@@ -7,6 +7,12 @@ import unittest
 import psycopg
 
 from ribeira_platform.audit_context import request_context
+from ribeira_platform.business import (
+    CommercialClassification,
+    ProductStatus,
+    RevenueType,
+    ServiceOffering,
+)
 from ribeira_platform.epistemology import (
     DataClassification,
     DecisionStatus,
@@ -182,6 +188,114 @@ class PostgresIntegrationTests(unittest.TestCase):
                 )
         with self.assertRaises(LookupError):
             self.application.evaluate(tenant_b.id, property_a.id)
+
+    def test_business_domain_is_persisted_and_rls_blocks_cross_tenant_references(
+        self,
+    ) -> None:
+        tenant_a = self.application.create_tenant("Business Tenant A")
+        tenant_b = self.application.create_tenant("Business Tenant B")
+        property_a = self.application.create_property(
+            tenant_a.id, "Business Property A"
+        )
+        property_b = self.application.create_property(
+            tenant_b.id, "Business Property B"
+        )
+        customer_a = self.application.business.create_customer(
+            tenant_a.id,
+            "Customer A",
+            actor="commercial-a",
+        )
+        customer_b = self.application.business.create_customer(
+            tenant_b.id,
+            "Customer B",
+            actor="commercial-b",
+        )
+        self.application.business.create_service(
+            ServiceOffering(
+                new_id(),
+                tenant_a.id,
+                "Managed network",
+                "CONNECTIVITY",
+                ProductStatus.ACTIVE,
+                True,
+                RevenueType.RECURRING_REVENUE,
+                None,
+                CommercialClassification.CONFIRMED,
+            ),
+            actor="commercial-a",
+        )
+        self.application.business.link_customer_property(
+            tenant_a.id,
+            customer_a.id,
+            property_a.id,
+            "OWNER",
+            "2026-09-16T00:00:00+00:00",
+            None,
+            actor="commercial-a",
+        )
+
+        with self.store.tenant_transaction(tenant_b.id):
+            self.assertIsNone(
+                self.store.connection.execute(
+                    "SELECT id FROM customer WHERE id=%s", (customer_a.id,)
+                ).fetchone()
+            )
+            self.assertEqual(
+                self.store.connection.execute(
+                    "UPDATE customer SET display_name='tampered' WHERE id=%s",
+                    (customer_a.id,),
+                ).rowcount,
+                0,
+            )
+            self.assertEqual(
+                self.store.connection.execute(
+                    "DELETE FROM customer WHERE id=%s", (customer_a.id,)
+                ).rowcount,
+                0,
+            )
+        with self.store.tenant_transaction(tenant_b.id):
+            with self.assertRaises(psycopg.Error):
+                self.store.connection.execute(
+                    """INSERT INTO customer_property
+                       (id,tenant_id,customer_id,property_id,relationship_type,valid_from,data_classification)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                    (
+                        new_id(),
+                        tenant_b.id,
+                        customer_a.id,
+                        property_a.id,
+                        "OWNER",
+                        "2026-09-16T00:00:00+00:00",
+                        "CONFIRMED",
+                    ),
+                )
+        with self.store.tenant_transaction(tenant_b.id):
+            with self.assertRaises(psycopg.Error):
+                self.store.connection.execute(
+                    """INSERT INTO commercial_opportunity
+                       (id,tenant_id,customer_id,property_id,opportunity_type,status,classification,
+                        evidence_ids,estimated_value_classification)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (
+                        new_id(),
+                        tenant_b.id,
+                        customer_a.id,
+                        property_a.id,
+                        "CROSS_TENANT",
+                        "OPEN",
+                        "POTENTIAL_OPPORTUNITY",
+                        "[]",
+                        "UNKNOWN",
+                    ),
+                )
+        with self.store.tenant_transaction(tenant_b.id):
+            rls = self.store.connection.execute(
+                "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='customer'"
+            ).fetchone()
+            self.assertTrue(rls["relrowsecurity"])
+            self.assertTrue(rls["relforcerowsecurity"])
+        self.assertEqual(customer_b.tenant_id, tenant_b.id)
+        self.assertEqual(property_b.tenant_id, tenant_b.id)
 
 
 if __name__ == "__main__":

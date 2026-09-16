@@ -23,6 +23,14 @@ não foi implementado.
 | Official providers | Blueprint fase 1 | Provider | adapters future | datasets/STAC future | contracts future | provider-specific | no real calls | GAP |
 | IoT/MQTT/LoRaWAN | Blueprint fase 2 | Telemetry | future | device/measurement future | event bus future | replay rules | future | GAP |
 | Banana Intelligence | Prompt §§34-35 | Agronomy | future | agronomic observations | future | no diagnosis from satellite | future | GAP |
+| Domínio comercial e catálogo | Fase 1B §§4-6, 30 | Customer, Catalog, Delivery | `business.py`, `business_service.py` | migration 006 | operation-oriented `/v1` endpoints | configuração sobre hardcode | `tests/test_business.py`, PG business integration | IMPLEMENTED |
+| Ownership e pass-through | Fase 1B §§6-9, 40 | Asset, Finance | `AssetOwnership`, `PassThroughItem` | `asset_ownership`, `pass_through_item` | asset ownership endpoint | ownership explícito; sem inferência | unit + PG/RLS integration | IMPLEMENTED |
+| Contratos versionados e MRR | Fase 1B §§10-11, 31-32 | Contract, Subscription | `BusinessApplication`, repository | `customer_contract`, `contract_version`, `subscription` | contract/catalog/MRR endpoints | vigência + tratamento de receita | business domain tests | IMPLEMENTED |
+| Pricing transparente em Decimal | Fase 1B §§14-18, 41-42 | Pricing | `PricingEngine` | `pricing_policy_version` numeric | simulate price endpoint | `INCOMPLETE_PRICING`; monotonicidade | Decimal/monotonicity/missing input tests | IMPLEMENTED |
+| Capacity Gate versionado | Fase 1B §§12-13, 43 | Capacity | `CapacityEngine` | `operational_capacity_policy` | capacity create/evaluate | sem expansão automática | boundary/gate tests | IMPLEMENTED |
+| Opportunity Evidence First | Fase 1B §§23-29, 34 | Commercial Intelligence | `CommercialRuleEngine`, `BusinessApplication` | opportunity + evidence link | rule/qualification endpoints | `UNKNOWN` não pontua como ausência | unknown/evidence/RLS tests | IMPLEMENTED |
+| Prospect Score configurável | Fase 1B §§27-29 | Prospect | scoring model/factor domain | `prospect_scoring_*` | application operation prepared | unknown policy explícita | engine tests | IMPLEMENTED/PREPARED |
+| IAM comercial e segregação | Fase 1B §§36-39 | Authorization/Audit | central `AuthorizationPolicy`, audit | audit + tenant RLS | `commercial:*`, `pricing:*`, `contract:*`, `asset:*` | default deny + approver distinto | auth/API + PG tests | IMPLEMENTED |
 
 ## Vertical slice rastreado
 

@@ -4,6 +4,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -15,6 +16,26 @@ from pydantic import BaseModel, ConfigDict, Field
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 from .audit_context import request_context as audit_request_context
+from .business import (
+    Asset,
+    AssetOwnership,
+    CapitalBreakdown,
+    CommercialClassification,
+    ContractVersion,
+    CustomerContract,
+    InstallationProject,
+    OpportunityClassification,
+    OperationalCapacityPolicy,
+    OwnershipKind,
+    PricingPolicy,
+    PricingPolicyVersion,
+    Product,
+    ProductStatus,
+    RevenueTreatment,
+    RevenueType,
+    ServiceOffering,
+    ServicePlan,
+)
 from .epistemology import RuleAuthority
 from .iam import (
     AuthContext,
@@ -107,6 +128,189 @@ class RuleRequest(BaseModel):
 class ActorRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     actor: str | None = Field(default=None, max_length=200)
+
+
+class CustomerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    display_name: str = Field(min_length=1, max_length=240)
+    customer_type: str = Field(default="LEGAL_ENTITY", min_length=1, max_length=60)
+    legal_name: str | None = Field(default=None, max_length=240)
+    status: str = Field(default="ACTIVE", min_length=1, max_length=40)
+    external_reference: str | None = Field(default=None, max_length=200)
+
+
+class ContractRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    customer_id: str
+    property_id: str | None = None
+    contract_type: str = Field(min_length=1, max_length=60)
+    counterparty_name: str | None = Field(default=None, max_length=240)
+    external_provider_name: str | None = Field(default=None, max_length=240)
+    revenue_treatment: RevenueTreatment
+    status: str = Field(default="DRAFT", min_length=1, max_length=40)
+    start_at: str
+    end_at: str | None = None
+    classification: CommercialClassification = CommercialClassification.CONFIRMED
+
+
+class ContractVersionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    contract_id: str
+    version: int = Field(ge=1)
+    status: str = Field(default="DRAFT", pattern=r"^(DRAFT|ACTIVE|RETIRED)$")
+    valid_from: str
+    valid_until: str | None = None
+    total_price: Decimal | None = Field(default=None, ge=0)
+    currency: str = Field(default="BRL", min_length=3, max_length=3)
+    recurring: bool = False
+    configuration: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProductRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=200)
+    category: str = Field(min_length=1, max_length=100)
+    status: ProductStatus = ProductStatus.DRAFT
+    sku: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=1000)
+    classification: CommercialClassification = CommercialClassification.CONFIRMED
+
+
+class ServiceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=200)
+    category: str = Field(min_length=1, max_length=100)
+    status: ProductStatus = ProductStatus.DRAFT
+    recurring: bool = False
+    revenue_type: RevenueType = RevenueType.ONE_TIME_SERVICE
+    product_id: str | None = None
+    classification: CommercialClassification = CommercialClassification.CONFIRMED
+
+
+class ServicePlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    service_id: str
+    name: str = Field(min_length=1, max_length=200)
+    billing_period: str = Field(default="MONTH", min_length=1, max_length=30)
+    monthly_price: Decimal | None = Field(default=None, ge=0)
+    currency: str = Field(default="BRL", min_length=3, max_length=3)
+    status: str = Field(default="DRAFT", min_length=1, max_length=40)
+    revenue_treatment: RevenueTreatment
+    classification: CommercialClassification = CommercialClassification.CONFIRMED
+
+
+class AssetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    asset_type: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=200)
+    serial_number: str | None = Field(default=None, max_length=200)
+    status: str = Field(default="ACTIVE", min_length=1, max_length=40)
+    property_id: str | None = None
+    site_id: str | None = None
+    classification: CommercialClassification = CommercialClassification.CONFIRMED
+
+
+class AssetOwnershipRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ownership_kind: OwnershipKind
+    customer_id: str | None = None
+    purchased_by: str | None = None
+    maintained_by: str | None = None
+    replacement_responsibility: str | None = None
+    risk_bearer: str | None = None
+    valid_from: str
+    valid_until: str | None = None
+    acquisition_document: str | None = None
+    classification: CommercialClassification = CommercialClassification.CONFIRMED
+
+
+class InstallationProjectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    customer_id: str
+    property_id: str | None = None
+    name: str = Field(min_length=1, max_length=200)
+    status: str = Field(default="DRAFT", min_length=1, max_length=40)
+    technical_provider_type: str = Field(default="RIBEIRA", min_length=1, max_length=60)
+    customer_total_project_cost: Decimal | None = Field(default=None, ge=0)
+    currency: str = Field(default="BRL", min_length=3, max_length=3)
+    revenue_treatment: RevenueTreatment
+    classification: CommercialClassification = CommercialClassification.CONFIRMED
+
+
+class PricingPolicyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=200)
+    scope: str = Field(default="TENANT", min_length=1, max_length=60)
+    status: str = Field(default="DRAFT", min_length=1, max_length=40)
+
+
+class PricingPolicyVersionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int = Field(ge=1)
+    status: str = Field(default="DRAFT", pattern=r"^(DRAFT|ACTIVE|RETIRED)$")
+    lower_threshold: Decimal = Field(ge=0)
+    lower_rate: Decimal = Field(ge=0)
+    lower_minimum: Decimal = Field(ge=0)
+    upper_rate: Decimal = Field(ge=0)
+    upper_minimum: Decimal = Field(ge=0)
+    currency: str = Field(default="BRL", min_length=3, max_length=3)
+    valid_from: str
+    valid_until: str | None = None
+    classification: CommercialClassification = CommercialClassification.CONFIRMED
+    source: str = Field(min_length=1, max_length=500)
+
+
+class PricingSimulationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int | None = Field(default=None, ge=1)
+    capex_ribeira: Decimal | None = Field(default=None, ge=0)
+    net_installation_margin: Decimal | None = None
+    other_net_inflows: Decimal | None = None
+    capex_classification: CommercialClassification = CommercialClassification.CONFIRMED
+    margin_classification: CommercialClassification = CommercialClassification.CONFIRMED
+    other_inflows_classification: CommercialClassification = (
+        CommercialClassification.CONFIRMED
+    )
+
+
+class CapacityPolicyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scope: str = Field(default="TENANT", min_length=1, max_length=60)
+    capacity_type: str = Field(min_length=1, max_length=100)
+    value: Decimal = Field(ge=0)
+    unit: str = Field(min_length=1, max_length=60)
+    effective_from: str
+    effective_until: str | None = None
+    status: str = Field(default="DRAFT", min_length=1, max_length=40)
+    source: str = Field(min_length=1, max_length=500)
+    classification: CommercialClassification = CommercialClassification.CONFIRMED
+
+
+class CapacityEvaluationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    requested_capacity: Decimal = Field(ge=0)
+    capacity_type: str = Field(min_length=1, max_length=100)
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class CommercialRuleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=200)
+    condition: dict[str, Any]
+    action: dict[str, Any]
+    version: int = Field(default=1, ge=1)
+    status: str = Field(default="DRAFT", pattern=r"^(DRAFT|ACTIVE|RETIRED)$")
+
+
+class OpportunityQualificationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    property_id: str | None = None
+    rule_id: str
+    version: int | None = Field(default=None, ge=1)
+    facts: dict[str, Any]
+    classification: OpportunityClassification = (
+        OpportunityClassification.POTENTIAL_OPPORTUNITY
+    )
 
 
 def _build_store(settings: Settings):
@@ -446,6 +650,543 @@ def create_app(
             property_id,
             (payload.actor if payload and payload.actor else ctx.subject),
             ctx.is_platform_admin,
+        )
+        return to_jsonable(result)
+
+    @app.post("/v1/tenants/{tenant_id}/customers", status_code=201, tags=["commercial"])
+    async def create_customer(
+        tenant_id: str, payload: CustomerRequest, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "commercial:write", tenant_id)
+        return to_jsonable(
+            application.business.create_customer(
+                tenant_id,
+                payload.display_name,
+                customer_type=payload.customer_type,
+                legal_name=payload.legal_name,
+                status=payload.status,
+                external_reference=payload.external_reference,
+                actor=ctx.subject,
+                platform_admin=ctx.is_platform_admin,
+            )
+        )
+
+    @app.post("/v1/tenants/{tenant_id}/contracts", status_code=201, tags=["contracts"])
+    async def create_contract(
+        tenant_id: str, payload: ContractRequest, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "contract:write", tenant_id)
+        item = CustomerContract(
+            new_id(),
+            tenant_id,
+            payload.customer_id,
+            payload.property_id,
+            payload.contract_type,
+            payload.counterparty_name,
+            payload.external_provider_name,
+            payload.revenue_treatment,
+            payload.status,
+            payload.start_at,
+            payload.end_at,
+            payload.classification,
+        )
+        return to_jsonable(
+            application.business.create_contract(
+                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/contract-versions",
+        status_code=201,
+        tags=["contracts"],
+    )
+    async def create_contract_version(
+        tenant_id: str,
+        payload: ContractVersionRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "contract:write", tenant_id)
+        if payload.status == "ACTIVE":
+            raise AuthorizationError(
+                "create the contract version as DRAFT and approve it in a separate operation"
+            )
+        item = ContractVersion(
+            new_id(),
+            tenant_id,
+            payload.contract_id,
+            payload.version,
+            payload.status,
+            payload.valid_from,
+            payload.valid_until,
+            payload.total_price,
+            payload.currency,
+            payload.recurring,
+            payload.configuration,
+            ctx.subject,
+            None,
+            CommercialClassification.CONFIRMED,
+        )
+        return to_jsonable(
+            application.business.create_contract_version(
+                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/contract-versions/{version_id}/approve",
+        tags=["contracts"],
+    )
+    async def approve_contract_version(
+        tenant_id: str, version_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "contract:approve", tenant_id)
+        application.business.approve_contract_version(
+            tenant_id,
+            version_id,
+            approver=ctx.subject,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return {
+            "status": "ACTIVE",
+            "approved_by": ctx.subject,
+            "version_id": version_id,
+        }
+
+    @app.post("/v1/tenants/{tenant_id}/products", status_code=201, tags=["catalog"])
+    async def create_product(
+        tenant_id: str, payload: ProductRequest, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "commercial:write", tenant_id)
+        item = Product(
+            new_id(),
+            tenant_id,
+            payload.name,
+            payload.category,
+            payload.status,
+            payload.sku,
+            payload.description,
+            payload.classification,
+        )
+        return to_jsonable(
+            application.business.create_product(
+                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.post("/v1/tenants/{tenant_id}/services", status_code=201, tags=["catalog"])
+    async def create_service(
+        tenant_id: str, payload: ServiceRequest, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "commercial:write", tenant_id)
+        item = ServiceOffering(
+            new_id(),
+            tenant_id,
+            payload.name,
+            payload.category,
+            payload.status,
+            payload.recurring,
+            payload.revenue_type,
+            payload.product_id,
+            payload.classification,
+        )
+        return to_jsonable(
+            application.business.create_service(
+                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/service-plans", status_code=201, tags=["catalog"]
+    )
+    async def create_service_plan(
+        tenant_id: str,
+        payload: ServicePlanRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "commercial:write", tenant_id)
+        item = ServicePlan(
+            new_id(),
+            tenant_id,
+            payload.service_id,
+            payload.name,
+            payload.billing_period,
+            payload.monthly_price,
+            payload.currency,
+            payload.status,
+            payload.revenue_treatment,
+            payload.classification,
+        )
+        return to_jsonable(
+            application.business.create_service_plan(
+                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/customers/{customer_id}/mrr",
+        tags=["commercial"],
+    )
+    async def customer_mrr(
+        tenant_id: str, customer_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "commercial:read", tenant_id)
+        return to_jsonable(
+            application.business.calculate_mrr(
+                tenant_id, customer_id, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.post("/v1/tenants/{tenant_id}/assets", status_code=201, tags=["assets"])
+    async def register_asset(
+        tenant_id: str, payload: AssetRequest, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "asset:manage", tenant_id)
+        item = Asset(
+            new_id(),
+            tenant_id,
+            payload.asset_type,
+            payload.name,
+            payload.serial_number,
+            payload.status,
+            payload.property_id,
+            payload.site_id,
+            payload.classification,
+        )
+        return to_jsonable(
+            application.business.register_asset(
+                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/assets/{asset_id}/ownership",
+        status_code=201,
+        tags=["assets"],
+    )
+    async def assign_asset_ownership(
+        tenant_id: str,
+        asset_id: str,
+        payload: AssetOwnershipRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "asset:manage", tenant_id)
+        item = AssetOwnership(
+            new_id(),
+            tenant_id,
+            asset_id,
+            payload.ownership_kind,
+            payload.customer_id,
+            payload.purchased_by,
+            payload.maintained_by,
+            payload.replacement_responsibility,
+            payload.risk_bearer,
+            payload.valid_from,
+            payload.valid_until,
+            payload.acquisition_document,
+            payload.classification,
+        )
+        return to_jsonable(
+            application.business.assign_asset_ownership(
+                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/installation-projects",
+        status_code=201,
+        tags=["projects"],
+    )
+    async def create_installation_project(
+        tenant_id: str,
+        payload: InstallationProjectRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "commercial:write", tenant_id)
+        item = InstallationProject(
+            new_id(),
+            tenant_id,
+            payload.customer_id,
+            payload.property_id,
+            payload.name,
+            payload.status,
+            payload.technical_provider_type,
+            payload.customer_total_project_cost,
+            payload.currency,
+            payload.revenue_treatment,
+            payload.classification,
+        )
+        return to_jsonable(
+            application.business.create_installation_project(
+                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/pricing-policies",
+        status_code=201,
+        tags=["pricing"],
+    )
+    async def create_pricing_policy(
+        tenant_id: str,
+        payload: PricingPolicyRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "pricing:write", tenant_id)
+        item = PricingPolicy(
+            new_id(),
+            tenant_id,
+            payload.name,
+            payload.scope,
+            payload.status,
+            ctx.subject,
+        )
+        return to_jsonable(
+            application.business.create_pricing_policy(
+                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/pricing-policies/{policy_id}/versions",
+        status_code=201,
+        tags=["pricing"],
+    )
+    async def create_pricing_policy_version(
+        tenant_id: str,
+        policy_id: str,
+        payload: PricingPolicyVersionRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "pricing:write", tenant_id)
+        if payload.status == "ACTIVE":
+            raise AuthorizationError(
+                "create the pricing policy version as DRAFT and approve it in a separate operation"
+            )
+        item = PricingPolicyVersion(
+            new_id(),
+            tenant_id,
+            policy_id,
+            payload.version,
+            payload.status,
+            payload.lower_threshold,
+            payload.lower_rate,
+            payload.lower_minimum,
+            payload.upper_rate,
+            payload.upper_minimum,
+            payload.currency,
+            payload.valid_from,
+            payload.valid_until,
+            ctx.subject,
+            None,
+            payload.classification,
+            payload.source,
+        )
+        return to_jsonable(
+            application.business.create_pricing_policy_version(
+                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/pricing-policies/{policy_id}/versions/{version_id}/approve",
+        tags=["pricing"],
+    )
+    async def approve_pricing_policy_version(
+        tenant_id: str,
+        policy_id: str,
+        version_id: str,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "pricing:approve", tenant_id)
+        application.business.approve_pricing_policy_version(
+            tenant_id,
+            policy_id,
+            version_id,
+            approver=ctx.subject,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return {
+            "status": "ACTIVE",
+            "approved_by": ctx.subject,
+            "policy_id": policy_id,
+            "version_id": version_id,
+        }
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/pricing-policies/{policy_id}/simulate",
+        tags=["pricing"],
+    )
+    async def simulate_price(
+        tenant_id: str,
+        policy_id: str,
+        payload: PricingSimulationRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "pricing:simulate", tenant_id)
+        capital = CapitalBreakdown(
+            payload.capex_ribeira,
+            payload.net_installation_margin,
+            payload.other_net_inflows,
+            payload.capex_classification,
+            payload.margin_classification,
+            payload.other_inflows_classification,
+        )
+        return to_jsonable(
+            application.business.simulate_price(
+                tenant_id,
+                policy_id,
+                capital,
+                version=payload.version,
+                platform_admin=ctx.is_platform_admin,
+            )
+        )
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/capacity-policies",
+        status_code=201,
+        tags=["capacity"],
+    )
+    async def create_capacity_policy(
+        tenant_id: str,
+        payload: CapacityPolicyRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "pricing:write", tenant_id)
+        if payload.status == "ACTIVE":
+            raise AuthorizationError(
+                "create the capacity policy as DRAFT and approve it in a separate operation"
+            )
+        item = OperationalCapacityPolicy(
+            new_id(),
+            tenant_id,
+            payload.scope,
+            payload.capacity_type,
+            payload.value,
+            payload.unit,
+            payload.effective_from,
+            payload.effective_until,
+            payload.status,
+            ctx.subject,
+            None,
+            payload.source,
+            payload.classification,
+        )
+        return to_jsonable(
+            application.business.create_capacity_policy(
+                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
+            )
+        )
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/capacity-policies/{policy_id}/approve",
+        tags=["capacity"],
+    )
+    async def approve_capacity_policy(
+        tenant_id: str, policy_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "capacity:approve", tenant_id)
+        application.business.approve_capacity_policy(
+            tenant_id,
+            policy_id,
+            approver=ctx.subject,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return {"status": "ACTIVE", "approved_by": ctx.subject, "policy_id": policy_id}
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/capacity/evaluate",
+        tags=["capacity"],
+    )
+    async def evaluate_capacity(
+        tenant_id: str,
+        payload: CapacityEvaluationRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "commercial:read", tenant_id)
+        return to_jsonable(
+            application.business.evaluate_capacity(
+                tenant_id,
+                payload.requested_capacity,
+                payload.capacity_type,
+                evidence_ids=payload.evidence_ids,
+                platform_admin=ctx.is_platform_admin,
+            )
+        )
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/commercial-rules",
+        status_code=201,
+        tags=["commercial"],
+    )
+    async def create_commercial_rule(
+        tenant_id: str,
+        payload: CommercialRuleRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "commercial:write", tenant_id)
+        if payload.status == "ACTIVE":
+            raise AuthorizationError(
+                "create the commercial rule as DRAFT and approve it in a separate operation"
+            )
+        rule_id, version_id = application.business.create_commercial_rule_version(
+            tenant_id,
+            payload.name,
+            payload.condition,
+            payload.action,
+            created_by=ctx.subject,
+            approved_by=None,
+            version=payload.version,
+            status=payload.status,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return {
+            "rule_id": rule_id,
+            "version_id": version_id,
+            "version": payload.version,
+        }
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/commercial-rules/{version_id}/approve",
+        tags=["commercial"],
+    )
+    async def approve_commercial_rule(
+        tenant_id: str, version_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "commercial:approve", tenant_id)
+        application.business.approve_commercial_rule_version(
+            tenant_id,
+            version_id,
+            approver=ctx.subject,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return {
+            "status": "ACTIVE",
+            "approved_by": ctx.subject,
+            "version_id": version_id,
+        }
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/customers/{customer_id}/opportunities/qualify",
+        tags=["commercial"],
+    )
+    async def qualify_opportunity(
+        tenant_id: str,
+        customer_id: str,
+        payload: OpportunityQualificationRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "commercial:write", tenant_id)
+        result = application.business.qualify_opportunity(
+            tenant_id,
+            customer_id,
+            payload.property_id,
+            payload.rule_id,
+            payload.facts,
+            version=payload.version,
+            actor=ctx.subject,
+            classification=payload.classification,
+            platform_admin=ctx.is_platform_admin,
         )
         return to_jsonable(result)
 

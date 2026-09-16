@@ -22,6 +22,18 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "decision:read",
             "action:write",
             "audit:read",
+            "commercial:read",
+            "commercial:write",
+            "pricing:simulate",
+            "pricing:write",
+            "pricing:approve",
+            "contract:read",
+            "contract:write",
+            "contract:approve",
+            "capacity:approve",
+            "commercial:approve",
+            "asset:read",
+            "asset:manage",
         }
     ),
     "MANAGER": frozenset(
@@ -36,6 +48,17 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "decision:read",
             "action:write",
             "audit:read",
+            "commercial:read",
+            "commercial:write",
+            "pricing:simulate",
+            "pricing:write",
+            "contract:read",
+            "contract:write",
+            "contract:approve",
+            "capacity:approve",
+            "commercial:approve",
+            "asset:read",
+            "asset:manage",
         }
     ),
     "ANALYST": frozenset(
@@ -46,10 +69,26 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "rule:read",
             "decision:read",
             "audit:read",
+            "commercial:read",
+            "pricing:simulate",
+            "contract:read",
+            "asset:read",
         }
     ),
     "COMMERCIAL": frozenset(
-        {"tenant:read", "property:read", "source:read", "decision:read"}
+        {
+            "tenant:read",
+            "property:read",
+            "source:read",
+            "decision:read",
+            "commercial:read",
+            "commercial:write",
+            "pricing:simulate",
+            "pricing:write",
+            "contract:read",
+            "contract:write",
+            "asset:read",
+        }
     ),
     "AGRONOMIST": frozenset(
         {
@@ -61,6 +100,9 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "rule:approve",
             "decision:read",
             "action:write",
+            "commercial:read",
+            "pricing:simulate",
+            "asset:read",
         }
     ),
     "TECHNICIAN": frozenset(
@@ -71,13 +113,31 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "source:write",
             "decision:read",
             "action:write",
+            "asset:read",
+            "asset:manage",
+            "commercial:read",
         }
     ),
     "OPERATOR": frozenset(
-        {"tenant:read", "property:read", "source:read", "decision:read", "action:write"}
+        {
+            "tenant:read",
+            "property:read",
+            "source:read",
+            "decision:read",
+            "action:write",
+            "asset:read",
+        }
     ),
     "VIEWER": frozenset(
-        {"tenant:read", "property:read", "source:read", "decision:read"}
+        {
+            "tenant:read",
+            "property:read",
+            "source:read",
+            "decision:read",
+            "commercial:read",
+            "contract:read",
+            "asset:read",
+        }
     ),
 }
 

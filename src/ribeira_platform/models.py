@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
@@ -172,6 +173,8 @@ class DecisionResult:
 
 
 def to_jsonable(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return format(value, "f")
     if hasattr(value, "value"):
         return value.value
     if hasattr(value, "__dataclass_fields__"):

@@ -96,6 +96,24 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(row["request_id"], "req-audit")
         self.assertEqual(row["correlation_id"], "corr-audit")
 
+    def test_business_customer_and_mrr_operations_are_authorized(self) -> None:
+        tenant = self.application.create_tenant("Commercial API tenant")
+        headers = {"Authorization": "Bearer platform-secret-dev-only"}
+        customer = self.client.post(
+            f"/v1/tenants/{tenant.id}/customers",
+            headers=headers,
+            json={"display_name": "Customer API"},
+        )
+        self.assertEqual(customer.status_code, 201)
+        self.assertEqual(customer.json()["tenant_id"], tenant.id)
+        mrr = self.client.get(
+            f"/v1/tenants/{tenant.id}/customers/{customer.json()['id']}/mrr",
+            headers=headers,
+        )
+        self.assertEqual(mrr.status_code, 200)
+        self.assertEqual(mrr.json()["classification"], "CALCULATED")
+        self.assertEqual(mrr.json()["result"], "0.00")
+
 
 if __name__ == "__main__":
     unittest.main()

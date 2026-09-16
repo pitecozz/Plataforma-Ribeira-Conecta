@@ -1,4 +1,4 @@
-# Threat model — Fase 1A
+# Threat model — Fase 1A + Fase 1B
 
 ## Escopo
 
@@ -24,6 +24,12 @@ MQTT, providers oficiais e frontend não estão habilitados nesta fase.
 | Auditoria insuficiente | actor/tenant/operação/recurso/payload/request/correlation IDs; sem token | schema, middleware e integration tests | append-only/imutabilidade/SIEM e retenção precisam plataforma |
 | Supply chain | pins declarativos/lock, SCA com pip-audit, SAST, secret scan e SBOM | workflow CI | image/IaC scanning, DAST e pentest ainda pendentes |
 | Dados falsos | classificação epistemológica, NULL/UNKNOWN preservados, sem fallback implícito | integrity/vertical-slice tests | cobertura de todos os futuros módulos ainda não existe |
+| Fraude ou alteração de preço | Pricing Engine fora do controller, Decimal, política versionada e aprovação distinta | testes de pricing, SoD e auditoria de versão | ainda não há workflow de aprovação com membership persistido |
+| Contrato histórico sobrescrito | `contract_version` com vigência e constraint de versão por tenant | testes de versão e schema PostgreSQL | endpoint de consulta histórica ainda é limitado |
+| Ownership fraudulento | ownership explícito, temporal, auditado e tenant-scoped | testes de ownership/RLS; audit de alteração | validações de segregação de função para todos os papéis ainda dependem do IdP |
+| Cross-tenant financeiro | RLS `USING`/`WITH CHECK`, FKs compostas nas entidades comerciais | `test_business_domain_is_persisted_and_rls_blocks_cross_tenant_references` | novos aggregates precisam seguir o mesmo padrão |
+| Oportunidade comercial falsa | regra ternária, evidência obrigatória, UNKNOWN inconclusivo | `test_business_application_keeps_evidence_chain_and_mrr_rules` e PG RLS | não há ainda workflow de qualificação humana completo |
+| Autoaprovação comercial | versões ativas de regra, preço, capacidade e contrato exigem aprovador distinto | testes de SoD em application service/API | identidade do aprovador ainda é claim/subject, não diretório persistido |
 
 ## Riscos residuais de produção
 
@@ -42,3 +48,12 @@ MQTT, providers oficiais e frontend não estão habilitados nesta fase.
 Esta revisão foi executada após a introdução do adapter Postgres, API, IAM,
 SSRF policy, migrations e CI. Os controles acima têm código e testes associados;
 os riscos residuais não foram marcados como resolvidos por documentação.
+
+## Revisão pós-Fase 1B
+
+Foi incluída a migration `006_business_domain.sql`, executada em PostgreSQL
+16 com PostGIS, incluindo RLS forçado para as tabelas comerciais e FKs
+compostas para referências tenant-scoped. O teste de integração exercita
+SELECT, UPDATE, DELETE e INSERT com referências cruzadas. A revisão não
+considera integrações externas, score com pesos ativos, MFA de produção ou
+imutabilidade física do audit log como concluídos nesta fase.

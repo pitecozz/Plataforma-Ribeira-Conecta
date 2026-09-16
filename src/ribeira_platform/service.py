@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from .engine import DecisionEngine, EvidenceEngine
+from .business_service import BusinessApplication
 from .epistemology import IngestionStatus
 from .models import (
     FetchResult,
@@ -39,6 +40,7 @@ class RibeiraApplication:
         self.default_adapter = HttpJsonSourceAdapter()
         self.decisions = DecisionEngine(self.store)
         self.evidence = EvidenceEngine(self.store)
+        self.business = BusinessApplication(self.store)
 
     def create_tenant(self, name: str) -> Tenant:
         tenant = Tenant(new_id(), name)
