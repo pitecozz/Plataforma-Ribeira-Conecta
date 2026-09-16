@@ -23,6 +23,23 @@ conclusion
 Nenhum valor de confiança é gerado pelo slice. `confidence = null` porque não há
 metodologia validada para um score de confiança neste momento.
 
+## Geospatial Evidence Chain
+
+```text
+CDSE STAC response reference
+  -> SatelliteScene.external_item_id + checksum
+  -> SatelliteAsset.href/title/roles
+  -> scene-selection policy/version
+  -> ProcessingJob algorithm/version/parameters
+  -> DerivedProduct output checksum/statistics
+  -> DERIVED_PRODUCT evidence
+```
+
+Scene metadata is classified as `OFFICIAL_SOURCE`. NDVI is `DERIVED`, carries
+its formula and input asset keys, and does not assert disease, cause or current
+field condition. When provider assets are unavailable, the job records
+`ASSET_UNAVAILABLE` and no statistic is emitted.
+
 ## Conflitos
 
 Valores diferentes do mesmo métrico e timestamp, provenientes de fontes

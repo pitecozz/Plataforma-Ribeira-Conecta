@@ -18,6 +18,13 @@ class ProviderMetadata:
     status: str
     last_success: str | None = None
     last_failure: str | None = None
+    organization: str | None = None
+    provider_type: str | None = None
+    documentation_url: str | None = None
+    catalog_endpoint: str | None = None
+    api_standard: str | None = None
+    stac_version: str | None = None
+    asset_hosts: frozenset[str] = frozenset()
 
 
 class ProviderRegistry:
@@ -32,8 +39,16 @@ class ProviderRegistry:
 
     def endpoint_allowed(self, provider_id: str, endpoint: str) -> bool:
         metadata = self.get(provider_id)
-        if metadata is None or metadata.status != "ACTIVE" or not metadata.endpoint:
+        if metadata is None or metadata.status != "ACTIVE":
             return False
-        return endpoint == metadata.endpoint or endpoint.startswith(
-            metadata.endpoint.rstrip("/") + "/"
+        bases = tuple(
+            value for value in (metadata.endpoint, metadata.catalog_endpoint) if value
         )
+        return any(
+            endpoint == base or endpoint.startswith(base.rstrip("/") + "/")
+            for base in bases
+        )
+
+    def asset_host_allowed(self, provider_id: str, hostname: str) -> bool:
+        metadata = self.get(provider_id)
+        return bool(metadata and hostname.lower() in metadata.asset_hosts)

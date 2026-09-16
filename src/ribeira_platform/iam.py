@@ -141,6 +141,17 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     ),
 }
 
+# Geospatial access is explicit and remains subject to the same tenant policy.
+_GEOSPATIAL_READ = "geospatial:read"
+_GEOSPATIAL_SEARCH = "geospatial:search"
+_GEOSPATIAL_PROCESS = "geospatial:process"
+for _role in ("TENANT_ADMIN", "MANAGER", "COMMERCIAL", "AGRONOMIST", "TECHNICIAN"):
+    ROLE_PERMISSIONS[_role] = ROLE_PERMISSIONS[_role] | frozenset(
+        {_GEOSPATIAL_READ, _GEOSPATIAL_SEARCH, _GEOSPATIAL_PROCESS}
+    )
+for _role in ("ANALYST", "OPERATOR", "VIEWER"):
+    ROLE_PERMISSIONS[_role] = ROLE_PERMISSIONS[_role] | frozenset({_GEOSPATIAL_READ})
+
 
 class AuthenticationError(PermissionError):
     pass

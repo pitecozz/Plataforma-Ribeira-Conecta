@@ -40,14 +40,27 @@ MQTT, providers oficiais e frontend não estão habilitados nesta fase.
 3. O provider de autenticação de desenvolvimento é deliberadamente não
    produtivo. Produção exige IdP OIDC/JWT, MFA/passkeys, revogação e rotação de
    chaves.
-4. Os providers externos ainda são contratos/allowlist, sem consulta real ou
-   licença. Nenhum dado de satélite, CAR, Anatel ou IoT é afirmado como obtido.
+4. CDSE STAC metadata discovery foi exercitado com consulta real e allowlist.
+   Asset download autenticado ainda não foi configurado; nenhum raster CDSE é
+   afirmado como baixado. CAR, Anatel e IoT continuam sem consulta real.
 
 ## Revisão pós-implementação
 
 Esta revisão foi executada após a introdução do adapter Postgres, API, IAM,
 SSRF policy, migrations e CI. Os controles acima têm código e testes associados;
 os riscos residuais não foram marcados como resolvidos por documentação.
+
+## Revisão pós-Fase 1C
+
+| Ameaça geoespacial | Controle | Evidência/teste | Risco residual |
+|---|---|---|---|
+| Catálogo STAC malicioso | schema validation, bounded pages/response, no arbitrary href execution | CDSE adapter tests + external contract test | provider payload changes require contract review |
+| SSRF via asset href | catalog and asset hosts are separately allowlisted; local processor accepts only `local://` | provider registry/network policy + raster tests | production downloader still to be implemented |
+| Redirect/host pivot | redirects disabled and next links validated | provider adapter tests | DNS/egress controls remain infrastructure responsibility |
+| Oversized geometry/raster/resource exhaustion | polygon validity, bounded candidates, response/object size, explicit jobs | geospatial unit tests | production quotas/queue isolation remain |
+| Cross-tenant geospatial leak | tenant-scoped tables, composite FKs, forced RLS and application tenant context | `test_geospatial_postgres.py` | privileged DBA remains trusted |
+| Cache/raw metadata poisoning | checksum and tenant-keyed raw references; no global scene dedup | repository/idempotency tests | immutable object storage is future operational control |
+| False agronomic diagnosis | NDVI only classified `DERIVED`, limitations explicitly recorded | NDVI test and documentation | future agronomic models need separate validation |
 
 ## Revisão pós-Fase 1B
 

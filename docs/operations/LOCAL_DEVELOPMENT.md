@@ -19,6 +19,21 @@ O compose é somente desenvolvimento. As credenciais do arquivo são dev-only e
 não devem ser reutilizadas. Em produção, migrations usam credencial separada e
 a aplicação usa apenas a role não proprietária.
 
+## CDSE external verification
+
+The normal suite does not require internet. To run the real official catalogue
+contract test explicitly, use:
+
+```bash
+RIBEIRA_CDSE_EXTERNAL_TEST=1 PYTHONPATH=src \
+  .venv/bin/python -m unittest tests.integration.test_cdse_external -v
+```
+
+This discovers metadata only. It does not download the provider's `s3://`
+assets and does not create a customer/property record. CDSE asset processing
+requires separately configured credentials and policy; absent credentials yield
+`ASSET_UNAVAILABLE`, never a synthetic NDVI.
+
 ## API
 
 ```bash

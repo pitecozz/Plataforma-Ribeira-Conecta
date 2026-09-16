@@ -37,6 +37,7 @@ from .business import (
     ServicePlan,
 )
 from .epistemology import RuleAuthority
+from .geospatial import SceneSelectionPolicy, SatelliteSearchRequest
 from .iam import (
     AuthContext,
     AuthenticationError,
@@ -106,6 +107,24 @@ class SourceRequest(BaseModel):
     provider: str = Field(min_length=1, max_length=160)
     endpoint: str | None = Field(default=None, max_length=2048)
     source_version: str | None = Field(default=None, max_length=160)
+
+
+class SatelliteSearchRequestModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    collection_id: str = Field(default="sentinel-2-l2a", min_length=1, max_length=160)
+    datetime_start: str
+    datetime_end: str
+    cloud_cover_limit: Decimal | None = Field(default=None, ge=0, le=100)
+    max_candidates: int = Field(default=100, ge=1, le=100)
+    policy_id: str = Field(
+        default="SENTINEL2_L2A_LATEST_V1", min_length=1, max_length=120
+    )
+    policy_version: int = Field(default=1, ge=1)
+
+
+class NdviJobRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    search_id: str
 
 
 class RuleRequest(BaseModel):
@@ -1189,6 +1208,123 @@ def create_app(
             platform_admin=ctx.is_platform_admin,
         )
         return to_jsonable(result)
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/satellite-searches",
+        status_code=201,
+        tags=["geospatial"],
+    )
+    async def search_satellite(
+        tenant_id: str,
+        property_id: str,
+        payload: SatelliteSearchRequestModel,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "geospatial:search", tenant_id)
+        result = application.geospatial.search_satellite(
+            tenant_id,
+            SatelliteSearchRequest(
+                property_id=property_id,
+                collection_id=payload.collection_id,
+                datetime_start=payload.datetime_start,
+                datetime_end=payload.datetime_end,
+                selection_policy=SceneSelectionPolicy(
+                    policy_id=payload.policy_id,
+                    version=payload.policy_version,
+                    cloud_cover_limit=payload.cloud_cover_limit,
+                    max_candidates=payload.max_candidates,
+                ),
+            ),
+            actor=ctx.subject,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return to_jsonable(result)
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/satellite-searches/{search_id}",
+        tags=["geospatial"],
+    )
+    async def get_satellite_search(
+        tenant_id: str, search_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "geospatial:read", tenant_id)
+        result = application.geospatial.get_search(tenant_id, search_id)
+        if result is None:
+            raise LookupError("satellite search not found in tenant")
+        return to_jsonable(result)
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/scenes",
+        tags=["geospatial"],
+    )
+    async def list_satellite_scenes(
+        tenant_id: str, property_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "geospatial:read", tenant_id)
+        return to_jsonable(application.geospatial.list_scenes(tenant_id, property_id))
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/ndvi-jobs",
+        status_code=202,
+        tags=["geospatial"],
+    )
+    async def create_ndvi_job(
+        tenant_id: str,
+        property_id: str,
+        payload: NdviJobRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "geospatial:process", tenant_id)
+        return to_jsonable(
+            application.geospatial.create_ndvi_job(
+                tenant_id,
+                property_id,
+                payload.search_id,
+                ctx.subject,
+                ctx.is_platform_admin,
+            )
+        )
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/processing-jobs/{job_id}",
+        tags=["geospatial"],
+    )
+    async def get_processing_job(
+        tenant_id: str, job_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "geospatial:read", tenant_id)
+        result = application.geospatial.get_job(tenant_id, job_id)
+        if result is None:
+            raise LookupError("processing job not found in tenant")
+        return to_jsonable(result)
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/processing-jobs/{job_id}/run",
+        tags=["geospatial"],
+    )
+    async def run_processing_job(
+        tenant_id: str, job_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "geospatial:process", tenant_id)
+        return to_jsonable(
+            application.geospatial.run_ndvi_job(
+                tenant_id, job_id, ctx.subject, ctx.is_platform_admin
+            )
+        )
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/derived-products/{product_id}/provenance",
+        tags=["geospatial"],
+    )
+    async def get_derived_product_provenance(
+        tenant_id: str, product_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "geospatial:read", tenant_id)
+        result = application.geospatial.get_product(tenant_id, product_id)
+        if result is None:
+            raise LookupError("derived product not found in tenant")
+        evidence = application.store.evidence_for_reference(tenant_id, product_id)
+        return to_jsonable({"product": result, "evidence": evidence})
 
     return app
 

@@ -1,0 +1,17 @@
+{
+  "captured_at": "2026-09-16",
+  "provider": "COPERNICUS_CDSE",
+  "endpoint": "https://stac.dataspace.copernicus.eu/v1/collections/sentinel-2-l2a",
+  "collection": {
+    "type": "Collection",
+    "id": "sentinel-2-l2a",
+    "stac_version": "1.1.0",
+    "title": "Sentinel-2 Level-2A",
+    "license": "other",
+    "summaries": {
+      "processing:level": ["L2A"],
+      "platform": ["sentinel-2a", "sentinel-2b", "sentinel-2c"]
+    }
+  },
+  "classification": "TEST_FIXTURE"
+}

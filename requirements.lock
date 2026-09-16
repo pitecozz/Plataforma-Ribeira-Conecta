@@ -3,6 +3,8 @@
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
+affine==3.0.1
+attrs==26.1.0
 bandit==1.8.3
 boolean.py==5.0
 CacheControl==0.14.4
@@ -10,6 +12,8 @@ certifi==2026.7.22
 cffi==2.1.1
 charset-normalizer==3.5.1
 click==8.5.0
+click-plugins==1.1.1.2
+cligj==0.7.2
 cryptography==50.0.1
 cyclonedx-python-lib==7.6.2
 defusedxml==0.7.1
@@ -28,7 +32,9 @@ mdurl==0.1.2
 msgpack==1.2.2
 mypy==1.14.1
 mypy_extensions==1.1.0
+numpy==2.2.3
 packageurl-python==0.17.6
+pyproj==3.7.1
 packaging==26.3
 pip-api==0.0.35
 pip-audit==2.7.3
@@ -48,9 +54,11 @@ pytest==9.0.3
 python-dotenv==1.2.3
 PyYAML==6.0.3
 requests==2.34.2
+rasterio==1.4.3
 rich==15.0.0
 ruff==0.9.6
 six==1.17.0
+shapely==2.0.7
 sortedcontainers==2.4.0
 starlette==1.6.0
 stevedore==5.9.1

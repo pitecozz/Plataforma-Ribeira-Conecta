@@ -11,4 +11,5 @@ build/
 *.sqlite3
 *.db
 .env
+.local/
 .DS_Store

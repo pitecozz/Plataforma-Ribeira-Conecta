@@ -8,6 +8,8 @@ from typing import Any
 from .engine import DecisionEngine, EvidenceEngine
 from .business_service import BusinessApplication
 from .epistemology import IngestionStatus
+from .geospatial_provider import CopernicusStacAdapter, default_copernicus_registry
+from .geospatial_service import GeospatialApplication
 from .models import (
     FetchResult,
     Property,
@@ -18,6 +20,7 @@ from .models import (
     now_utc,
 )
 from .sources import HttpJsonSourceAdapter, SourceAdapter
+from .object_storage import LocalObjectStorage
 from .storage import SQLiteStore
 from .time_utils import parse_aware
 
@@ -34,6 +37,8 @@ class RibeiraApplication:
         self,
         store: SQLiteStore | None = None,
         adapters: dict[str, SourceAdapter] | None = None,
+        geospatial_provider: Any | None = None,
+        object_storage: LocalObjectStorage | None = None,
     ) -> None:
         self.store = store or SQLiteStore()
         self.adapters = adapters or {}
@@ -41,6 +46,13 @@ class RibeiraApplication:
         self.decisions = DecisionEngine(self.store)
         self.evidence = EvidenceEngine(self.store)
         self.business = BusinessApplication(self.store)
+        registry = default_copernicus_registry()
+        self.geospatial_provider = geospatial_provider or CopernicusStacAdapter(
+            registry
+        )
+        self.geospatial = GeospatialApplication(
+            self.store, self.geospatial_provider, object_storage or LocalObjectStorage()
+        )
 
     def create_tenant(self, name: str) -> Tenant:
         tenant = Tenant(new_id(), name)

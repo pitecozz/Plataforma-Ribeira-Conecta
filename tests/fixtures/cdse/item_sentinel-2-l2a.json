@@ -1,0 +1,31 @@
+{
+  "captured_at": "2026-09-16",
+  "provider": "COPERNICUS_CDSE",
+  "endpoint": "https://stac.dataspace.copernicus.eu/v1/search",
+  "collection": "sentinel-2-l2a",
+  "item": {
+    "type": "Feature",
+    "stac_version": "1.1.0",
+    "id": "S2A_MSIL2A_20251228T131301_N0511_R138_T23KKP_20251228T154509",
+    "properties": {
+      "datetime": "2025-12-28T13:13:01.024000Z",
+      "eo:cloud_cover": 6.74,
+      "platform": "sentinel-2a",
+      "constellation": "sentinel-2",
+      "processing:level": "L2A"
+    },
+    "assets": {
+      "B04_10m": {
+        "title": "Red (band 4) - 10m",
+        "roles": ["data", "reflectance"],
+        "media_type": "image/jp2"
+      },
+      "B08_10m": {
+        "title": "NIR 1 (band 8) - 10m",
+        "roles": ["data", "reflectance"],
+        "media_type": "image/jp2"
+      }
+    }
+  },
+  "classification": "TEST_FIXTURE"
+}
