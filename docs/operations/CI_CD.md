@@ -1,23 +1,17 @@
-# CI/CD status
+# CI/CD
 
-## Implementado no bootstrap
+O workflow `.github/workflows/ci.yml` executa gates reais:
 
-- compilação Python;
-- testes unitários e de integridade;
-- teste de isolamento multi-tenant;
-- teste de ausência, conflito, `NULL` e fonte indisponível;
-- workflow GitHub Actions básico.
+- `ruff format --check`, `ruff check`, `mypy` e testes unitários;
+- serviço PostgreSQL/PostGIS, migrations em banco limpo e testes de RLS/
+  integração com role não proprietária;
+- Bandit (SAST), pip-audit (SCA), detect-secrets e SBOM CycloneDX.
 
-## Gates ainda obrigatórios antes de produção
+O arquivo `requirements.lock` fixa as versões observadas do ambiente de
+desenvolvimento. A instalação usa o lock antes da instalação editável do
+projeto; o pacote local é excluído do pip-audit por não ser uma distribuição
+publicada.
 
-O workflow inicial não declara sucesso falso para controles ainda não instalados.
-Devem ser adicionados antes do primeiro deploy público:
-
-- format/lint/type check;
-- SAST;
-- SCA e secret scanning;
-- SBOM e image scanning;
-- IaC scanning;
-- integration/contract/E2E/performance tests;
-- DAST, pentest e revisão de threat model;
-- test deploy, migration check, canary e rollback.
+Ainda não são gates desta fase: image scanning, IaC scanning, DAST, pentest,
+test deploy, canary e rollback de release. Esses itens são risco residual e não
+são simulados por um job que apenas imprime uma mensagem.

@@ -1,15 +1,16 @@
-# Runbook local do primeiro slice
+# Runbook local da fundação
 
 ## Subir
 
-```bash
-PYTHONPATH=src RIBEIRA_DB_PATH=/tmp/ribeira.sqlite3 python3 -m ribeira_platform.api
-```
+Consulte `docs/operations/LOCAL_DEVELOPMENT.md`. O caminho de produção local usa
+PostgreSQL/PostGIS, migrations e a role `ribeira_app`; SQLite é somente fallback
+para testes rápidos.
 
 ## Verificar saúde
 
 ```bash
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8000/health/live
+curl http://127.0.0.1:8000/health/ready
 ```
 
 ## Falha de provider
@@ -25,7 +26,8 @@ Se não houver regra ativa, a API deve devolver `INCONCLUSIVE` com
 `missing_data=active_rule:soil_moisture`. Publicar uma nova versão com aprovador;
 não alterar a versão histórica.
 
-## Produção ainda não autorizada
+## Exposição pública ainda não autorizada
 
-Este bootstrap não deve ser exposto à internet pública: não possui autenticação,
-TLS próprio, rate limiting, RLS executado ou observabilidade operacional completa.
+O adapter HTTP possui autenticação JWT/OIDC, autorização, RLS, limites e métricas
+de aplicação, mas ainda depende de TLS no edge, WAF, rate limiting distribuído,
+egress proxy, secrets manager, backup/DR e SIEM antes de exposição pública.

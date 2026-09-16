@@ -4,24 +4,96 @@ on:
   push:
   pull_request:
 
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
-  verify:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Compile
-        run: python -m compileall -q src tests
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install locked development dependencies
+        run: python -m pip install -r requirements.lock && python -m pip install -e .
+      - name: Format check
+        run: ruff format --check src tests
+      - name: Lint
+        run: ruff check src tests
+      - name: Type check
+        run: mypy src --ignore-missing-imports
       - name: Unit and integrity tests
         run: PYTHONPATH=src python -m unittest discover -s tests -v
 
-  supply-chain-placeholder:
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: ribeira_dev
+          POSTGRES_USER: ribeira_admin
+          POSTGRES_PASSWORD: ribeira_admin_ci_only
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U ribeira_admin -d ribeira_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install locked dependencies
+        run: python -m pip install -r requirements.lock && python -m pip install -e .
+      - name: Create non-owner application role
+        env:
+          PGPASSWORD: ribeira_admin_ci_only
+        run: |
+          psql "host=127.0.0.1 port=55432 dbname=ribeira_dev user=ribeira_admin" \
+            -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE ribeira_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD 'ribeira_app_ci_only'"
+          psql "host=127.0.0.1 port=55432 dbname=ribeira_dev user=ribeira_admin" \
+            -v ON_ERROR_STOP=1 \
+            -c "GRANT CONNECT ON DATABASE ribeira_dev TO ribeira_app; GRANT USAGE ON SCHEMA public TO ribeira_app"
+      - name: Apply migrations to clean PostgreSQL/PostGIS database
+        env:
+          RIBEIRA_MIGRATION_DATABASE_URL: postgresql://ribeira_admin:ribeira_admin_ci_only@127.0.0.1:55432/ribeira_dev
+          RIBEIRA_ENV: test
+        run: PYTHONPATH=src python -m ribeira_platform.migrations upgrade
+      - name: Run PostgreSQL/PostGIS integration tests
+        env:
+          RIBEIRA_TEST_DATABASE_URL: postgresql://ribeira_app:ribeira_app_ci_only@127.0.0.1:55432/ribeira_dev
+        run: PYTHONPATH=src python -m unittest discover -s tests/integration -v
+
+  security:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Document security gate status
-        run: |
-          test -f docs/security/THREAT_MODEL.md
-          echo "SAST/SCA/SBOM/DAST/IaC gates are deployment prerequisites documented in the threat model."
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install locked development dependencies
+        run: python -m pip install -r requirements.lock && python -m pip install -e .
+      - name: SAST
+        run: bandit -q -r src
+      - name: Dependency vulnerability scan
+        run: pip-audit --skip-editable
+      - name: Secret scan
+        run: >-
+          detect-secrets scan --all-files
+          --exclude-files '(^|/)(\.git|\.venv|__pycache__)/'
+          --exclude-files 'requirements.lock'
+          --exclude-lines '(dev_only|ci_only|dev-only)'
+      - name: Generate dependency SBOM
+        run: pip-audit --skip-editable --format cyclonedx-json --output sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-sbom
+          path: sbom.cdx.json

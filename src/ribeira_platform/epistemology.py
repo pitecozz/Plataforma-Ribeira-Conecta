@@ -20,8 +20,10 @@ class DataClassification(StrEnum):
 class QualityFlag(StrEnum):
     VALID = "VALID"
     INVALID = "INVALID"
+    STALE = "STALE"
     UNKNOWN = "UNKNOWN"
     SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
+    INVALID_PAYLOAD = "INVALID_PAYLOAD"
     CONFLICTING = "CONFLICTING"
 
 

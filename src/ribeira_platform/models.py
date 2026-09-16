@@ -65,6 +65,8 @@ class Observation:
     observation_timestamp: str
     ingestion_timestamp: str = field(default_factory=now_utc)
     processing_timestamp: str = field(default_factory=now_utc)
+    original_observation_timestamp: str | None = None
+    idempotency_key: str | None = None
     classification: DataClassification = DataClassification.OBSERVED
     quality_flag: QualityFlag = QualityFlag.VALID
     raw_data_reference: str | None = None

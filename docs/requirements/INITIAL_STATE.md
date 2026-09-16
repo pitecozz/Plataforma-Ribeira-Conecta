@@ -8,7 +8,7 @@ schema, testes, CI/CD, observabilidade ou integrações. O blueprint primário f
 lido de `/home/pitequin/Downloads/ribeira_conecta_blueprint_completo.json` antes
 de criar arquivos.
 
-## Requisitos atendidos nesta execução
+## Requisitos atendidos na fundação e Fase 1A
 
 - núcleo multi-tenant com consultas escopadas por tenant;
 - propriedade com GeoJSON/CRS e alvo PostGIS;
@@ -16,25 +16,32 @@ de criar arquivos.
 - estados `SOURCE_UNAVAILABLE`, `UNKNOWN`, `INCONCLUSIVE` e `CONFLICTING`;
 - evidência, proveniência, regra versionada, decisão, alerta, ação e auditoria;
 - testes para dados ausentes, nulos, conflitos e tenant breakout;
-- documentação de lineage, traceability, threat model e ADRs.
+- documentação de lineage, traceability, threat model e ADRs;
+- PostgreSQL/PostGIS real, migrations com checksum e rollback testado;
+- RLS com `USING`, `WITH CHECK`, `FORCE RLS`, role não proprietária e testes reais;
+- API FastAPI versionada com OpenAPI, JWT/OIDC boundary, RBAC default-deny,
+  request/correlation IDs, health/readiness, limites e headers;
+- SSRF policy/provider registry, idempotência, timestamps timezone-aware,
+  métricas e gates CI de SAST/SCA/secret scan/SBOM.
 
 ## Gaps
 
-- autenticação/MFA/Passkeys/RBAC/ABAC;
-- PostgreSQL/PostGIS executado e RLS verificado em ambiente real;
+- MFA/Passkeys via Identity Provider, ABAC completo, membership administrativo e
+  revogação operacional;
+- deployment gerenciado, TLS/WAF/rate limit distribuído, backup/DR/SIEM;
 - providers oficiais reais, STAC, COG, object storage e workers geoespaciais;
 - frontend GIS/Farm 360/Rule Studio;
 - MQTT/LoRaWAN/device identity/edge;
 - módulos Banana Intelligence, CRM, rastreabilidade e IA contextual;
-- CI/CD com SAST, SCA, SBOM, DAST, image/IaC scanning;
+- DAST, image/IaC scanning, pentest, canary e rollback de release;
 - métricas, traces, filas, backup/DR e SIEM operacionais.
 
 ## Riscos
 
-O servidor atual é uma superfície local de desenvolvimento. Não deve ser
-publicado na internet: a API não possui autenticação nem TLS próprio. O adapter
-HTTP ainda precisa de allowlist/egress proxy contra SSRF em produção. A regra de
-30% de umidade é somente um exemplo do blueprint e não é criada automaticamente.
+O compose e o provider de desenvolvimento são somente locais. A API não termina
+TLS e ainda depende de edge/WAF/rate limit/egress proxy para exposição pública.
+A regra de 30% de umidade é somente um exemplo do blueprint e não é criada
+automaticamente.
 
 ## Dados ausentes
 
@@ -42,7 +49,8 @@ HTTP ainda precisa de allowlist/egress proxy contra SSRF em produção. A regra 
 - polígonos reais, sensores reais e séries históricas;
 - regra agronômica aprovada, limites por cliente/talhão e responsáveis;
 - resultados de campo para validar modelos/diagnósticos;
-- políticas comerciais confirmadas além das regras documentadas no prompt.
+- políticas comerciais confirmadas além das regras documentadas no prompt;
+- credenciais/licenças de providers externos e configuração de IdP.
 
 Não foram inventados valores para preencher esses campos.
 
@@ -50,16 +58,16 @@ Não foram inventados valores para preencher esses campos.
 
 - provider oficial e contrato de cada camada da fase 1;
 - stack de frontend GIS e estratégia de tiles;
-- política de identidade, papéis e segregação de funções;
+- configuração do Identity Provider, papéis efetivos, MFA e segregação de funções;
 - retenção LGPD, residência e classificação de dados;
 - definição agronômica validada e processo de aprovação das regras;
-- ambiente PostgreSQL/PostGIS, object storage, filas e observabilidade.
+- ambiente gerenciado PostgreSQL/PostGIS, object storage, filas e observabilidade.
 
 ## Arquitetura proposta
 
 Modular monolith com boundaries de source adapters, evidence engine, decision
-engine, storage, API e workers futuros. PostgreSQL/PostGIS é o alvo produtivo;
-SQLite é apenas o backend dependency-free de teste/local.
+engine, storage, API e workers futuros. PostgreSQL/PostGIS é o caminho produtivo
+validado nesta fase; SQLite é apenas o backend dependency-free de teste/local.
 
 ## Primeiro vertical slice
 

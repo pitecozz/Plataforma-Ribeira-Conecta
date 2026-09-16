@@ -23,17 +23,22 @@ inconclusiva. Fixtures sintéticas existem somente nos testes e são marcadas co
 
 ## Executar localmente
 
-O servidor usa SQLite local para desenvolvimento, sem exigir Docker ou PostgreSQL.
-O schema alvo PostGIS está em `db/migrations/001_initial.sql`.
+O caminho recomendado usa Docker Compose com PostgreSQL/PostGIS, migrations e
+autenticação de desenvolvimento explicitamente marcada. SQLite continua
+disponível apenas para testes rápidos. Veja o passo a passo em
+`docs/operations/LOCAL_DEVELOPMENT.md`.
 
 ```bash
-PYTHONPATH=src python3 -m ribeira_platform.api
+docker compose up -d postgres
+RIBEIRA_MIGRATION_DATABASE_URL=postgresql://ribeira_admin:ribeira_admin_dev_only@127.0.0.1:55432/ribeira_dev \
+  PYTHONPATH=src python3 -m ribeira_platform.migrations upgrade
 ```
 
 Endpoints básicos:
 
 ```text
-GET  /health
+GET  /health/live
+GET  /health/ready
 POST /v1/tenants
 POST /v1/tenants/{tenant_id}/properties
 POST /v1/tenants/{tenant_id}/sources
@@ -49,9 +54,8 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 
 ## Limites deliberados
 
-- O servidor local não autentica usuários; ele é uma superfície de
-  desenvolvimento e a documentação marca o gateway/MFA/RBAC como gap de
-  implantação.
+- O provider local de desenvolvimento não é autenticação de produção; produção
+  exige JWT/OIDC, MFA/passkeys e revogação no Identity Provider.
 - SQLite não executa consultas espaciais; o contrato PostGIS é a fonte para
   produção.
 - Nenhum provedor externo é consultado sem endpoint/credencial configurado.

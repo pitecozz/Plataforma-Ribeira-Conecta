@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from datetime import datetime, timedelta, timezone
 
-from ribeira_platform.epistemology import DataClassification, DecisionStatus, RuleAuthority
+from ribeira_platform.epistemology import (
+    DataClassification,
+    DecisionStatus,
+    RuleAuthority,
+)
 from ribeira_platform.models import RuleDefinition, new_id
 from ribeira_platform.service import RibeiraApplication
-from ribeira_platform.sources import HttpJsonSourceAdapter
+from ribeira_platform.providers import ProviderMetadata, ProviderRegistry
+from ribeira_platform.security import NetworkPolicy
+from ribeira_platform.sources import HttpJsonSourceAdapter, SyntheticFixtureAdapter
 from ribeira_platform.models import Property, Source
 from ribeira_platform.storage import SQLiteStore
 
@@ -32,11 +39,23 @@ class IntegrityTests(unittest.TestCase):
         app = RibeiraApplication(store)
         tenant = app.create_tenant("Tenant")
         with self.assertRaises(ValueError):
-            app.create_rule(RuleDefinition(
-                id=new_id(), tenant_id=tenant.id, version=1, name="unapproved", authority=RuleAuthority.REGRA_RIBEIRA,
-                metric="soil_moisture", operator="<", threshold=30, unit="%", severity="HIGH", status="ACTIVE",
-                approved_by=None, valid_from="2026-09-16T00:00:00+00:00",
-            ))
+            app.create_rule(
+                RuleDefinition(
+                    id=new_id(),
+                    tenant_id=tenant.id,
+                    version=1,
+                    name="unapproved",
+                    authority=RuleAuthority.REGRA_RIBEIRA,
+                    metric="soil_moisture",
+                    operator="<",
+                    threshold=30,
+                    unit="%",
+                    severity="HIGH",
+                    status="ACTIVE",
+                    approved_by=None,
+                    valid_from="2026-09-16T00:00:00+00:00",
+                )
+            )
         store.close()
 
     def test_expired_rule_is_not_active(self) -> None:
@@ -45,19 +64,151 @@ class IntegrityTests(unittest.TestCase):
         tenant = app.create_tenant("Tenant")
         expired = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         until = datetime.now(timezone.utc).isoformat()
-        app.create_rule(RuleDefinition(
-            id=new_id(), tenant_id=tenant.id, version=1, name="expired", authority=RuleAuthority.REGRA_RIBEIRA,
-            metric="soil_moisture", operator="<", threshold=30, unit="%", severity="HIGH", status="ACTIVE",
-            approved_by="approver", valid_from=expired, valid_until=until,
-        ))
+        app.create_rule(
+            RuleDefinition(
+                id=new_id(),
+                tenant_id=tenant.id,
+                version=1,
+                name="expired",
+                authority=RuleAuthority.REGRA_RIBEIRA,
+                metric="soil_moisture",
+                operator="<",
+                threshold=30,
+                unit="%",
+                severity="HIGH",
+                status="ACTIVE",
+                approved_by="approver",
+                valid_from=expired,
+                valid_until=until,
+            )
+        )
         self.assertIsNone(store.active_rule(tenant.id, "soil_moisture"))
         store.close()
 
     def test_http_adapter_rejects_non_http_endpoint(self) -> None:
         property = Property(new_id(), "tenant", "property")
-        source = Source(new_id(), "tenant", "source", "provider", "provider", "file:///etc/passwd")
-        result = HttpJsonSourceAdapter().fetch_property_observations("tenant", property, source)
+        source = Source(
+            new_id(), "tenant", "source", "provider", "provider", "file:///etc/passwd"
+        )
+        result = HttpJsonSourceAdapter().fetch_property_observations(
+            "tenant", property, source
+        )
         self.assertEqual(result.status.value, "SOURCE_UNAVAILABLE")
+        self.assertEqual(result.observations, [])
+
+    def test_timestamps_require_timezone_and_preserve_original_offset(self) -> None:
+        property = Property(new_id(), "tenant", "property")
+        source = Source(new_id(), "tenant", "source", "test", "fixture")
+        adapter = SyntheticFixtureAdapter(
+            [
+                {
+                    "metric": "soil_moisture",
+                    "value": 27.4,
+                    "unit": "%",
+                    "observation_timestamp": "2026-09-16T13:42:11-03:00",
+                }
+            ]
+        )
+        result = adapter.fetch_property_observations("tenant", property, source)
+        observation = result.observations[0]
+        self.assertEqual(observation.observation_timestamp, "2026-09-16T16:42:11+00:00")
+        self.assertEqual(
+            observation.original_observation_timestamp, "2026-09-16T13:42:11-03:00"
+        )
+        with self.assertRaises(ValueError):
+            SyntheticFixtureAdapter(
+                [
+                    {
+                        "metric": "soil_moisture",
+                        "value": 27.4,
+                        "unit": "%",
+                        "observation_timestamp": "2026-09-16T13:42:11",
+                    }
+                ]
+            ).fetch_property_observations("tenant", property, source)
+
+    def test_rule_timestamps_require_timezone(self) -> None:
+        store = SQLiteStore()
+        app = RibeiraApplication(store)
+        tenant = app.create_tenant("Tenant")
+        with self.assertRaises(ValueError):
+            app.create_rule(
+                RuleDefinition(
+                    new_id(),
+                    tenant.id,
+                    1,
+                    "naive rule",
+                    RuleAuthority.REGRA_RIBEIRA,
+                    "soil_moisture",
+                    "<",
+                    30,
+                    "%",
+                    "HIGH",
+                    "DRAFT",
+                    None,
+                    "2026-09-16T00:00:00",
+                )
+            )
+        store.close()
+
+    def test_http_adapter_marks_invalid_provider_payload(self) -> None:
+        property = Property(new_id(), "tenant", "property")
+        source = Source(
+            new_id(),
+            "tenant",
+            "source",
+            "provider",
+            "provider-1",
+            "https://provider.example/observations",
+        )
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def read(self):
+                return b'{"unexpected": true}'
+
+        class Opener:
+            def open(self, *_args, **_kwargs):
+                return Response()
+
+        registry = ProviderRegistry(
+            [
+                ProviderMetadata(
+                    "provider-1",
+                    "Provider",
+                    "test",
+                    "MANUAL_CONFIRMED",
+                    "https://provider.example/observations",
+                    None,
+                    "none",
+                    None,
+                    None,
+                    "1",
+                    "ACTIVE",
+                )
+            ]
+        )
+        adapter = HttpJsonSourceAdapter(
+            provider_registry=registry,
+            network_policy=NetworkPolicy(allowed_hosts=frozenset({"provider.example"})),
+        )
+        with (
+            patch(
+                "ribeira_platform.sources.urllib.request.build_opener",
+                return_value=Opener(),
+            ),
+            patch(
+                "ribeira_platform.security.socket.getaddrinfo",
+                return_value=[(None, None, None, None, ("93.184.216.34", 443))],
+            ),
+        ):
+            result = adapter.fetch_property_observations("tenant", property, source)
+        self.assertEqual(result.status.value, "INVALID_PAYLOAD")
         self.assertEqual(result.observations, [])
 
 

@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: ribeira-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ribeira_dev
+      POSTGRES_USER: ribeira_admin
+      POSTGRES_PASSWORD: ribeira_admin_dev_only
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - ribeira_postgres_data:/var/lib/postgresql/data
+      - ./db/bootstrap:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ribeira_admin -d ribeira_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  ribeira_postgres_data:
