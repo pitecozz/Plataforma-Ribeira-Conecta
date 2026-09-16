@@ -1,0 +1,1423 @@
+{
+  "metadata": {
+    "projeto": "Ribeira Conecta Intelligence Platform",
+    "versao_documento": "1.0",
+    "data_consolidacao": "2026-09-16",
+    "idioma": "pt-BR",
+    "origem": "Consolidação da conversa sobre SpectraX, inteligência territorial, prospecção, agronegócio, regras de negócio, segurança e arquitetura",
+    "observacao_importante": "A SpectraX não publica uma lista completa e oficial de todo o pipeline interno. Portanto, o documento separa fontes publicamente associadas/citadas, fontes recomendadas para a Ribeira Conecta e hipóteses técnicas. Não tratar hipóteses como confirmação de uso pela SpectraX."
+  },
+  "visao_geral": {
+    "objetivo_principal": "Construir uma plataforma de inteligência territorial, comercial, agronômica, ambiental, de infraestrutura, conectividade, IoT e segurança que se adapte às regras de negócio da Ribeira Conecta e às regras específicas de cada cliente.",
+    "objetivos_secundarios": [
+      "Prospectar novos clientes de forma inteligente.",
+      "Conhecer o ambiente completo do cliente antes e depois da contratação.",
+      "Identificar instalações, conectividade, energia, riscos, infraestrutura e oportunidades.",
+      "Criar novas linhas de consultoria para bananicultores e outros produtores.",
+      "Gerar valor recorrente ao cliente com monitoramento, alertas, recomendações e automações.",
+      "Transformar dados brutos em decisões e ações.",
+      "Criar oportunidades de cross-sell e upsell para a Ribeira Conecta.",
+      "Permitir customização por setor, cliente, propriedade, talhão, ativo e contexto.",
+      "Evoluir de GIS/dashboard para uma plataforma operacional e de decisão."
+    ],
+    "principio_central": "Ativo -> dado -> contexto -> regra -> decisão -> ação -> resultado"
+  },
+  "conceito_de_produto": {
+    "nome_conceitual": "Ribeira Intelligence Platform",
+    "posicionamento": "Sistema operacional de inteligência para propriedades, operações rurais e clientes empresariais.",
+    "nao_deve_ser": [
+      "Apenas um mapa bonito.",
+      "Apenas um clone da SpectraX.",
+      "Apenas um dashboard de indicadores.",
+      "Apenas um CRM.",
+      "Apenas um sistema de satélite."
+    ],
+    "deve_ser": [
+      "Plataforma multi-tenant.",
+      "Orientada por regras.",
+      "Baseada em GIS e Digital Twin.",
+      "Integrada a IoT.",
+      "Com inteligência comercial.",
+      "Com camada agronômica.",
+      "Com camada ambiental.",
+      "Com infraestrutura e conectividade.",
+      "Com segurança por design.",
+      "Com IA contextual.",
+      "Com rastreabilidade e auditoria."
+    ]
+  },
+  "modulos_sugeridos": {
+    "Ribeira_Maps": "GIS, mapas, camadas, satélite, ortofotos e análise espacial.",
+    "Ribeira_Prospect": "Prospecção, scoring de leads e priorização comercial.",
+    "Ribeira_Connect": "Conectividade, RF, visada, Fresnel, link budget e oportunidades de telecom.",
+    "Ribeira_Agro": "Inteligência agrícola, talhões, vegetação, risco hídrico e doenças.",
+    "Ribeira_IoT": "Sensores, telemetria, MQTT, LoRaWAN, edge e automações.",
+    "Ribeira_Monitor": "Alertas, incidentes, regras e acompanhamento.",
+    "Ribeira_Rules": "Motor de regras da Ribeira e dos clientes.",
+    "Ribeira_AI": "IA contextual baseada nos dados reais do cliente.",
+    "Ribeira_Trace": "Rastreabilidade de produção, lotes, colheita e IG.",
+    "Ribeira_Energy": "Energia, rede elétrica, monitoramento e oportunidades.",
+    "Ribeira_Security": "CFTV, segurança física, monitoramento e infraestrutura.",
+    "Ribeira_Business": "CRM, oportunidades, upsell, cross-sell, receita potencial e relacionamento.",
+    "Ribeira_Farm_360": "Visão 360 da propriedade e de seus ativos.",
+    "Ribeira_Banana_Intelligence": "Módulo específico para bananicultura."
+  },
+  "spectrax": {
+    "escopo_publicamente_observado": [
+      "CAR",
+      "SIGEF/SNCI",
+      "PRODES",
+      "ImazonGeo",
+      "IBAMA",
+      "ICMBio",
+      "Sinaflor",
+      "mineração",
+      "solos",
+      "clima",
+      "carbono",
+      "territórios",
+      "infraestrutura",
+      "uso e cobertura do solo",
+      "APP",
+      "Reserva Legal",
+      "recursos hídricos",
+      "emissões",
+      "biodiversidade",
+      "indicadores sociais e de governança"
+    ],
+    "tecnologias_associadas": [
+      "Sensoriamento remoto",
+      "Big Data",
+      "Machine Learning",
+      "Ciência de dados",
+      "Geoprocessamento"
+    ],
+    "satelites_ou_sensores_citados_em_contextos_tecnicos": [
+      {
+        "nome": "Sentinel-2",
+        "status": "fortemente relevante e citado",
+        "uso": [
+          "vegetação",
+          "NDVI",
+          "uso do solo",
+          "monitoramento agrícola",
+          "desmatamento"
+        ]
+      },
+      {
+        "nome": "MODIS",
+        "status": "citado em conteúdos técnicos",
+        "uso": [
+          "vegetação",
+          "fogo",
+          "temperatura",
+          "séries temporais"
+        ]
+      },
+      {
+        "nome": "PlanetScope",
+        "status": "citado como opção de alta frequência",
+        "uso": [
+          "monitoramento frequente",
+          "detalhamento de propriedades"
+        ]
+      },
+      {
+        "nome": "CBERS-4A",
+        "status": "citado em contexto de fiscalização territorial",
+        "uso": [
+          "alta resolução relativa",
+          "uso do solo",
+          "fiscalização"
+        ]
+      },
+      {
+        "nome": "WorldView-3",
+        "status": "citado em contexto técnico; não assumir uso operacional interno sem confirmação",
+        "uso": [
+          "inspeção detalhada",
+          "infraestrutura",
+          "vegetação"
+        ]
+      },
+      {
+        "nome": "Pléiades",
+        "status": "citado em contexto técnico; não assumir uso operacional interno sem confirmação",
+        "uso": [
+          "inspeção detalhada",
+          "infraestrutura",
+          "fiscalização"
+        ]
+      }
+    ],
+    "limite_de_conhecimento": "Não existe documentação pública completa que confirme todas as fontes e todos os satélites do pipeline interno da SpectraX."
+  },
+  "satelites_e_sensores_recomendados": {
+    "opticos": [
+      {
+        "nome": "Sentinel-2 MSI",
+        "resolucao_aproximada": "10-60 m",
+        "prioridade": "muito alta",
+        "aplicacoes": [
+          "NDVI",
+          "NDRE",
+          "NDMI",
+          "vegetação",
+          "talhões",
+          "uso do solo",
+          "mudanças",
+          "agricultura"
+        ]
+      },
+      {
+        "nome": "Landsat 8 OLI/TIRS",
+        "resolucao_aproximada": "30 m multiespectral / 15 m pancromático",
+        "prioridade": "alta",
+        "aplicacoes": [
+          "histórico",
+          "uso do solo",
+          "temperatura",
+          "séries temporais"
+        ]
+      },
+      {
+        "nome": "Landsat 9 OLI-2/TIRS-2",
+        "resolucao_aproximada": "30 m multiespectral / 15 m pancromático",
+        "prioridade": "alta",
+        "aplicacoes": [
+          "histórico",
+          "uso do solo",
+          "temperatura",
+          "séries temporais"
+        ]
+      },
+      {
+        "nome": "CBERS-4A WPM",
+        "resolucao_aproximada": "2 m PAN / 8 m MS",
+        "prioridade": "alta",
+        "aplicacoes": [
+          "fiscalização",
+          "infraestrutura",
+          "detalhamento territorial"
+        ]
+      },
+      {
+        "nome": "CBERS-4A MUX",
+        "resolucao_aproximada": "16 m",
+        "prioridade": "média",
+        "aplicacoes": [
+          "vegetação",
+          "uso do solo"
+        ]
+      },
+      {
+        "nome": "CBERS-4A WFI",
+        "resolucao_aproximada": "55 m",
+        "prioridade": "média",
+        "aplicacoes": [
+          "monitoramento regional"
+        ]
+      },
+      {
+        "nome": "MODIS Terra/Aqua",
+        "resolucao_aproximada": "250-1000 m",
+        "prioridade": "média",
+        "aplicacoes": [
+          "fogo",
+          "vegetação",
+          "temperatura",
+          "clima",
+          "séries temporais"
+        ]
+      },
+      {
+        "nome": "VIIRS",
+        "resolucao_aproximada": "~375 m em produtos de fogo",
+        "prioridade": "alta para incêndios",
+        "aplicacoes": [
+          "focos de calor",
+          "queimadas"
+        ]
+      }
+    ],
+    "radar": [
+      {
+        "nome": "Sentinel-1 SAR",
+        "prioridade": "muito alta",
+        "aplicacoes": [
+          "monitoramento com nuvens",
+          "mudanças",
+          "umidade",
+          "estrutura",
+          "alagamentos"
+        ]
+      },
+      {
+        "nome": "NISAR",
+        "prioridade": "roadmap",
+        "aplicacoes": [
+          "estrutura de vegetação",
+          "umidade",
+          "mudanças",
+          "biomassa",
+          "contexto regional"
+        ]
+      },
+      {
+        "nome": "ALOS PALSAR",
+        "prioridade": "média",
+        "aplicacoes": [
+          "radar",
+          "estrutura",
+          "relevo",
+          "mudanças"
+        ]
+      }
+    ],
+    "hiperespectral_e_termico": [
+      {
+        "nome": "EnMAP",
+        "prioridade": "P&D",
+        "aplicacoes": [
+          "assinatura espectral",
+          "vegetação",
+          "solos",
+          "pesquisa agronômica"
+        ]
+      },
+      {
+        "nome": "ECOSTRESS",
+        "prioridade": "alta para consultoria agrícola",
+        "aplicacoes": [
+          "temperatura de superfície",
+          "estresse térmico",
+          "evapotranspiração",
+          "manejo hídrico"
+        ]
+      }
+    ],
+    "floresta_e_biomassa": [
+      {
+        "nome": "GEDI",
+        "prioridade": "média",
+        "aplicacoes": [
+          "altura de vegetação",
+          "biomassa",
+          "carbono"
+        ]
+      }
+    ],
+    "comerciais_premium": [
+      {
+        "nome": "PlanetScope",
+        "resolucao_aproximada": "~3 m",
+        "uso": [
+          "monitoramento frequente",
+          "prospecção premium",
+          "mudanças"
+        ]
+      },
+      {
+        "nome": "Pléiades",
+        "resolucao_aproximada": "~50 cm",
+        "uso": [
+          "infraestrutura",
+          "edificações",
+          "inspeção"
+        ]
+      },
+      {
+        "nome": "Pléiades Neo",
+        "resolucao_aproximada": "~30 cm",
+        "uso": [
+          "inspeção de altíssimo detalhe"
+        ]
+      },
+      {
+        "nome": "WorldView-3",
+        "resolucao_aproximada": "~31 cm PAN",
+        "uso": [
+          "infraestrutura",
+          "vegetação",
+          "solo",
+          "minerais"
+        ]
+      },
+      {
+        "nome": "WorldView Legion",
+        "resolucao_aproximada": "~30 cm",
+        "uso": [
+          "alta resolução e frequência"
+        ]
+      }
+    ],
+    "drone": {
+      "tipos": [
+        "RGB",
+        "multiespectral",
+        "eventualmente térmico"
+      ],
+      "resolucao_alvo": "centímetros por pixel",
+      "aplicacoes": [
+        "ortofoto de propriedade",
+        "contagem e inspeção",
+        "instalações",
+        "galpões",
+        "packing house",
+        "reservatórios",
+        "carreadores",
+        "talhões",
+        "irrigação",
+        "infraestrutura"
+      ]
+    }
+  },
+  "bases_fundiarias_e_imoveis": [
+    "SICAR/CAR",
+    "SIGEF/INCRA",
+    "SNCI/INCRA",
+    "SNCR",
+    "Meu Imóvel Rural",
+    "Acervo Fundiário do INCRA"
+  ],
+  "bases_ambientais_e_florestais": [
+    "INPE PRODES",
+    "INPE DETER",
+    "Imazon SAD / ImazonGeo",
+    "Hansen Global Forest Change",
+    "JRC Tropical Moist Forest",
+    "MapBiomas",
+    "MapBiomas Alerta",
+    "MapBiomas Fogo",
+    "MapBiomas Água",
+    "MapBiomas Pastagem",
+    "MapBiomas Solo",
+    "IBAMA Embargos",
+    "IBAMA Autos de Infração",
+    "SINAFLOR",
+    "ICMBio",
+    "CNUC/MMA",
+    "CNFP/Serviço Florestal Brasileiro"
+  ],
+  "bases_territoriais_sociais_e_publicas": [
+    "FUNAI - Terras Indígenas",
+    "INCRA - Territórios Quilombolas",
+    "INCRA - Assentamentos",
+    "Unidades de Conservação",
+    "Florestas Públicas",
+    "MTE - Lista de Trabalho Análogo à Escravidão"
+  ],
+  "bases_estaduais_sugeridas": {
+    "MG": [
+      "SEMAD MG",
+      "licenciamento ambiental",
+      "intervenção ambiental",
+      "fiscalização"
+    ],
+    "TO": [
+      "Naturatins",
+      "embargos",
+      "autos de infração"
+    ],
+    "PR": [
+      "GeoPR/IAT",
+      "embargos"
+    ],
+    "PA": [
+      "SEMAS PA",
+      "embargos"
+    ],
+    "GO": [
+      "SEMAD GO",
+      "embargos",
+      "autorização de supressão",
+      "autos de infração"
+    ],
+    "CE": [
+      "SEMACE",
+      "infrações",
+      "embargos"
+    ],
+    "MT": [
+      "SEMA MT",
+      "SIGA MT",
+      "autorização de desmate",
+      "declaração de limpeza",
+      "autos",
+      "embargos"
+    ],
+    "MS": [
+      "licenciamento",
+      "supressão vegetal",
+      "autos",
+      "multas",
+      "outorgas de água",
+      "licenças florestais"
+    ]
+  },
+  "bases_mineracao": [
+    "ANM SIGMINE",
+    "Processos minerários",
+    "Concessões",
+    "Requerimentos",
+    "Reservas garimpeiras",
+    "Áreas de bloqueio"
+  ],
+  "solos": {
+    "fontes": [
+      "Embrapa",
+      "SiBCS",
+      "BDSolos",
+      "PronaSolos",
+      "ISRIC SoilGrids"
+    ],
+    "variaveis": [
+      "argila",
+      "areia",
+      "silte",
+      "carbono orgânico",
+      "densidade aparente",
+      "pH",
+      "CEC",
+      "nitrogênio",
+      "textura",
+      "classe de solo"
+    ]
+  },
+  "clima_e_hidrologia": {
+    "precipitacao": [
+      "CHIRPS",
+      "GPM IMERG",
+      "INMET",
+      "Cemaden"
+    ],
+    "temperatura": [
+      "ERA5-Land",
+      "NASA POWER",
+      "INMET",
+      "MODIS LST",
+      "ECOSTRESS"
+    ],
+    "evapotranspiracao": [
+      "MODIS MOD16",
+      "SSEBop",
+      "FAO WaPOR",
+      "ECOSTRESS"
+    ],
+    "hidrologia": [
+      "ANA",
+      "SNIRH",
+      "JRC Global Surface Water",
+      "HydroSHEDS"
+    ],
+    "risco": [
+      "Cemaden",
+      "SGB",
+      "ANA"
+    ],
+    "calculos_internos": [
+      "balanço hídrico",
+      "anomalia de chuva",
+      "déficit hídrico",
+      "autonomia de reservatório"
+    ]
+  },
+  "relevo": {
+    "fontes": [
+      "SRTM",
+      "Copernicus DEM",
+      "ALOS DEM",
+      "TOPODATA/INPE"
+    ],
+    "derivados": [
+      "declividade",
+      "altitude",
+      "aspecto",
+      "drenagem",
+      "bacias",
+      "visada",
+      "Fresnel",
+      "risco de erosão",
+      "apoio a APP"
+    ]
+  },
+  "queimadas": [
+    "INPE BDQueimadas",
+    "NASA FIRMS",
+    "VIIRS",
+    "MODIS"
+  ],
+  "infraestrutura_e_logistica": {
+    "energia": [
+      "ANEEL BDGD"
+    ],
+    "rodovias": [
+      "DNIT",
+      "DER-SP"
+    ],
+    "ferrovias": [
+      "ANTT"
+    ],
+    "armazens_e_silos": [
+      "CONAB"
+    ],
+    "combustiveis_e_biocombustiveis": [
+      "ANP"
+    ],
+    "energia_eletrica_derivados": [
+      "distância até rede",
+      "distância até transformador",
+      "infraestrutura existente",
+      "viabilidade de expansão",
+      "oportunidade para nobreak",
+      "oportunidade para energia solar",
+      "oportunidade para telemetria de energia"
+    ]
+  },
+  "conectividade": {
+    "fontes": [
+      "Anatel ERBs",
+      "Anatel cobertura móvel",
+      "dados próprios de POPs e torres Ribeira",
+      "DEM",
+      "obstáculos e edificações",
+      "inventário de enlaces"
+    ],
+    "calculos": [
+      "Line of Sight",
+      "Zona de Fresnel",
+      "Link Budget",
+      "distância até POP",
+      "altura mínima de antena",
+      "RSSI estimado",
+      "throughput estimado",
+      "melhor POP/torre",
+      "viabilidade LoRaWAN"
+    ],
+    "valor_comercial": [
+      "internet rural",
+      "backhaul",
+      "Wi-Fi externo",
+      "LoRaWAN",
+      "CFTV",
+      "telemetria",
+      "monitoramento"
+    ]
+  },
+  "prospeccao": {
+    "fontes": [
+      "IBGE PAM",
+      "Censo Agropecuário IBGE",
+      "Receita Federal - Dados Abertos CNPJ",
+      "SICOR/BCB",
+      "CAR/SIGEF",
+      "satélites",
+      "Anatel",
+      "ANEEL",
+      "rodovias",
+      "dados próprios da Ribeira"
+    ],
+    "objetivo": "Identificar propriedades, empresas e operações com maior probabilidade de precisar dos serviços da Ribeira.",
+    "prospect_score_exemplo": {
+      "banana_detectada": 25,
+      "area_maior_que_20ha": 15,
+      "baixa_conectividade": 20,
+      "galpao_ou_packing_house": 10,
+      "rede_eletrica_proxima": 5,
+      "alta_atividade_agricola": 10,
+      "risco_climatico": 5,
+      "sem_monitoramento_iot": 10
+    },
+    "regras_de_privacidade": [
+      "Priorizar dados territoriais e dados públicos de pessoas jurídicas.",
+      "Evitar enriquecimento abusivo com dados pessoais.",
+      "Tratar contatos e dados pessoais conforme LGPD e base legal apropriada."
+    ]
+  },
+  "banana_intelligence": {
+    "objetivo": "Criar uma linha de consultoria e monitoramento recorrente para bananicultores.",
+    "problemas_relevantes": [
+      "Sigatoka-amarela",
+      "Sigatoka-negra",
+      "Murcha de Fusarium / Mal-do-Panamá",
+      "estresse hídrico",
+      "alagamento",
+      "problemas de irrigação",
+      "anomalias vegetativas"
+    ],
+    "indices_e_variaveis": [
+      "NDVI",
+      "NDRE",
+      "NDMI",
+      "temperatura",
+      "umidade do solo",
+      "chuva",
+      "molhamento foliar",
+      "vigor",
+      "anomalia vegetativa"
+    ],
+    "regra_critica": "Satélite sozinho não deve diagnosticar doença. Deve produzir risco, evidência ou triagem para inspeção de campo.",
+    "sensores_iot_recomendados": [
+      "temperatura",
+      "umidade relativa",
+      "chuva",
+      "molhamento foliar",
+      "umidade do solo",
+      "radiação solar",
+      "vento",
+      "pressão",
+      "vazão",
+      "nível de reservatório"
+    ],
+    "produto_iot": "Ribeira Agro Station",
+    "saida_exemplo": {
+      "tipo": "alerta_risco_sigatoka",
+      "conteudo": [
+        "molhamento foliar acumulado",
+        "temperatura média",
+        "umidade relativa",
+        "precipitação",
+        "nível de risco",
+        "recomendação de inspeção"
+      ]
+    }
+  },
+  "rastreabilidade": {
+    "produto": "Ribeira Trace",
+    "cadeia": [
+      "produtor",
+      "propriedade",
+      "talhão",
+      "colheita",
+      "lote",
+      "packing house",
+      "transporte",
+      "comprador"
+    ],
+    "uso": [
+      "QR Code",
+      "origem",
+      "lote",
+      "data de colheita",
+      "rastreabilidade",
+      "integração com IG da Banana do Vale do Ribeira",
+      "controle de qualidade"
+    ]
+  },
+  "mercado_e_economia": {
+    "fontes": [
+      "CEAGESP",
+      "CONAB Prohort",
+      "SICOR/BCB",
+      "IBGE PAM"
+    ],
+    "indicadores": [
+      "preço atual",
+      "média 7 dias",
+      "média 30 dias",
+      "média 12 meses",
+      "tendência",
+      "produção estimada",
+      "receita estimada"
+    ],
+    "regra": "Modelos de previsão devem apresentar incerteza e não ser tratados como garantia de preço."
+  },
+  "digital_twin": {
+    "objetivo": "Representar digitalmente a propriedade e seus ativos.",
+    "entidades": [
+      "propriedade",
+      "talhão",
+      "galpão",
+      "packing house",
+      "câmara fria",
+      "reservatório",
+      "bomba",
+      "irrigação",
+      "estradas internas",
+      "carreadores",
+      "torre",
+      "antena",
+      "POP",
+      "transformador",
+      "sensor",
+      "CFTV",
+      "casa",
+      "equipamento",
+      "rede elétrica"
+    ],
+    "cada_entidade_deve_ter": [
+      "ID único",
+      "geometria/localização",
+      "tipo",
+      "status",
+      "atributos",
+      "sensores relacionados",
+      "histórico",
+      "documentos",
+      "alertas",
+      "manutenções",
+      "regras aplicáveis"
+    ]
+  },
+  "linha_do_tempo": {
+    "eventos": [
+      "mudança de vegetação",
+      "expansão",
+      "obras",
+      "mudança de uso do solo",
+      "incidente",
+      "manutenção",
+      "chuva extrema",
+      "doença/risco",
+      "alteração de infraestrutura",
+      "atualização cadastral",
+      "mudança comercial"
+    ],
+    "objetivo": "Permitir análise histórica e mostrar evolução da propriedade."
+  },
+  "regras_de_negocio": {
+    "arquitetura_de_regras": {
+      "camadas": [
+        "GLOBAL",
+        "SETOR",
+        "TIPO_DE_NEGOCIO",
+        "CLIENTE",
+        "PROPRIEDADE",
+        "TALHAO",
+        "ATIVO"
+      ],
+      "heranca": "Regras mais específicas podem sobrescrever regras genéricas.",
+      "exemplo": {
+        "global_umidade_minima": "30%",
+        "cliente_umidade_minima": "35%",
+        "talhao_umidade_minima": "40%",
+        "valor_aplicado_no_talhao": "40%"
+      }
+    },
+    "regras_ribeira_conecta": {
+      "objetivo": "Representar políticas comerciais, operacionais, técnicas e de atendimento da Ribeira.",
+      "exemplos": [
+        {
+          "nome": "Oportunidade de conectividade",
+          "condicao": "propriedade > 20 ha AND internet inadequada AND visada para POP Ribeira = true",
+          "acao": "criar oportunidade comercial de conectividade"
+        },
+        {
+          "nome": "Cross-sell CFTV",
+          "condicao": "cliente atual = true AND galpao = true AND CFTV identificado = false",
+          "acao": "criar oportunidade de avaliação de segurança"
+        },
+        {
+          "nome": "Cross-sell IoT Agro",
+          "condicao": "cliente internet = true AND produção agrícola significativa = true AND monitoramento IoT = false",
+          "acao": "criar oportunidade de IoT/agro"
+        }
+      ],
+      "parametros_configuraveis": [
+        "perfil de cliente ideal",
+        "distância máxima por tecnologia de link",
+        "margem mínima",
+        "SLA",
+        "prioridade de lead",
+        "quando gerar tarefa comercial",
+        "quando exigir visita técnica",
+        "produtos elegíveis por perfil",
+        "regras de escalonamento",
+        "regras de cross-sell e upsell"
+      ]
+    },
+    "regras_do_cliente": {
+      "objetivo": "Adaptar a plataforma à operação real de cada cliente.",
+      "exemplos": [
+        {
+          "nome": "Alerta logístico por chuva",
+          "condicao": "chuva > limite_cliente AND estrada em risco",
+          "acao": [
+            "alertar logística",
+            "criar tarefa"
+          ]
+        },
+        {
+          "nome": "Risco Sigatoka",
+          "condicao": "molhamento foliar + temperatura + umidade dentro de condições favoráveis",
+          "acao": [
+            "elevar risco",
+            "avisar responsável",
+            "recomendar inspeção"
+          ]
+        },
+        {
+          "nome": "Restrição operacional de irrigação",
+          "condicao": "horário entre 18:00 e 22:00",
+          "acao": "bloquear ou desaconselhar irrigação conforme política do cliente"
+        },
+        {
+          "nome": "Câmara fria",
+          "condicao": "temperatura > 15°C por 5 minutos",
+          "acao": [
+            "alertar responsável",
+            "abrir incidente crítico"
+          ]
+        },
+        {
+          "nome": "Bomba sem vazão",
+          "condicao": "bomba ligada AND vazão não aumenta",
+          "acao": [
+            "alerta",
+            "ordem de serviço",
+            "inspeção"
+          ]
+        }
+      ]
+    },
+    "regras_regulatorias_e_tecnicas": {
+      "exemplos": [
+        "APP",
+        "Reserva Legal",
+        "CAR",
+        "embargos",
+        "segurança",
+        "disponibilidade",
+        "LGPD",
+        "rastreabilidade",
+        "auditoria"
+      ],
+      "controle": "Não devem ser alteradas livremente por qualquer usuário."
+    },
+    "business_rule_studio": {
+      "objetivo": "Permitir configuração visual de regras sem necessidade de programação.",
+      "componentes": [
+        "quando",
+        "condição",
+        "operador",
+        "valor",
+        "janela de tempo",
+        "severidade",
+        "ação",
+        "responsável",
+        "canal de notificação",
+        "escopo",
+        "vigência",
+        "versionamento"
+      ],
+      "acoes_possiveis": [
+        "WhatsApp",
+        "e-mail",
+        "push",
+        "dashboard",
+        "criar alerta",
+        "criar tarefa",
+        "criar ticket",
+        "abrir ordem de serviço",
+        "acionar automação",
+        "avisar agrônomo",
+        "avisar vendedor",
+        "criar oportunidade CRM"
+      ]
+    }
+  },
+  "templates_de_negocio": {
+    "bananicultor": [
+      "talhões",
+      "produção",
+      "chuva",
+      "temperatura",
+      "molhamento foliar",
+      "Sigatoka",
+      "irrigação",
+      "bombas",
+      "energia",
+      "estradas",
+      "colheita",
+      "packing house",
+      "rastreabilidade",
+      "preço",
+      "logística",
+      "conectividade"
+    ],
+    "industria": [
+      "energia",
+      "conectividade",
+      "servidores",
+      "CFTV",
+      "temperatura",
+      "máquinas",
+      "SLA",
+      "produção"
+    ],
+    "pecuaria": [
+      "pastagem",
+      "água",
+      "cercas",
+      "rebanho",
+      "clima",
+      "conectividade"
+    ],
+    "prefeitura": [
+      "infraestrutura",
+      "fiscalização",
+      "território",
+      "ativos públicos",
+      "conectividade",
+      "riscos"
+    ]
+  },
+  "ia_contextual": {
+    "deve_conhecer": [
+      "propriedade",
+      "sensores",
+      "histórico",
+      "regras do cliente",
+      "documentos",
+      "procedimentos",
+      "equipamentos",
+      "mapas",
+      "tickets",
+      "indicadores",
+      "alertas",
+      "manutenções"
+    ],
+    "principio": "A IA não deve ser apenas um chatbot genérico.",
+    "exemplo_de_resposta": "Explicar um problema correlacionando vigor vegetal, umidade, pressão de irrigação, histórico e regras, e sugerir a próxima ação."
+  },
+  "next_best_action": {
+    "objetivo": "Transformar detecção em ação prática.",
+    "estrutura": [
+      "problema",
+      "confiança",
+      "evidências",
+      "causas prováveis",
+      "próxima melhor ação",
+      "responsável",
+      "prazo",
+      "botão para ordem de serviço"
+    ]
+  },
+  "valor_para_o_cliente": {
+    "principios": [
+      "Não mostrar apenas índice técnico.",
+      "Traduzir dados para impacto operacional.",
+      "Traduzir anomalias para impacto financeiro quando possível.",
+      "Explicar por que o alerta existe.",
+      "Mostrar evidências.",
+      "Sugerir ação.",
+      "Acompanhar resultado.",
+      "Criar histórico e rastreabilidade.",
+      "Ajudar a evitar perdas.",
+      "Melhorar produtividade e operação."
+    ],
+    "exemplos": [
+      "Talhão 7 perdeu 14% de vigor em relação à média dos últimos 90 dias.",
+      "A alteração coincide com queda de umidade e temperatura acima da média.",
+      "Recomendada inspeção no setor nordeste.",
+      "4,8 ha apresentam anomalia e podem representar risco econômico relevante.",
+      "Falha de irrigação acumulada por 6h42 pode afetar 12 ha."
+    ]
+  },
+  "valor_para_a_ribeira": {
+    "objetivos": [
+      "Identificar leads prioritários.",
+      "Reduzir custo de visita comercial.",
+      "Entender o ambiente antes da proposta.",
+      "Aumentar conversão.",
+      "Aumentar ticket médio.",
+      "Criar receita recorrente.",
+      "Gerar cross-sell.",
+      "Gerar upsell.",
+      "Oferecer consultoria baseada em dados.",
+      "Criar lock-in positivo por histórico e integração operacional."
+    ],
+    "oportunidades_exemplo": [
+      "internet rural",
+      "CFTV",
+      "Wi-Fi externo",
+      "IoT agrícola",
+      "estação meteorológica",
+      "LoRaWAN",
+      "energia/UPS",
+      "telemetria",
+      "automação de irrigação",
+      "rastreabilidade",
+      "monitoramento satelital",
+      "consultoria agronômica"
+    ]
+  },
+  "indice_de_maturidade": {
+    "nome": "Ribeira Digital Maturity Index",
+    "dimensoes": [
+      "conectividade",
+      "segurança",
+      "automação",
+      "IoT",
+      "energia",
+      "inteligência agrícola"
+    ],
+    "regra": "O índice deve servir para diagnóstico e plano de melhoria, não apenas para pressionar venda."
+  },
+  "arquitetura_tecnica": {
+    "multi_tenant": true,
+    "componentes": {
+      "frontend": [
+        "Web GIS",
+        "dashboard",
+        "mobile opcional"
+      ],
+      "backend": [
+        "API",
+        "Rules Engine",
+        "Spatial Engine",
+        "Business Engine",
+        "Notification Engine"
+      ],
+      "banco": [
+        "PostgreSQL",
+        "PostGIS"
+      ],
+      "raster": [
+        "Object Storage",
+        "COG"
+      ],
+      "catalogo_geoespacial": [
+        "STAC"
+      ],
+      "mensageria": [
+        "fila/event bus"
+      ],
+      "iot": [
+        "MQTT",
+        "LoRaWAN",
+        "edge"
+      ],
+      "mapas": [
+        "MapLibre",
+        "OpenLayers",
+        "Leaflet"
+      ],
+      "processamento": [
+        "GeoPandas",
+        "PostGIS",
+        "workers geoespaciais"
+      ],
+      "ia_ml": [
+        "modelos de classificação",
+        "anomaly detection",
+        "risk scoring",
+        "RAG/IA contextual"
+      ],
+      "observabilidade": [
+        "logs",
+        "métricas",
+        "traces",
+        "alertas"
+      ]
+    },
+    "fluxo": [
+      "satélite/bases/IoT/APIs",
+      "ingestão",
+      "normalização",
+      "armazenamento",
+      "modelo de dados",
+      "motor de regras",
+      "análise",
+      "alerta/recomendação",
+      "ação",
+      "feedback/resultado"
+    ]
+  },
+  "modelo_de_dados_recomendado": {
+    "entidades_core": [
+      "tenant",
+      "cliente",
+      "conta",
+      "propriedade",
+      "talhão",
+      "ativo",
+      "sensor",
+      "medição",
+      "camada_geoespacial",
+      "imagem",
+      "evento",
+      "alerta",
+      "regra",
+      "versão_da_regra",
+      "incidente",
+      "ordem_de_servico",
+      "oportunidade",
+      "produto",
+      "serviço",
+      "documento",
+      "usuario",
+      "papel",
+      "permissão",
+      "audit_log"
+    ]
+  },
+  "seguranca_da_informacao": {
+    "pilares": [
+      "Confidencialidade",
+      "Integridade",
+      "Disponibilidade",
+      "Autenticidade",
+      "Não repúdio",
+      "Rastreabilidade"
+    ],
+    "controles": [
+      "TLS em trânsito",
+      "criptografia em repouso",
+      "MFA",
+      "Passkeys quando aplicável",
+      "RBAC",
+      "ABAC",
+      "isolamento entre tenants",
+      "API Gateway",
+      "WAF",
+      "rate limiting",
+      "Secrets Manager",
+      "rotação de chaves",
+      "logs de auditoria",
+      "backup",
+      "backup imutável",
+      "disaster recovery",
+      "alta disponibilidade",
+      "SAST",
+      "DAST",
+      "SCA",
+      "SBOM",
+      "container scanning",
+      "IaC scanning",
+      "pentest",
+      "threat modeling",
+      "SIEM",
+      "gestão de vulnerabilidades",
+      "testes de recuperação",
+      "retenção de dados",
+      "segregação de função",
+      "princípio do menor privilégio",
+      "LGPD"
+    ],
+    "security_by_design": true,
+    "regra": "Segurança deve ser transversal e entrar desde a arquitetura, não apenas no fim do projeto."
+  },
+  "testes_e_qualidade": {
+    "observacao": "Não existe garantia realista de software 100% sem bugs.",
+    "objetivo": "Reduzir falhas de forma sistemática e manter qualidade contínua.",
+    "praticas": [
+      "testes unitários",
+      "testes de integração",
+      "testes end-to-end",
+      "testes de contrato",
+      "testes de carga",
+      "testes de performance",
+      "testes de segurança",
+      "testes de regressão",
+      "testes geoespaciais",
+      "testes de regras",
+      "testes de isolamento multi-tenant",
+      "fuzzing quando aplicável",
+      "chaos testing quando aplicável",
+      "code review",
+      "quality gates em CI/CD",
+      "observabilidade em produção",
+      "feature flags",
+      "canary release"
+    ]
+  },
+  "equipe_recomendada": {
+    "lideranca_tecnica": {
+      "cargo": "Principal/Staff Software Engineer ou Software/Solution Architect",
+      "perfil_ideal": "Cloud + GIS + IoT + Cybersecurity + arquitetura distribuída"
+    },
+    "papeis": [
+      {
+        "cargo": "Principal/Staff Engineer",
+        "responsabilidade": "arquitetura geral e decisões técnicas"
+      },
+      {
+        "cargo": "Senior Backend Engineer",
+        "responsabilidade": "APIs, regras, integrações e processamento"
+      },
+      {
+        "cargo": "Frontend/GIS Engineer",
+        "responsabilidade": "dashboard, mapas, UX GIS e digital twin"
+      },
+      {
+        "cargo": "Geospatial Engineer",
+        "responsabilidade": "PostGIS, raster, STAC, satélites e sensoriamento remoto"
+      },
+      {
+        "cargo": "Data/ML Engineer",
+        "responsabilidade": "pipelines, classificação, previsão e modelos"
+      },
+      {
+        "cargo": "IoT Engineer",
+        "responsabilidade": "sensores, LoRaWAN, MQTT e edge"
+      },
+      {
+        "cargo": "Cloud/Platform Engineer",
+        "responsabilidade": "infraestrutura, containers, escalabilidade e alta disponibilidade"
+      },
+      {
+        "cargo": "DevSecOps/AppSec Engineer",
+        "responsabilidade": "segurança de aplicação, pipeline e hardening"
+      },
+      {
+        "cargo": "Security Architect",
+        "responsabilidade": "arquitetura de segurança transversal"
+      },
+      {
+        "cargo": "QA/SDET",
+        "responsabilidade": "automação de testes e qualidade"
+      },
+      {
+        "cargo": "Agrônomo especialista em banana",
+        "responsabilidade": "regras agronômicas, validação de modelos e consultoria"
+      }
+    ],
+    "papel_do_dono_do_produto": "Product/Technical Owner para traduzir a regra da Ribeira e dos clientes para o time técnico."
+  },
+  "prioridade_de_implantacao": {
+    "fase_1_mvp": [
+      "multi-tenant",
+      "cadastro de clientes e propriedades",
+      "PostGIS",
+      "CAR/SIGEF",
+      "Sentinel-2",
+      "Sentinel-1",
+      "Landsat",
+      "CBERS-4A",
+      "PRODES/DETER",
+      "MapBiomas",
+      "Anatel",
+      "ANEEL",
+      "IBGE PAM",
+      "Rules Engine",
+      "Prospect Score",
+      "dashboard GIS",
+      "alertas",
+      "RBAC/MFA/auditoria"
+    ],
+    "fase_2": [
+      "IoT",
+      "LoRaWAN",
+      "Digital Twin",
+      "ordem de serviço",
+      "CRM inteligente",
+      "Banana Intelligence",
+      "clima avançado",
+      "modelos de risco",
+      "rastreabilidade"
+    ],
+    "fase_3": [
+      "drone",
+      "PlanetScope",
+      "ECOSTRESS",
+      "NISAR",
+      "EnMAP",
+      "IA contextual",
+      "next best action",
+      "automação avançada",
+      "previsões e modelos proprietários"
+    ]
+  },
+  "exemplo_de_tela_farm_360": {
+    "propriedade": {
+      "area_total": "exemplo: 86 ha",
+      "banana_estimada": "exemplo: 61,4 ha",
+      "talhoes": "lista de talhões"
+    },
+    "producao": {
+      "vigor_medio": "percentual",
+      "anomalias": "quantidade",
+      "estresse_hidrico": "baixo/médio/alto",
+      "risco_doenca": "baixo/médio/alto"
+    },
+    "infraestrutura": {
+      "galpoes": "quantidade",
+      "packing_house": "sim/não",
+      "reservatorios": "quantidade",
+      "energia": "status",
+      "internet": "status"
+    },
+    "conectividade_ribeira": {
+      "pop_proximo": "distância",
+      "visada": "sim/não",
+      "link_estimado": "Mbps",
+      "iot": "viável/não viável",
+      "lorawan": "viável/não viável"
+    },
+    "ambiental": {
+      "car": "status",
+      "app": "área",
+      "reserva_legal": "área",
+      "embargos": "status",
+      "desmatamento_recente": "status"
+    },
+    "risco": {
+      "inundacao": "nível",
+      "deslizamento": "nível",
+      "seca": "nível",
+      "doenca": "nível"
+    },
+    "comercial": {
+      "prospect_score": "0-100",
+      "oportunidades": [
+        "internet rural",
+        "CFTV",
+        "Wi-Fi externo",
+        "IoT agrícola",
+        "estação meteorológica",
+        "LoRaWAN",
+        "energia/UPS",
+        "automação de irrigação",
+        "rastreabilidade",
+        "monitoramento satelital",
+        "consultoria agronômica"
+      ]
+    }
+  },
+  "requisitos_nao_funcionais": {
+    "performance": [
+      "cache para consultas geoespaciais pesadas",
+      "processamento assíncrono",
+      "tiles vetoriais/raster",
+      "COG",
+      "STAC",
+      "particionamento de tabelas quando necessário"
+    ],
+    "escalabilidade": [
+      "workers",
+      "filas",
+      "serviços desacoplados quando justificado",
+      "autoscaling",
+      "object storage"
+    ],
+    "disponibilidade": [
+      "monitoramento",
+      "health checks",
+      "backup",
+      "DR",
+      "redundância",
+      "failover planejado"
+    ],
+    "manutenibilidade": [
+      "regras fora do código",
+      "versionamento de regras",
+      "configuração por tenant",
+      "adapters para provedores externos",
+      "documentação de APIs",
+      "testes automatizados"
+    ]
+  },
+  "principios_de_produto": [
+    "Configuração antes de customização hardcoded.",
+    "Regra de negócio não deve ficar espalhada no código.",
+    "Separar regra da Ribeira de regra do cliente.",
+    "Separar dado observado de inferência/modelo.",
+    "Mostrar nível de confiança.",
+    "Nunca tratar detecção por satélite como diagnóstico definitivo quando exigir validação de campo.",
+    "Priorizar valor operacional e financeiro.",
+    "Toda recomendação importante deve ser rastreável às evidências.",
+    "Toda automação relevante deve ser auditável.",
+    "O cliente deve conseguir entender por que o sistema tomou determinada decisão."
+  ]
+}
