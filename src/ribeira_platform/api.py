@@ -133,6 +133,17 @@ class NdviJobRequest(BaseModel):
     search_id: str
 
 
+class ProductJobRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    product_id: str
+
+
+class TemporalDeltaJobRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    baseline_product_id: str
+    target_product_id: str
+
+
 class RuleRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str | None = None
@@ -1507,7 +1518,13 @@ def create_app(
                     "comparable_coverage_percentage": comparison[
                         "comparable_coverage_percentage"
                     ],
-                    "classification": "DERIVED_AGGREGATE" if comparison["status"] == "READY" else "INCONCLUSIVE",
+                    "classification": "PIXEL_ALIGNED_DELTA" if comparison.get("delta") else "DERIVED_AGGREGATE" if comparison["status"] == "READY" else "INCONCLUSIVE",
+                    "delta_product_id": comparison["delta"].id if comparison.get("delta") else None,
+                    "delta_minimum": comparison["delta"].statistics.minimum if comparison.get("delta") else None,
+                    "delta_maximum": comparison["delta"].statistics.maximum if comparison.get("delta") else None,
+                    "delta_median": comparison["delta"].statistics.median if comparison.get("delta") else None,
+                    "quality_mask_policy": comparison["delta"].parameters.get("quality_mask_policies") if comparison.get("delta") else None,
+                    "alignment_summary": comparison["delta"].parameters.get("alignment") if comparison.get("delta") else None,
                     "limitations": comparison["limitations"],
                 },
             }
@@ -1535,6 +1552,28 @@ def create_app(
             )
         )
 
+    @app.post(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/quality-masked-ndvi-jobs",
+        status_code=202, tags=["geospatial"],
+    )
+    async def create_quality_masked_ndvi_job(
+        tenant_id: str, property_id: str, payload: ProductJobRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "geospatial:process", tenant_id)
+        return to_jsonable(application.geospatial.create_quality_masked_ndvi_job(tenant_id, property_id, payload.product_id, ctx.subject, ctx.is_platform_admin))
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/temporal-delta-jobs",
+        status_code=202, tags=["temporal"],
+    )
+    async def create_temporal_delta_job(
+        tenant_id: str, property_id: str, payload: TemporalDeltaJobRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "geospatial:process", tenant_id)
+        return to_jsonable(application.geospatial.create_temporal_delta_job(tenant_id, property_id, payload.baseline_product_id, payload.target_product_id, ctx.subject, ctx.is_platform_admin))
+
     @app.get(
         "/v1/tenants/{tenant_id}/processing-jobs/{job_id}",
         tags=["geospatial"],
@@ -1556,11 +1595,17 @@ def create_app(
         tenant_id: str, job_id: str, ctx: AuthContext = Depends(context)
     ):
         authorize(ctx, "geospatial:process", tenant_id)
-        return to_jsonable(
-            application.geospatial.run_ndvi_job(
-                tenant_id, job_id, ctx.subject, ctx.is_platform_admin
-            )
-        )
+        job = application.geospatial.get_job(tenant_id, job_id)
+        if job is None:
+            raise LookupError("processing job not found in tenant")
+        runner = {
+            "NDVI": application.geospatial.run_ndvi_job,
+            "QUALITY_MASKED_NDVI": application.geospatial.run_quality_masked_ndvi_job,
+            "TEMPORAL_DELTA": application.geospatial.run_temporal_delta_job,
+        }.get(job.job_type)
+        if runner is None:
+            raise ValueError("unsupported processing job type")
+        return to_jsonable(runner(tenant_id, job_id, ctx.subject, ctx.is_platform_admin))
 
     @app.get(
         "/v1/tenants/{tenant_id}/derived-products/{product_id}/provenance",
@@ -1607,6 +1652,19 @@ def create_app(
                     "catalog_source": "COPERNICUS_CDSE_STAC" if scene else "UNKNOWN",
                 },
                 "evidence": result["evidence"],
+                "upstreams": [
+                    {
+                        "relationship": upstream["relationship"],
+                        "product": safe_product(upstream["product"]),
+                        "scene": safe_scene(upstream["scene"]) if upstream["scene"] else None,
+                        "assets": [
+                            {"id": asset.id, "asset_key": asset.asset_key, "checksum": asset.checksum_local or asset.checksum_provider or asset.checksum}
+                            for asset in upstream["assets"]
+                        ],
+                        "evidence": upstream["evidence"],
+                    }
+                    for upstream in result.get("upstreams", [])
+                ],
             }
         )
 
@@ -1639,7 +1697,7 @@ def create_app(
             path = application.geospatial.object_storage.read_local_path(
                 product.output_reference
             )
-            tile = render_ndvi_tile(path, z, x, y)
+            tile = render_ndvi_tile(path, z, x, y, delta=product.product_type == "NDVI_DELTA")
         except InvalidTile:
             TILE_FAILURES.inc()
             raise

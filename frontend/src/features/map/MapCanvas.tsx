@@ -8,12 +8,14 @@ interface Props {
   aoi: Geometry | null;
   apiBaseUrl: string;
   tileUrl: string | null;
+  deltaTileUrl: string | null;
   ndviEnabled: boolean;
+  deltaEnabled: boolean;
   token: string;
 }
 const sourceId = "property-aoi";
 
-export function MapCanvas({ aoi, apiBaseUrl, tileUrl, ndviEnabled, token }: Props) {
+export function MapCanvas({ aoi, apiBaseUrl, tileUrl, deltaTileUrl, ndviEnabled, deltaEnabled, token }: Props) {
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   useEffect(() => {
@@ -54,5 +56,18 @@ export function MapCanvas({ aoi, apiBaseUrl, tileUrl, ndviEnabled, token }: Prop
     };
     if (active.isStyleLoaded()) update(); else active.once("load", update);
   }, [tileUrl, ndviEnabled]);
+  useEffect(() => {
+    const active = map.current;
+    if (!active) return;
+    const update = () => {
+      if (active.getLayer("delta-raster")) active.removeLayer("delta-raster");
+      if (active.getSource("delta-raster")) active.removeSource("delta-raster");
+      if (deltaTileUrl && deltaEnabled) {
+        active.addSource("delta-raster", { type: "raster", tiles: [deltaTileUrl], tileSize: 256 });
+        active.addLayer({ id: "delta-raster", type: "raster", source: "delta-raster", paint: { "raster-opacity": 0.78 } }, "property-outline");
+      }
+    };
+    if (active.isStyleLoaded()) update(); else active.once("load", update);
+  }, [deltaTileUrl, deltaEnabled]);
   return <div className="map-canvas" ref={element} aria-label="Mapa da propriedade" />;
 }

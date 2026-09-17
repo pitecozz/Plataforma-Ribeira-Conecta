@@ -1,0 +1,2 @@
+DROP POLICY IF EXISTS derived_product_dependency_tenant_isolation ON derived_product_dependency;
+DROP TABLE IF EXISTS derived_product_dependency;

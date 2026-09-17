@@ -7,6 +7,7 @@ from typing import Any, Iterable
 from .epistemology import DataClassification
 from .geospatial import (
     DerivedProduct,
+    DerivedProductDependency,
     DownloadPolicy,
     GeospatialQuality,
     GeospatialStatus,
@@ -77,6 +78,13 @@ CREATE TABLE IF NOT EXISTS derived_product (
   algorithm_id TEXT NOT NULL, algorithm_version TEXT NOT NULL, formula TEXT NOT NULL,
   input_asset_keys TEXT NOT NULL, parameters TEXT NOT NULL, limitations TEXT NOT NULL,
   quality TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(tenant_id, processing_job_id)
+);
+CREATE TABLE IF NOT EXISTS derived_product_dependency (
+  tenant_id TEXT NOT NULL, derived_product_id TEXT NOT NULL,
+  upstream_product_id TEXT NOT NULL, relationship TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(tenant_id, derived_product_id, relationship),
+  UNIQUE(tenant_id, derived_product_id, upstream_product_id)
 );
 """
 
@@ -718,6 +726,50 @@ class GeospatialRepository:
         )
         return item
 
+    def create_product_dependency(
+        self, item: DerivedProductDependency
+    ) -> DerivedProductDependency:
+        self._insert(
+            "derived_product_dependency",
+            ["tenant_id", "derived_product_id", "upstream_product_id", "relationship", "created_at"],
+            [item.tenant_id, item.derived_product_id, item.upstream_product_id, item.relationship, item.created_at],
+        )
+        return item
+
+    def list_product_dependencies(
+        self, tenant_id: str, derived_product_id: str
+    ) -> list[DerivedProductDependency]:
+        p = self.p
+        rows = self._execute(
+            f"SELECT * FROM derived_product_dependency WHERE tenant_id={p} AND derived_product_id={p} ORDER BY relationship",  # nosec B608
+            [tenant_id, derived_product_id],
+        ).fetchall()
+        return [
+            DerivedProductDependency(
+                str(row["tenant_id"]), str(row["derived_product_id"]),
+                str(row["upstream_product_id"]), row["relationship"],
+                self._timestamp(row["created_at"]) or "",
+            )
+            for row in rows
+        ]
+
+    def find_temporal_delta(
+        self, tenant_id: str, baseline_product_id: str, target_product_id: str
+    ) -> DerivedProduct | None:
+        p = self.p
+        row = self._one(
+            f"""SELECT d.* FROM derived_product d
+              JOIN derived_product_dependency baseline ON baseline.tenant_id=d.tenant_id
+                AND baseline.derived_product_id=d.id AND baseline.relationship='BASELINE_NDVI'
+              JOIN derived_product_dependency target ON target.tenant_id=d.tenant_id
+                AND target.derived_product_id=d.id AND target.relationship='TARGET_NDVI'
+              WHERE d.tenant_id={p} AND d.product_type='NDVI_DELTA'
+                AND baseline.upstream_product_id={p} AND target.upstream_product_id={p}
+              ORDER BY d.created_at DESC, d.id DESC LIMIT 1""",  # nosec B608
+            [tenant_id, baseline_product_id, target_product_id],
+        )
+        return self._derived_product(row) if row is not None else None
+
     def get_derived_product(
         self, tenant_id: str, product_id: str
     ) -> DerivedProduct | None:
@@ -787,6 +839,12 @@ class GeospatialRepository:
                 JOIN satellite_scene s ON s.tenant_id=p.tenant_id AND s.id=p.scene_id
                 JOIN processing_job j ON j.tenant_id=p.tenant_id AND j.id=p.processing_job_id
                 WHERE p.tenant_id={p} AND p.property_id={p}
+                  AND p.product_type IN ('NDVI', 'NDVI_QUALITY_MASKED')
+                  AND (p.product_type='NDVI_QUALITY_MASKED' OR NOT EXISTS (
+                    SELECT 1 FROM derived_product masked
+                    WHERE masked.tenant_id=p.tenant_id AND masked.scene_id=p.scene_id
+                      AND masked.product_type='NDVI_QUALITY_MASKED'
+                  ))
                 ORDER BY s.acquisition_datetime ASC, p.created_at ASC, p.id ASC""",  # nosec B608
             [tenant_id, property_id],
         ).fetchall()

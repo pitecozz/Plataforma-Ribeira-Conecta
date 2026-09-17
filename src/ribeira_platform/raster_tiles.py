@@ -58,7 +58,24 @@ def _colourize(values: np.ndarray) -> np.ndarray:
     return rgba
 
 
-def render_ndvi_tile(path: str, z: int, x: int, y: int) -> RasterTile:
+def _colourize_delta(values: np.ndarray) -> np.ndarray:
+    """Display-only diverging ramp: target lower / near zero / target higher."""
+    rgba = np.zeros((4, values.shape[0], values.shape[1]), dtype="uint8")
+    valid = np.isfinite(values)
+    normalized = np.clip((values + 1.0) / 2.0, 0.0, 1.0)
+    stops = np.array([[178, 24, 43], [247, 247, 247], [33, 102, 172]], dtype="float32")
+    lower = normalized <= 0.5
+    rgb = np.empty((*values.shape, 3), dtype="float32")
+    rgb[lower] = stops[0] + (stops[1] - stops[0]) * (normalized[lower, None] * 2.0)
+    high = ~lower
+    rgb[high] = stops[1] + (stops[2] - stops[1]) * ((normalized[high, None] - 0.5) * 2.0)
+    for channel in range(3):
+        rgba[channel][valid] = rgb[..., channel][valid].astype("uint8")
+    rgba[3][valid] = 255
+    return rgba
+
+
+def render_ndvi_tile(path: str, z: int, x: int, y: int, *, delta: bool = False) -> RasterTile:
     bounds = _tile_bounds(z, x, y)
     with rasterio.open(path) as dataset:
         if dataset.count != 1 or dataset.crs is None:
@@ -90,7 +107,7 @@ def render_ndvi_tile(path: str, z: int, x: int, y: int) -> RasterTile:
                 dst_crs="EPSG:3857",
                 resampling=Resampling.bilinear,
             )
-            rgba = _colourize(values)
+            rgba = _colourize_delta(values) if delta else _colourize(values)
     with MemoryFile() as memory:
         with memory.open(
             driver="PNG", width=256, height=256, count=4, dtype="uint8"

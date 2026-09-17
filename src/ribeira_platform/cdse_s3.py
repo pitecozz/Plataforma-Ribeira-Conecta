@@ -97,7 +97,8 @@ class CdseS3Config:
     timeout_seconds: float = 60.0
     max_object_bytes: int = 500_000_000
     max_job_bytes: int = 1_000_000_000
-    max_assets_per_job: int = 2
+    # Quality-masked NDVI requires the two reflectance inputs plus official SCL.
+    max_assets_per_job: int = 3
     chunk_bytes: int = 1024 * 1024
     max_retries: int = 2
     documentation_url: str = (

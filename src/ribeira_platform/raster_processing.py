@@ -18,6 +18,7 @@ from shapely.geometry import shape
 
 from .geospatial import BandResolver, GeospatialQuality, NdviStatistics, SatelliteAsset
 from .object_storage import LocalObjectStorage, ObjectStorageError
+from .sentinel2_quality import Sentinel2QualityPolicy
 
 
 class RasterProcessingError(RuntimeError):
@@ -32,6 +33,7 @@ def validate_cog(
     expected_crs: Any | None = None,
     expected_transform: Any | None = None,
     expected_shape: tuple[int, int] | None = None,
+    expected_value_range: tuple[float, float] | None = (-1.0, 1.0),
 ) -> None:
     """Validate the structural and semantic properties of a derived NDVI COG.
 
@@ -77,8 +79,11 @@ def validate_cog(
         )
         values = dataset.read(1, window=window, masked=True)
         valid = values.compressed()
-        if valid.size and (bool(np.any(valid < -1.0)) or bool(np.any(valid > 1.0))):
-            raise ValueError("derived COG window contains NDVI outside [-1, 1]")
+        if expected_value_range is not None and valid.size and (
+            bool(np.any(valid < expected_value_range[0]))
+            or bool(np.any(valid > expected_value_range[1]))
+        ):
+            raise ValueError("derived COG window contains values outside its expected range")
 
 
 @dataclass(frozen=True)
@@ -89,6 +94,7 @@ class RasterProcessingOutput:
     input_asset_keys: list[str]
     limitations: list[str]
     quality: list[GeospatialQuality]
+    quality_mask: dict[str, Any] | None = None
 
 
 class NdviProcessor:
@@ -104,6 +110,7 @@ class NdviProcessor:
         assets: list[SatelliteAsset],
         aoi_geojson: dict[str, Any],
         output_key: str,
+        quality_policy: Sentinel2QualityPolicy | None = None,
     ) -> RasterProcessingOutput:
         asset_map = {item.asset_key: item for item in assets}
         try:
@@ -124,6 +131,11 @@ class NdviProcessor:
         try:
             red_path = self.object_storage.read_local_path(asset_map[roles["red"]].href)
             nir_path = self.object_storage.read_local_path(asset_map[roles["nir"]].href)
+            scl_path = (
+                self.object_storage.read_local_path(asset_map[quality_policy.scl_asset_key].href)
+                if quality_policy is not None
+                else None
+            )
         except (KeyError, ObjectStorageError) as exc:
             raise RasterProcessingError(
                 GeospatialQuality.ASSET_UNAVAILABLE,
@@ -145,6 +157,23 @@ class NdviProcessor:
                     & np.isfinite(denominator)
                     & (denominator != 0)
                 )
+                mask_record = None
+                if quality_policy is not None:
+                    if scl_path is None:
+                        raise RasterProcessingError(GeospatialQuality.ASSET_UNAVAILABLE, "SCL asset is unavailable")
+                    with rasterio.open(scl_path) as scl_ds:
+                        scl = self._read_aligned(scl_ds, red_ds, aoi_geojson, red.shape[1:], transform)
+                    scl_values = scl[0]
+                    scl_valid = ~np.ma.getmaskarray(scl[0]) & np.isfinite(scl_values)
+                    accepted = quality_policy.accepts(scl_values)
+                    valid_before_scl = int(valid.sum())
+                    valid &= scl_valid & accepted
+                    mask_record = {
+                        **quality_policy.record(),
+                        "valid_before_scl": valid_before_scl,
+                        "discarded_by_scl": valid_before_scl - int(valid.sum()),
+                        "valid_after_scl": int(valid.sum()),
+                    }
                 ndvi = np.full(red_values.shape, np.nan, dtype="float32")
                 ndvi[valid] = (nir_values[valid] - red_values[valid]) / denominator[
                     valid
@@ -191,9 +220,10 @@ class NdviProcessor:
                     stats,
                     output[0],
                     output[1],
-                    [roles["red"], roles["nir"]],
+                    [roles["red"], roles["nir"]] + ([quality_policy.scl_asset_key] if quality_policy else []),
                     limitations,
                     quality,
+                    mask_record,
                 )
         except RasterProcessingError:
             raise
@@ -237,8 +267,10 @@ class NdviProcessor:
         ):
             return source
         destination = np.ma.masked_all((1, shape_[0], shape_[1]), dtype="float32")
+        source_values = source.data.astype("float32", copy=True)
+        source_values[np.ma.getmaskarray(source)] = np.nan
         reproject(
-            source=source.filled(np.nan),
+            source=source_values,
             destination=destination.data,
             src_transform=source_transform,
             src_crs=dataset.crs,
@@ -257,6 +289,7 @@ class NdviProcessor:
         reference: rasterio.DatasetReader,
         transform,
         output_key: str,
+        expected_value_range: tuple[float, float] | None = (-1.0, 1.0),
     ) -> tuple[str, str]:
         with tempfile.NamedTemporaryFile(suffix=".tif") as temporary:
             with rasterio.open(
@@ -285,6 +318,7 @@ class NdviProcessor:
                 expected_crs=reference.crs,
                 expected_transform=transform,
                 expected_shape=values.shape,
+                expected_value_range=expected_value_range,
             )
         except (ValueError, rasterio.errors.RasterioIOError) as exc:
             raise RasterProcessingError(
@@ -292,6 +326,66 @@ class NdviProcessor:
                 f"derived raster failed COG validation: {exc}",
             ) from exc
         return output_reference, checksum
+
+
+@dataclass(frozen=True)
+class DeltaRasterProcessingOutput:
+    statistics: NdviStatistics
+    output_reference: str
+    output_checksum: str
+    alignment: dict[str, Any]
+
+
+class TemporalDeltaProcessor:
+    algorithm_id = "NDVI_TEMPORAL_DELTA"
+    algorithm_version = "1.0.0"
+    formula = "NDVI_target - NDVI_baseline"
+
+    def __init__(self, object_storage: LocalObjectStorage) -> None:
+        self.object_storage = object_storage
+
+    def process(self, baseline_reference: str, target_reference: str, output_key: str) -> DeltaRasterProcessingOutput:
+        baseline_path = self.object_storage.read_local_path(baseline_reference)
+        target_path = self.object_storage.read_local_path(target_reference)
+        with rasterio.open(baseline_path) as baseline, rasterio.open(target_path) as target:
+            baseline_values = baseline.read(1).astype("float32")
+            same_grid = (
+                baseline.crs == target.crs
+                and baseline.transform == target.transform
+                and baseline.width == target.width
+                and baseline.height == target.height
+            )
+            if same_grid:
+                target_values = target.read(1).astype("float32")
+                alignment: dict[str, Any] = {"status": "IDENTICAL_GRID", "target_grid": "baseline", "resampling": None}
+            else:
+                target_values = np.full(baseline_values.shape, np.nan, dtype="float32")
+                reproject(
+                    source=rasterio.band(target, 1), destination=target_values,
+                    src_transform=target.transform, src_crs=target.crs,
+                    dst_transform=baseline.transform, dst_crs=baseline.crs,
+                    src_nodata=target.nodata, dst_nodata=np.nan,
+                    resampling=Resampling.bilinear,
+                )
+                alignment = {"status": "ALIGNED_TO_BASELINE_GRID", "target_grid": "baseline", "resampling": "bilinear"}
+            comparable = np.isfinite(baseline_values) & np.isfinite(target_values)
+            values = np.full(baseline_values.shape, np.nan, dtype="float32")
+            values[comparable] = target_values[comparable] - baseline_values[comparable]
+            valid_values = values[np.isfinite(values)]
+            total = int(values.size)
+            if valid_values.size == 0:
+                raise RasterProcessingError(GeospatialQuality.PROCESSING_FAILED, "quality-masked NDVI products have no comparable pixels")
+            stats = NdviStatistics(
+                int(valid_values.size), total - int(valid_values.size),
+                Decimal(str(float(valid_values.min()))), Decimal(str(float(valid_values.max()))),
+                Decimal(str(float(valid_values.mean()))), Decimal(str(float(np.median(valid_values))),),
+                Decimal(str(round(valid_values.size / total * 100, 6))),
+            )
+            output, checksum = NdviProcessor(self.object_storage)._write_cog(
+                values, baseline, baseline.transform, output_key, expected_value_range=(-2.0, 2.0)
+            )
+        alignment.update({"reference_pixels": total, "baseline_valid_pixels": int(np.isfinite(baseline_values).sum()), "target_valid_pixels": int(np.isfinite(target_values).sum()), "comparable_valid_pixels": stats.valid_count})
+        return DeltaRasterProcessingOutput(stats, output, checksum, alignment)
 
 
 def algorithm_parameters(aoi_geojson: dict[str, Any]) -> dict[str, Any]:

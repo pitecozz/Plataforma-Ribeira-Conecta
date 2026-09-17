@@ -20,7 +20,7 @@ describe("TemporalPanel", () => {
   });
 
   it("shows insufficient comparison without inventing comparable pixels", () => {
-    render(<TemporalPanel items={items} selectedProductId="product-b" mode="compare" baselineProductId="product-a" targetProductId="product-b" comparison={{ property_id: "property", status: "DADO_INSUFICIENTE", baseline: items[0].derived_product, target: items[1].derived_product, comparison: { delta_mean: null, comparable_valid_pixels: null, comparable_coverage_percentage: null, classification: "INCONCLUSIVE", limitations: ["No pixel-aligned delta raster"] } }} comparisonLoading={false} onSelectProduct={vi.fn()} onModeChange={vi.fn()} onBaselineChange={vi.fn()} onTargetChange={vi.fn()} />);
+    render(<TemporalPanel items={items} selectedProductId="product-b" mode="compare" baselineProductId="product-a" targetProductId="product-b" comparison={{ property_id: "property", status: "DADO_INSUFICIENTE", baseline: items[0].derived_product, target: items[1].derived_product, comparison: { delta_mean: null, comparable_valid_pixels: null, comparable_coverage_percentage: null, classification: "INCONCLUSIVE", delta_product_id: null, delta_minimum: null, delta_maximum: null, delta_median: null, quality_mask_policy: null, alignment_summary: null, limitations: ["No pixel-aligned delta raster"] } }} comparisonLoading={false} onSelectProduct={vi.fn()} onModeChange={vi.fn()} onBaselineChange={vi.fn()} onTargetChange={vi.fn()} />);
     expect(screen.getByText("DADO_INSUFICIENTE")).toBeInTheDocument();
     expect(screen.getAllByText("NULL").length).toBeGreaterThan(1);
     expect(screen.getByText("No pixel-aligned delta raster")).toBeInTheDocument();

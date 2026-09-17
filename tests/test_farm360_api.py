@@ -16,6 +16,7 @@ from shapely.geometry import Polygon, mapping
 
 from ribeira_platform.api import Settings, create_app
 from ribeira_platform.geospatial import (
+    DerivedProductDependency,
     ProviderSearchResult,
     SatelliteCollection,
     SatelliteSearchRequest,
@@ -382,6 +383,78 @@ class Farm360ApiTests(unittest.TestCase):
             headers={"Authorization": "Bearer tenant-b"},
         )
         self.assertEqual(cross_tenant_comparison.status_code, 403)
+
+    def test_persisted_delta_is_exposed_as_pixel_aligned_and_tenant_scoped(self) -> None:
+        """Synthetic test data exercises the API contract, never live CDSE data."""
+        repository = self.application.geospatial.repository
+        original_job = self.application.geospatial.get_job(
+            self.tenant.id, self.product.processing_job_id
+        )
+        original_scene = repository.get_scene(self.tenant.id, self.product.scene_id)
+        assert original_job is not None
+        assert original_scene is not None
+        target_scene = replace(
+            original_scene,
+            id=new_id(),
+            external_item_id="SYNTHETIC_TEST_SCENE_DELTA_TARGET",
+            acquisition_datetime="2025-02-15T10:00:00Z",
+        )
+        target_job = replace(
+            original_job, id=new_id(), scene_id=target_scene.id,
+            idempotency_key=new_id(), output_product_id=None,
+        )
+        target = replace(
+            self.product, id=new_id(), scene_id=target_scene.id,
+            processing_job_id=target_job.id, output_checksum="synthetic_test_target",
+            statistics=replace(self.product.statistics, mean=Decimal("0.7")),
+        )
+        delta_job = replace(
+            original_job, id=new_id(), job_type="TEMPORAL_DELTA", idempotency_key=new_id(),
+            output_product_id=None,
+        )
+        delta = replace(
+            self.product, id=new_id(), processing_job_id=delta_job.id,
+            product_type="NDVI_DELTA", output_checksum="synthetic_test_delta",
+            statistics=replace(self.product.statistics, minimum=Decimal("-0.1"),
+                               maximum=Decimal("0.2"), mean=Decimal("0.05"),
+                               median=Decimal("0.04"), valid_count=12,
+                               coverage_percentage=Decimal("75.0")),
+            parameters={"alignment": {"status": "IDENTICAL_GRID"}},
+        )
+        repository.upsert_scene(target_scene)
+        repository.create_job(target_job)
+        repository.create_derived_product(target)
+        repository.mark_job(self.tenant.id, target_job.id, original_job.status, output_product_id=target.id)
+        repository.create_job(delta_job)
+        repository.create_derived_product(delta)
+        repository.create_product_dependency(
+            DerivedProductDependency(self.tenant.id, delta.id, self.product.id, "BASELINE_NDVI")
+        )
+        repository.create_product_dependency(
+            DerivedProductDependency(self.tenant.id, delta.id, target.id, "TARGET_NDVI")
+        )
+        repository.mark_job(self.tenant.id, delta_job.id, original_job.status, output_product_id=delta.id)
+
+        comparison = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
+            params={"baseline_product_id": self.product.id, "target_product_id": target.id},
+            headers={"Authorization": "Bearer admin"},
+        )
+        self.assertEqual(comparison.status_code, 200)
+        self.assertEqual(comparison.json()["comparison"]["classification"], "PIXEL_ALIGNED_DELTA")
+        self.assertEqual(comparison.json()["comparison"]["delta_product_id"], delta.id)
+        self.assertEqual(comparison.json()["comparison"]["comparable_valid_pixels"], 12)
+        tile = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/derived-products/{delta.id}/tiles/0/0/0",
+            headers={"Authorization": "Bearer admin"},
+        )
+        self.assertEqual(tile.status_code, 200)
+        self.assertEqual(tile.headers["content-type"], "image/png")
+        denied = self.tenant_client.get(
+            f"/v1/tenants/{self.tenant.id}/derived-products/{delta.id}/tiles/0/0/0",
+            headers={"Authorization": "Bearer tenant-b"},
+        )
+        self.assertEqual(denied.status_code, 403)
 
 
 if __name__ == "__main__":

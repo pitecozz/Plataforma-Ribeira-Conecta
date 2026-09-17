@@ -249,6 +249,15 @@ class DerivedProduct:
 
 
 @dataclass(frozen=True)
+class DerivedProductDependency:
+    tenant_id: str
+    derived_product_id: str
+    upstream_product_id: str
+    relationship: str
+    created_at: str = field(default_factory=now_utc)
+
+
+@dataclass(frozen=True)
 class SearchResult:
     search: SatelliteSearch
     scenes: list[SatelliteScene]
