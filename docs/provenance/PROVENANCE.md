@@ -46,6 +46,12 @@ provider checksum when explicitly returned, local object reference, AOI
 checksum, algorithm/version and processing timestamps. Secret keys and
 authorization headers are never provenance or audit data.
 
+`tests/integration/test_geospatial_postgres.py` exercises this persistence chain
+against PostgreSQL/PostGIS and RLS using data explicitly marked
+`synthetic_test_data`. It proves storage relationships and tenant isolation; it
+does not represent a live CDSE observation. Live asset verification remains
+opt-in through `RIBEIRA_CDSE_S3_EXTERNAL_TEST=1`.
+
 ## Conflitos
 
 Valores diferentes do mesmo métrico e timestamp, provenientes de fontes

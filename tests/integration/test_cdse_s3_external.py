@@ -18,7 +18,7 @@ from ribeira_platform.geospatial_provider import (
     default_copernicus_registry,
 )
 from ribeira_platform.object_storage import LocalObjectStorage
-from ribeira_platform.raster_processing import NdviProcessor
+from ribeira_platform.raster_processing import NdviProcessor, validate_cog
 
 
 @unittest.skipUnless(
@@ -112,6 +112,7 @@ class CdseS3ExternalTests(unittest.TestCase):
         output = NdviProcessor(storage).process(assets, aoi, "external-test/ndvi.tif")
         self.assertGreater(output.statistics.valid_count, 0)
         self.assertIsNotNone(output.output_checksum)
+        validate_cog(storage.read_local_path(output.output_reference))
         self.assertGreaterEqual(output.statistics.minimum or -2, -1)
         self.assertLessEqual(output.statistics.maximum or 2, 1)
         print(

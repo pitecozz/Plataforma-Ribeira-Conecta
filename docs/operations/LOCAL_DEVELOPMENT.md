@@ -54,6 +54,10 @@ RIBEIRA_CDSE_S3_EXTERNAL_TEST=1 \
 Without credentials, the test skips with `CDSE S3 credentials are not
 configured` and no NDVI is claimed. In the application, the corresponding
 processing job ends as `BLOCKED_BY_CREDENTIAL` and records no derived raster.
+When it runs, it requires local SHA-256 checksums for RED and NIR, an output
+SHA-256 checksum, valid NDVI pixels in `[-1, 1]`, and structural COG validation
+of the persisted output. It does not persist a PostgreSQL evidence chain; that
+is covered separately by the explicitly synthetic PostgreSQL/PostGIS test.
 
 ## API
 

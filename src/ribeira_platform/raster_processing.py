@@ -12,6 +12,7 @@ import numpy as np
 import rasterio
 from rasterio.enums import Resampling
 from rasterio.mask import mask
+from rasterio.windows import Window
 from rasterio.warp import reproject, transform_geom
 from shapely.geometry import shape
 
@@ -23,6 +24,61 @@ class RasterProcessingError(RuntimeError):
     def __init__(self, quality: GeospatialQuality, message: str) -> None:
         super().__init__(message)
         self.quality = quality
+
+
+def validate_cog(
+    path: str | Path,
+    *,
+    expected_crs: Any | None = None,
+    expected_transform: Any | None = None,
+    expected_shape: tuple[int, int] | None = None,
+) -> None:
+    """Validate the structural and semantic properties of a derived NDVI COG.
+
+    ``IMAGE_STRUCTURE:LAYOUT=COG`` is GDAL's recognition of the internal COG
+    organization.  The additional checks protect the raster contract that the
+    downstream product record describes, rather than trusting a file suffix or
+    a creation option alone.
+    """
+    with rasterio.open(path) as dataset:
+        layout = dataset.tags(ns="IMAGE_STRUCTURE").get("LAYOUT")
+        if dataset.driver != "GTiff" or layout != "COG":
+            raise ValueError("GeoTIFF is not recognized by GDAL as a COG")
+        if dataset.count != 1:
+            raise ValueError("derived COG must contain one NDVI band")
+        if not dataset.block_shapes or any(
+            block_height <= 1 or block_width <= 1
+            for block_height, block_width in dataset.block_shapes
+        ):
+            raise ValueError("derived COG must use tiled internal blocks")
+        if dataset.compression is None or dataset.compression.value != "DEFLATE":
+            raise ValueError("derived COG must use DEFLATE compression")
+        if dataset.crs is None:
+            raise ValueError("derived COG requires a CRS")
+        if expected_crs is not None and dataset.crs != expected_crs:
+            raise ValueError("derived COG CRS differs from the RED input")
+        if expected_transform is not None and dataset.transform != expected_transform:
+            raise ValueError("derived COG transform differs from the RED input")
+        if (
+            expected_shape is not None
+            and (dataset.height, dataset.width) != expected_shape
+        ):
+            raise ValueError("derived COG dimensions differ from the NDVI window")
+        if dataset.nodata is None or not np.isnan(dataset.nodata):
+            raise ValueError("derived COG must use NaN nodata")
+
+        # Read a real window from the persisted object.  This catches a broken
+        # TIFF directory or unusable tile independently of writer-side arrays.
+        window = Window(
+            0,
+            0,
+            min(dataset.width, 64),
+            min(dataset.height, 64),
+        )
+        values = dataset.read(1, window=window, masked=True)
+        valid = values.compressed()
+        if valid.size and (bool(np.any(valid < -1.0)) or bool(np.any(valid > 1.0))):
+            raise ValueError("derived COG window contains NDVI outside [-1, 1]")
 
 
 @dataclass(frozen=True)
@@ -219,21 +275,23 @@ class NdviProcessor:
             ) as output:
                 output.write(values, 1)
             payload = Path(temporary.name).read_bytes()
-        reference, checksum = self.object_storage.put_bytes(
+        output_reference, checksum = self.object_storage.put_bytes(
             output_key, payload, "image/tiff"
         )
-        local_path = self.object_storage.read_local_path(reference)
-        with rasterio.open(local_path) as check:
-            if (
-                check.driver not in {"COG", "GTiff"}
-                or check.count != 1
-                or check.tags(ns="IMAGE_STRUCTURE").get("LAYOUT") != "COG"
-            ):
-                raise RasterProcessingError(
-                    GeospatialQuality.PROCESSING_FAILED,
-                    "derived raster failed COG validation",
-                )
-        return reference, checksum
+        local_path = self.object_storage.read_local_path(output_reference)
+        try:
+            validate_cog(
+                local_path,
+                expected_crs=reference.crs,
+                expected_transform=transform,
+                expected_shape=values.shape,
+            )
+        except (ValueError, rasterio.errors.RasterioIOError) as exc:
+            raise RasterProcessingError(
+                GeospatialQuality.PROCESSING_FAILED,
+                f"derived raster failed COG validation: {exc}",
+            ) from exc
+        return output_reference, checksum
 
 
 def algorithm_parameters(aoi_geojson: dict[str, Any]) -> dict[str, Any]:

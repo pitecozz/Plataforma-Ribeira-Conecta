@@ -23,6 +23,7 @@ from ribeira_platform.cdse_s3 import CdseS3AssetAdapter, CdseS3Config
 from ribeira_platform.geospatial_service import GeospatialApplication
 from ribeira_platform.models import Property, Tenant, new_id
 from ribeira_platform.object_storage import LocalObjectStorage
+from ribeira_platform.raster_processing import validate_cog
 from ribeira_platform.storage import SQLiteStore
 
 
@@ -190,6 +191,26 @@ class GeospatialTests(unittest.TestCase):
         self.assertEqual(output.product.statistics.nodata_count, 1)
         self.assertIn(GeospatialQuality.PARTIAL_COVERAGE, output.product.quality)
         self.assertEqual(output.product.statistics.coverage_percentage, 93.75)
+        assert output.product.output_reference is not None
+        validate_cog(self.storage.read_local_path(output.product.output_reference))
+
+    def test_cog_validator_rejects_a_regular_geotiff(self) -> None:
+        path = Path(self.tmp.name) / "not-a-cog.tif"
+        with rasterio.open(
+            path,
+            "w",
+            driver="GTiff",
+            height=4,
+            width=4,
+            count=1,
+            dtype="float32",
+            crs="EPSG:4326",
+            transform=from_origin(0, 1, 0.25, 0.25),
+            nodata=np.nan,
+        ) as dataset:
+            dataset.write(np.ones((1, 4, 4), dtype="float32"))
+        with self.assertRaisesRegex(ValueError, "not recognized by GDAL as a COG"):
+            validate_cog(path)
 
     def test_s3_asset_without_credentials_blocks_real_ndvi(self) -> None:
         item = deepcopy(_item())
