@@ -728,6 +728,9 @@ class GeospatialRepository:
         )
         if row is None:
             return None
+        return self._derived_product(row)
+
+    def _derived_product(self, row: Any) -> DerivedProduct:
         stats = NdviStatistics(
             int(row["valid_count"]),
             int(row["nodata_count"]),
@@ -770,4 +773,35 @@ class GeospatialRepository:
             item
             for row in rows
             if (item := self.get_derived_product(tenant_id, str(row["id"]))) is not None
+        ]
+
+    def list_timeline(self, tenant_id: str, property_id: str) -> list[dict[str, Any]]:
+        """Read the temporal catalogue in one joined query, ordered ascending."""
+        p = self.p
+        rows = self._execute(
+            f"""SELECT p.*, s.id AS timeline_scene_id, s.external_item_id AS timeline_external_item_id,
+                s.provider_id AS timeline_provider_id, s.collection_id AS timeline_collection_id,
+                s.acquisition_datetime AS timeline_acquisition_datetime,
+                s.cloud_cover AS timeline_cloud_cover, j.status AS timeline_job_status
+                FROM derived_product p
+                JOIN satellite_scene s ON s.tenant_id=p.tenant_id AND s.id=p.scene_id
+                JOIN processing_job j ON j.tenant_id=p.tenant_id AND j.id=p.processing_job_id
+                WHERE p.tenant_id={p} AND p.property_id={p}
+                ORDER BY s.acquisition_datetime ASC, p.created_at ASC, p.id ASC""",  # nosec B608
+            [tenant_id, property_id],
+        ).fetchall()
+        return [
+            {
+                "product": self._derived_product(row),
+                "scene_id": str(row["timeline_scene_id"]),
+                "external_scene_id": row["timeline_external_item_id"],
+                "provider_id": row["timeline_provider_id"],
+                "collection_id": row["timeline_collection_id"],
+                "acquisition_datetime": self._timestamp(
+                    row["timeline_acquisition_datetime"]
+                ),
+                "cloud_cover": self._decimal(row["timeline_cloud_cover"]),
+                "processing_status": row["timeline_job_status"],
+            }
+            for row in rows
         ]

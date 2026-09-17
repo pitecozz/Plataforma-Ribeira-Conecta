@@ -32,6 +32,8 @@ customer observation or a commercial record.
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/geospatial`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/scenes`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/derived-products`
+- `GET /v1/tenants/{tenant_id}/properties/{property_id}/timeline`
+- `GET /v1/tenants/{tenant_id}/properties/{property_id}/temporal-comparison?baseline_product_id={id}&target_product_id={id}`
 - `GET /v1/tenants/{tenant_id}/derived-products/{product_id}/provenance`
 - `GET /v1/tenants/{tenant_id}/derived-products/{product_id}/tiles/{z}/{x}/{y}`
 
@@ -75,6 +77,10 @@ The current MapLibre bundle is approximately 224 kB minified in the production
 build. Code splitting or a prebuilt basemap/style is the next performance step
 if field use proves it necessary. The normal Node 18 local environment is
 supported by Vite 6.
+
+For Phase 1E temporal selection and comparison semantics, including why V1
+does not create an unproven pixel delta raster, see
+`docs/geospatial/TEMPORAL_INTELLIGENCE_V1.md`.
 
 ## MapLibre worker with Vite
 

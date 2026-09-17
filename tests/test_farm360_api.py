@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 import numpy as np
@@ -231,6 +232,156 @@ class Farm360ApiTests(unittest.TestCase):
             headers=headers,
         )
         self.assertEqual(unavailable.status_code, 409)
+
+    def test_timeline_is_ascending_and_comparison_is_non_causal_aggregate(self) -> None:
+        original_scene = self.application.geospatial.repository.get_scene(
+            self.tenant.id, self.product.scene_id
+        )
+        original_job = self.application.geospatial.get_job(
+            self.tenant.id, self.product.processing_job_id
+        )
+        assert original_scene is not None
+        assert original_job is not None
+        later_scene = replace(
+            original_scene,
+            id=new_id(),
+            external_item_id="SYNTHETIC_TEST_SCENE_LATER",
+            acquisition_datetime="2025-02-15T10:00:00Z",
+        )
+        later_job = replace(
+            original_job,
+            id=new_id(),
+            scene_id=later_scene.id,
+            idempotency_key=new_id(),
+            output_product_id=None,
+        )
+        later_product = replace(
+            self.product,
+            id=new_id(),
+            scene_id=later_scene.id,
+            processing_job_id=later_job.id,
+            output_checksum="synthetic_test_checksum_later",
+            statistics=replace(self.product.statistics, mean=Decimal("0.7")),
+        )
+        repository = self.application.geospatial.repository
+        repository.upsert_scene(later_scene)
+        repository.create_job(later_job)
+        repository.create_derived_product(later_product)
+        repository.mark_job(
+            self.tenant.id,
+            later_job.id,
+            original_job.status,
+            output_product_id=later_product.id,
+        )
+        headers = {"Authorization": "Bearer admin"}
+        timeline = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/timeline",
+            headers=headers,
+        )
+        self.assertEqual(timeline.status_code, 200)
+        entries = timeline.json()["items"]
+        self.assertEqual(timeline.json()["order"], "acquisition_datetime_asc")
+        self.assertEqual([entry["scene_id"] for entry in entries], [
+            "SYNTHETIC_TEST_SCENE",
+            "SYNTHETIC_TEST_SCENE_LATER",
+        ])
+        comparison = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
+            params={
+                "baseline_product_id": self.product.id,
+                "target_product_id": later_product.id,
+            },
+            headers=headers,
+        )
+        self.assertEqual(comparison.status_code, 200)
+        self.assertEqual(comparison.json()["status"], "READY")
+        self.assertEqual(comparison.json()["comparison"]["delta_mean"], "0.2")
+        self.assertEqual(
+            comparison.json()["comparison"]["comparable_valid_pixels"], None
+        )
+        same = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
+            params={
+                "baseline_product_id": self.product.id,
+                "target_product_id": self.product.id,
+            },
+            headers=headers,
+        )
+        self.assertEqual(same.json()["status"], "DADO_INSUFICIENTE")
+        empty_property = self.application.create_property(
+            self.tenant.id, "TEST_AOI_EMPTY", None, None
+        )
+        empty = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{empty_property.id}/timeline",
+            headers=headers,
+        )
+        self.assertEqual(empty.json()["items"], [])
+
+    def test_temporal_endpoints_do_not_cross_tenant_or_property_boundaries(self) -> None:
+        headers = {"Authorization": "Bearer admin"}
+        original_job = self.application.geospatial.get_job(
+            self.tenant.id, self.product.processing_job_id
+        )
+        assert original_job is not None
+        wrong_type_job = replace(
+            original_job,
+            id=new_id(),
+            idempotency_key=new_id(),
+            output_product_id=None,
+        )
+        wrong_type = replace(
+            self.product,
+            id=new_id(),
+            processing_job_id=wrong_type_job.id,
+            product_type="EVI",
+            output_checksum="synthetic_test_wrong_type",
+        )
+        self.application.geospatial.repository.create_job(wrong_type_job)
+        self.application.geospatial.repository.create_derived_product(wrong_type)
+        wrong_type_response = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
+            params={
+                "baseline_product_id": self.product.id,
+                "target_product_id": wrong_type.id,
+            },
+            headers=headers,
+        )
+        self.assertEqual(wrong_type_response.status_code, 422)
+        nonexistent = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
+            params={
+                "baseline_product_id": self.product.id,
+                "target_product_id": "not-a-product",
+            },
+            headers=headers,
+        )
+        self.assertEqual(nonexistent.status_code, 404)
+        other_property = self.application.create_property(
+            self.tenant.id, "TEST_AOI_OTHER", None, None
+        )
+        cross_property = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{other_property.id}/temporal-comparison",
+            params={
+                "baseline_product_id": self.product.id,
+                "target_product_id": self.product.id,
+            },
+            headers=headers,
+        )
+        self.assertEqual(cross_property.status_code, 422)
+        cross_tenant_timeline = self.tenant_client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/timeline",
+            headers={"Authorization": "Bearer tenant-b"},
+        )
+        self.assertEqual(cross_tenant_timeline.status_code, 403)
+        cross_tenant_comparison = self.tenant_client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
+            params={
+                "baseline_product_id": self.product.id,
+                "target_product_id": self.product.id,
+            },
+            headers={"Authorization": "Bearer tenant-b"},
+        )
+        self.assertEqual(cross_tenant_comparison.status_code, 403)
 
 
 if __name__ == "__main__":

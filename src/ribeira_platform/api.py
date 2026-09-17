@@ -661,6 +661,20 @@ def create_app(
             "quality": [quality.value for quality in item.quality],
         }
 
+    def safe_timeline_item(item: dict[str, Any]) -> dict[str, Any]:
+        product = safe_product(item["product"])
+        product["processing_status"] = item["processing_status"]
+        return {
+            "scene_internal_id": item["scene_id"],
+            "scene_id": item["external_scene_id"],
+            "provider": item["provider_id"],
+            "collection": item["collection_id"],
+            "acquisition_datetime": item["acquisition_datetime"],
+            "cloud_cover": item["cloud_cover"],
+            "derived_product": product,
+            "provenance_available": True,
+        }
+
     def data_status(products: list[Any], scenes: list[Any]) -> str:
         if any(product.output_reference for product in products):
             return "READY"
@@ -1440,6 +1454,64 @@ def create_app(
                 for item in application.geospatial.list_products(tenant_id, property_id)
             ]
         }
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/timeline",
+        tags=["temporal"],
+    )
+    async def get_property_timeline(
+        tenant_id: str, property_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "geospatial:read", tenant_id)
+        with application.store.tenant_transaction(tenant_id, ctx.is_platform_admin):
+            property_item = application.store.get_property(tenant_id, property_id)
+        if property_item is None:
+            raise LookupError("property not found in tenant")
+        return {
+            "property_id": property_id,
+            "order": "acquisition_datetime_asc",
+            "items": [
+                safe_timeline_item(item)
+                for item in application.geospatial.timeline(tenant_id, property_id)
+            ],
+        }
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/temporal-comparison",
+        tags=["temporal"],
+    )
+    async def get_temporal_comparison(
+        tenant_id: str,
+        property_id: str,
+        baseline_product_id: str,
+        target_product_id: str,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "geospatial:read", tenant_id)
+        with application.store.tenant_transaction(tenant_id, ctx.is_platform_admin):
+            property_item = application.store.get_property(tenant_id, property_id)
+        if property_item is None:
+            raise LookupError("property not found in tenant")
+        comparison = application.geospatial.compare_products(
+            tenant_id, property_id, baseline_product_id, target_product_id
+        )
+        return to_jsonable(
+            {
+                "property_id": property_id,
+                "status": comparison["status"],
+                "baseline": safe_product(comparison["baseline"]),
+                "target": safe_product(comparison["target"]),
+                "comparison": {
+                    "delta_mean": comparison["delta_mean"],
+                    "comparable_valid_pixels": comparison["comparable_valid_pixels"],
+                    "comparable_coverage_percentage": comparison[
+                        "comparable_coverage_percentage"
+                    ],
+                    "classification": "DERIVED_AGGREGATE" if comparison["status"] == "READY" else "INCONCLUSIVE",
+                    "limitations": comparison["limitations"],
+                },
+            }
+        )
 
     @app.post(
         "/v1/tenants/{tenant_id}/properties/{property_id}/ndvi-jobs",

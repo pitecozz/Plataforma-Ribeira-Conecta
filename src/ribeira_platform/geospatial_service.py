@@ -792,6 +792,88 @@ class GeospatialApplication:
         with self.store.tenant_transaction(tenant_id):
             return self.repository.list_derived_products(tenant_id, property_id)
 
+    def timeline(self, tenant_id: str, property_id: str) -> list[dict[str, Any]]:
+        with self.store.tenant_transaction(tenant_id):
+            return self.repository.list_timeline(tenant_id, property_id)
+
+    def compare_products(
+        self,
+        tenant_id: str,
+        property_id: str,
+        baseline_product_id: str,
+        target_product_id: str,
+    ) -> dict[str, Any]:
+        """Compare persisted NDVI aggregate statistics without causal inference.
+
+        This does not claim pixel comparability: an aggregate mean difference is
+        returned only when both independently persisted means exist. Raster delta
+        remains deliberately out of scope until alignment/mask provenance is a
+        first-class processing contract.
+        """
+        with self.store.tenant_transaction(tenant_id):
+            baseline = self.repository.get_derived_product(tenant_id, baseline_product_id)
+            target = self.repository.get_derived_product(tenant_id, target_product_id)
+            if baseline is None or target is None:
+                raise LookupError("derived product not found in tenant")
+            if baseline.property_id != property_id or target.property_id != property_id:
+                raise ValueError("both products must belong to the requested property")
+            if baseline.product_type != "NDVI" or target.product_type != "NDVI":
+                raise ValueError("temporal comparison supports NDVI products only")
+            baseline_job = self.repository.get_job(tenant_id, baseline.processing_job_id)
+            target_job = self.repository.get_job(tenant_id, target.processing_job_id)
+
+        limitations = [
+            "Aggregate mean difference is not a pixel-aligned delta raster",
+            "Temporal change does not identify a cause, diagnosis, or field condition",
+        ]
+        if baseline_product_id == target_product_id:
+            return {
+                "status": "DADO_INSUFICIENTE",
+                "baseline": baseline,
+                "target": target,
+                "delta_mean": None,
+                "comparable_valid_pixels": None,
+                "comparable_coverage_percentage": None,
+                "limitations": limitations + [
+                    "Baseline and target must be different derived products"
+                ],
+            }
+        baseline_mean = baseline.statistics.mean
+        target_mean = target.statistics.mean
+        usable = (
+            baseline.output_reference
+            and target.output_reference
+            and baseline_job is not None
+            and target_job is not None
+            and baseline_job.status == ProcessingJobStatus.SUCCEEDED
+            and target_job.status == ProcessingJobStatus.SUCCEEDED
+            and baseline_mean is not None
+            and target_mean is not None
+            and baseline.statistics.valid_count > 0
+            and target.statistics.valid_count > 0
+        )
+        if not usable or baseline_mean is None or target_mean is None:
+            return {
+                "status": "DADO_INSUFICIENTE",
+                "baseline": baseline,
+                "target": target,
+                "delta_mean": None,
+                "comparable_valid_pixels": None,
+                "comparable_coverage_percentage": None,
+                "limitations": limitations + [
+                    "Both persisted NDVI products require successful processing and valid means"
+                ],
+            }
+        return {
+            "status": "READY",
+            "baseline": baseline,
+            "target": target,
+            "delta_mean": target_mean - baseline_mean,
+            "comparable_valid_pixels": None,
+            "comparable_coverage_percentage": None,
+            "limitations": limitations,
+        }
+
     def provenance(self, tenant_id: str, product_id: str) -> dict[str, Any] | None:
         """Return the persisted chain; HTTP presentation removes storage references."""
         with self.store.tenant_transaction(tenant_id):
