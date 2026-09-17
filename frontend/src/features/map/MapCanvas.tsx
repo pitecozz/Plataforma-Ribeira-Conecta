@@ -2,11 +2,18 @@ import { useEffect, useRef } from "react";
 import type { Geometry } from "geojson";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { transformMapRequest } from "./tileAuth";
 
-interface Props { aoi: Geometry | null; tileUrl: string | null; ndviEnabled: boolean; token: string; }
+interface Props {
+  aoi: Geometry | null;
+  apiBaseUrl: string;
+  tileUrl: string | null;
+  ndviEnabled: boolean;
+  token: string;
+}
 const sourceId = "property-aoi";
 
-export function MapCanvas({ aoi, tileUrl, ndviEnabled, token }: Props) {
+export function MapCanvas({ aoi, apiBaseUrl, tileUrl, ndviEnabled, token }: Props) {
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   useEffect(() => {
@@ -15,10 +22,10 @@ export function MapCanvas({ aoi, tileUrl, ndviEnabled, token }: Props) {
       container: element.current,
       style: import.meta.env.VITE_MAP_STYLE_URL || "https://demotiles.maplibre.org/style.json",
       center: [-47, -24], zoom: 4,
-      transformRequest: (url: string) => url.includes("/tiles/") ? { url, headers: { Authorization: `Bearer ${token}` } } : { url }
+      transformRequest: (url: string) => transformMapRequest(url, apiBaseUrl, token),
     });
     return () => { map.current?.remove(); map.current = null; };
-  }, [token]);
+  }, [apiBaseUrl, token]);
   useEffect(() => {
     const active = map.current;
     if (!active || !aoi) return;

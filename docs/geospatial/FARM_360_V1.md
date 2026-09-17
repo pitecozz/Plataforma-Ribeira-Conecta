@@ -57,6 +57,14 @@ at runtime through `VITE_RIBEIRA_*` configuration. Do not put CDSE secrets in
 Vite variables. For local use, bind only to loopback (the `dev` script uses
 `127.0.0.1`) and forward it over SSH if needed.
 
+`VITE_*` values are compiled into browser-delivered code and are not secret
+storage. `VITE_RIBEIRA_ACCESS_TOKEN` is permitted only for a short-lived,
+discardable local validation token; it must never contain a production CDSE
+credential or be committed. Production session handling remains outside this
+slice. The MapLibre request transform attaches that token only to the exact
+same-origin Ribeira derived-product XYZ endpoint, never to basemap styles,
+glyphs, sprites, or other third-party origins.
+
 ```bash
 cd frontend
 npm install
@@ -67,3 +75,13 @@ The current MapLibre bundle is approximately 224 kB minified in the production
 build. Code splitting or a prebuilt basemap/style is the next performance step
 if field use proves it necessary. The normal Node 18 local environment is
 supported by Vite 6.
+
+## MapLibre worker with Vite
+
+MapLibre 6 derives its worker URL relative to `import.meta.url`. Vite's default
+dependency optimization rewrites that URL into `node_modules/.vite/deps` but
+does not emit MapLibre's sibling `maplibre-gl-worker.mjs`, causing a worker 404.
+Clearing the Vite cache alone does not fix this. `vite.config.ts` therefore
+excludes only `maplibre-gl` from `optimizeDeps`, so Vite serves the package's
+actual `dist/maplibre-gl.mjs` and its sibling worker. No worker is copied into
+`public/`.

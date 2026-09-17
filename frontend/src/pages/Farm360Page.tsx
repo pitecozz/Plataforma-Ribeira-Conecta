@@ -8,10 +8,16 @@ import { SatellitePanel } from "../features/satellite/SatellitePanel";
 import { NdviPanel } from "../features/ndvi/NdviPanel";
 import { ProvenancePanel } from "../features/provenance/ProvenancePanel";
 
-interface Props { api: Farm360Api; tenantId: string; propertyId: string; token: string; }
+interface Props {
+  api: Farm360Api;
+  apiBaseUrl: string;
+  tenantId: string;
+  propertyId: string;
+  token: string;
+}
 type LoadState = "loading" | "ready" | "empty" | "error";
 
-export function Farm360Page({ api, tenantId, propertyId, token }: Props) {
+export function Farm360Page({ api, apiBaseUrl, tenantId, propertyId, token }: Props) {
   const [state, setState] = useState<LoadState>("loading");
   const [property, setProperty] = useState<PropertyRecord | null>(null);
   const [scenes, setScenes] = useState<Scene[]>([]);
@@ -38,5 +44,5 @@ export function Farm360Page({ api, tenantId, propertyId, token }: Props) {
   if (state === "loading") return <main className="state">Carregando Farm 360…</main>;
   if (state === "error") return <main className="state">SOURCE_UNAVAILABLE — não foi possível carregar os dados persistidos.</main>;
   if (!property || state === "empty") return <main className="state">DADO_INSUFICIENTE — esta propriedade não possui cena ou NDVI persistido.</main>;
-  return <main className="farm360"><div className="map-column"><MapCanvas aoi={property.geometry_geojson} tileUrl={tileUrl} ndviEnabled={ndviEnabled} token={token} /><div className="map-tools"><label><input type="checkbox" checked={ndviEnabled} onChange={event => setNdviEnabled(event.target.checked)} disabled={!product} /> NDVI</label><span className="legend"><i /> −1 solo/água <b /> +1 vegetação</span>{!product && <span>Nodata: transparente</span>}</div></div><aside><PropertyPanel property={property} /><SatellitePanel scene={scenes[0] ?? null} /><NdviPanel product={product} /><ProvenancePanel provenance={provenance} /></aside></main>;
+  return <main className="farm360"><div className="map-column"><MapCanvas aoi={property.geometry_geojson} apiBaseUrl={apiBaseUrl} tileUrl={tileUrl} ndviEnabled={ndviEnabled} token={token} /><div className="map-tools"><label><input type="checkbox" checked={ndviEnabled} onChange={event => setNdviEnabled(event.target.checked)} disabled={!product} /> NDVI</label><span className="legend"><i /> −1 solo/água <b /> +1 vegetação</span>{!product && <span>Nodata: transparente</span>}</div></div><aside><PropertyPanel property={property} /><SatellitePanel scene={scenes[0] ?? null} /><NdviPanel product={product} /><ProvenancePanel provenance={provenance} /></aside></main>;
 }

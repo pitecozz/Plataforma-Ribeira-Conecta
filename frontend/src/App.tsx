@@ -8,5 +8,5 @@ const token = import.meta.env.VITE_RIBEIRA_ACCESS_TOKEN;
 
 export default function App() {
   if (!apiUrl || !tenantId || !propertyId || !token) return <main className="state">Configuração necessária: informe VITE_RIBEIRA_API_URL, VITE_RIBEIRA_TENANT_ID, VITE_RIBEIRA_PROPERTY_ID e um token de sessão.</main>;
-  return <Farm360Page api={new Farm360Api(apiUrl, token)} tenantId={tenantId} propertyId={propertyId} token={token} />;
+  return <Farm360Page api={new Farm360Api(apiUrl, token)} apiBaseUrl={apiUrl} tenantId={tenantId} propertyId={propertyId} token={token} />;
 }
