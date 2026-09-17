@@ -25,6 +25,8 @@ class ProviderMetadata:
     api_standard: str | None = None
     stac_version: str | None = None
     asset_hosts: frozenset[str] = frozenset()
+    asset_endpoint: str | None = None
+    asset_bucket: str | None = None
 
 
 class ProviderRegistry:
@@ -52,3 +54,11 @@ class ProviderRegistry:
     def asset_host_allowed(self, provider_id: str, hostname: str) -> bool:
         metadata = self.get(provider_id)
         return bool(metadata and hostname.lower() in metadata.asset_hosts)
+
+    def asset_endpoint(self, provider_id: str) -> str | None:
+        metadata = self.get(provider_id)
+        return metadata.asset_endpoint if metadata else None
+
+    def asset_bucket(self, provider_id: str) -> str | None:
+        metadata = self.get(provider_id)
+        return metadata.asset_bucket if metadata else None

@@ -38,7 +38,9 @@ não foi implementado.
 | Explicit scene selection | Fase 1C §§32-34, 61 | Scene policy | `SceneSelectionPolicy` | persisted candidate criteria | search result | versioned policy; no fallback | selection/unit tests | IMPLEMENTED |
 | NDVI derived raster | Fase 1C §§17-31, 43-46 | Derived product | `NdviProcessor`, controlled job | derived product + COG reference | NDVI job/provenance API | formula/version/nodata | local raster tests | IMPLEMENTED/ASSET GAP |
 | Tenant isolation for geospatial data | Fase 1C §§39-40 | Tenant-scoped geospatial | RLS + repository | forced RLS/FKs | tenant-scoped endpoints | default deny | real Postgres geospatial RLS | IMPLEMENTED |
-| External asset download | Fase 1C §§15, 37, 63-64 | Asset processing | future authenticated adapter | object storage future | processing job | allowlist/credentials | no fabricated fallback | GAP |
+| External asset download | Fase 1C.1 §§1-18, 35-42 | Asset processing | `CredentialProviderPort`, `CdseS3AssetAdapter`, `LocalObjectStorage.put_file` | migration 008 asset access metadata | processing job + audit events | exact bucket/endpoint, bounded download, explicit auth failure | `tests/test_cdse_s3.py`; opt-in `test_cdse_s3_external.py` | IMPLEMENTED / external credential-gated |
+| Real Sentinel-2 NDVI validation | Fase 1C.1 §§20-31, 42-45 | Derived product | `NdviProcessor` + authenticated asset adapter | derived product + checksums/provenance | NDVI job | nodata, range validation, COG validation | deterministic local raster + opt-in external test | IMPLEMENTED locally / REAL NDVI credential-gated |
+| S3 credential boundary | Fase 1C.1 §§1-9, 18-19, 40-41 | Infrastructure security | environment credential provider + boto3 adapter | no secrets stored | asset access status/audit | no secret logging or fallback | redaction, missing credentials, bucket/URI tests | IMPLEMENTED |
 | Banana diagnosis / Prospect consumption | Fase 1C §§68-69 | out of scope | not implemented | not applicable | not exposed | prohibited in phase | negative scope review | GAP/BLOCKED BY SCOPE |
 
 ## Vertical slice rastreado

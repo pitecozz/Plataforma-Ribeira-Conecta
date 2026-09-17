@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +19,7 @@ from ribeira_platform.geospatial import (
     SatelliteSearchRequest,
 )
 from ribeira_platform.geospatial_provider import default_copernicus_registry
+from ribeira_platform.cdse_s3 import CdseS3AssetAdapter, CdseS3Config
 from ribeira_platform.geospatial_service import GeospatialApplication
 from ribeira_platform.models import Property, Tenant, new_id
 from ribeira_platform.object_storage import LocalObjectStorage
@@ -188,6 +190,36 @@ class GeospatialTests(unittest.TestCase):
         self.assertEqual(output.product.statistics.nodata_count, 1)
         self.assertIn(GeospatialQuality.PARTIAL_COVERAGE, output.product.quality)
         self.assertEqual(output.product.statistics.coverage_percentage, 93.75)
+
+    def test_s3_asset_without_credentials_blocks_real_ndvi(self) -> None:
+        item = deepcopy(_item())
+        item["assets"]["B04_10m"]["href"] = "s3://eodata/real/red.jp2"
+        item["assets"]["B08_10m"]["href"] = "s3://eodata/real/nir.jp2"
+        app = GeospatialApplication(
+            self.store,
+            FakeProvider(ProviderSearchResult([item], [{"features": [item]}])),
+            self.storage,
+            asset_adapter=CdseS3AssetAdapter(
+                self.storage,
+                credential_provider=type(
+                    "Missing", (), {"get_credentials": lambda _: None}
+                )(),
+                config=CdseS3Config(),
+            ),
+        )
+        result = app.search_satellite(
+            self.tenant.id,
+            SatelliteSearchRequest(
+                self.property.id,
+                "sentinel-2-l2a",
+                "2025-01-01T00:00:00Z",
+                "2025-02-01T00:00:00Z",
+            ),
+        )
+        job = app.create_ndvi_job(self.tenant.id, self.property.id, result.search.id)
+        output = app.run_ndvi_job(self.tenant.id, job.id)
+        self.assertIsNone(output.product)
+        self.assertEqual(output.job.failure_reason, "BLOCKED_BY_CREDENTIAL")
 
     def test_duplicate_scene_is_idempotent_and_tenant_scoped(self) -> None:
         app = self._application()

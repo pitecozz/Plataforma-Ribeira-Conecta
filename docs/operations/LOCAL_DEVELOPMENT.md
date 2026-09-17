@@ -30,9 +30,30 @@ RIBEIRA_CDSE_EXTERNAL_TEST=1 PYTHONPATH=src \
 ```
 
 This discovers metadata only. It does not download the provider's `s3://`
-assets and does not create a customer/property record. CDSE asset processing
-requires separately configured credentials and policy; absent credentials yield
-`ASSET_UNAVAILABLE`, never a synthetic NDVI.
+assets and does not create a customer/property record.
+
+## CDSE authenticated asset verification
+
+Configure only through the runtime environment or an external secret store;
+never commit the values. The adapter reads `CDSE_S3_ACCESS_KEY` and
+`CDSE_S3_SECRET_KEY`. Optional non-secret settings are `CDSE_S3_ENDPOINT` and
+`CDSE_S3_BUCKET`; the implementation accepts only the official CDSE HTTPS
+endpoints and bucket `eodata`. Limits include
+`CDSE_S3_MAX_OBJECT_BYTES`, `CDSE_S3_MAX_JOB_BYTES`,
+`CDSE_S3_MAX_ASSETS_PER_JOB`, `CDSE_S3_TIMEOUT_SECONDS` and
+`CDSE_S3_MAX_RETRIES`.
+
+Run the explicit test only in an isolated test environment:
+
+```bash
+RIBEIRA_CDSE_S3_EXTERNAL_TEST=1 \
+  PYTHONPATH=src .venv/bin/python -m unittest \
+  tests.integration.test_cdse_s3_external -v
+```
+
+Without credentials, the test skips with `CDSE S3 credentials are not
+configured` and no NDVI is claimed. In the application, the corresponding
+processing job ends as `BLOCKED_BY_CREDENTIAL` and records no derived raster.
 
 ## API
 

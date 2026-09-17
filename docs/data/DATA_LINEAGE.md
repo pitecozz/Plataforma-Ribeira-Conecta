@@ -51,3 +51,20 @@ Property.geometry + geometry_crs
 Acquisition, provider publication, ingestion and processing timestamps remain
 separate. Nodata is not zero. `s3://` asset references are catalogued but not
 claimed as downloaded unless a controlled asset adapter succeeds.
+
+For authenticated CDSE processing, the asset segment is explicit:
+
+```text
+CDSE STAC Item
+  -> s3://eodata object reference
+  -> exact bucket/key validation
+  -> authenticated CDSE S3 access
+  -> bounded local file + SHA-256
+  -> RED/NIR AOI windows
+  -> NDVI algorithm/version
+  -> validated COG + statistics
+```
+
+Missing credentials, rejected credentials, disallowed buckets, oversized
+objects and unavailable objects are quality outcomes. They never become zero,
+empty rasters or fabricated statistics.

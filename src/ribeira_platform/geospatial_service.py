@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 from decimal import Decimal
+from dataclasses import replace
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from .epistemology import DataClassification
 from .geospatial import (
+    BandResolver,
     DerivedProduct,
     GeospatialError,
     GeospatialQuality,
@@ -26,7 +29,12 @@ from .geospatial import (
 from .geospatial_provider import StacProviderError
 from .geospatial_repository import GeospatialRepository
 from .models import Evidence, Source, new_id, now_utc
-from .object_storage import LocalObjectStorage
+from .object_storage import LocalObjectStorage, ObjectStorageError
+from .cdse_s3 import (
+    AssetAccessStatus,
+    CdseS3AssetAdapter,
+    CdseS3Config,
+)
 from .raster_processing import (
     NdviProcessor,
     RasterProcessingError,
@@ -35,19 +43,185 @@ from .raster_processing import (
 from .time_utils import parse_aware
 
 
+class AssetAccessFailure(RuntimeError):
+    def __init__(self, status: AssetAccessStatus, code: str) -> None:
+        super().__init__(code)
+        self.status = status
+        self.code = code
+
+
 class GeospatialApplication:
     """Application service for the auditable CDSE discovery and NDVI slice."""
 
     provider_id = "COPERNICUS_CDSE"
 
     def __init__(
-        self, store: Any, provider: Any, object_storage: LocalObjectStorage
+        self,
+        store: Any,
+        provider: Any,
+        object_storage: LocalObjectStorage,
+        asset_adapter: CdseS3AssetAdapter | None = None,
     ) -> None:
         self.store = store
         self.provider = provider
         self.object_storage = object_storage
         self.repository = GeospatialRepository(store)
         self.processor = NdviProcessor(object_storage)
+        asset_config = CdseS3Config.from_environment()
+        registry = getattr(provider, "registry", None)
+        provider_metadata = (
+            registry.get(self.provider_id) if registry is not None else None
+        )
+        if provider_metadata is not None:
+            if provider_metadata.asset_endpoint and not os.getenv("CDSE_S3_ENDPOINT"):
+                asset_config = replace(
+                    asset_config, endpoint=provider_metadata.asset_endpoint
+                )
+            if provider_metadata.asset_bucket and not os.getenv("CDSE_S3_BUCKET"):
+                asset_config = replace(
+                    asset_config, bucket=provider_metadata.asset_bucket
+                )
+        self.asset_adapter = asset_adapter or CdseS3AssetAdapter(
+            object_storage=object_storage,
+            config=asset_config,
+        )
+
+    def _prepare_processing_assets(
+        self,
+        tenant_id: str,
+        job_id: str,
+        assets: list[SatelliteAsset],
+        actor: str,
+        platform_admin: bool,
+    ) -> tuple[list[SatelliteAsset], list[dict[str, Any]]]:
+        """Acquire only the semantic RED/NIR inputs required by NDVI."""
+        try:
+            roles = BandResolver.resolve(
+                {
+                    item.asset_key: {"title": item.title, "roles": item.roles}
+                    for item in assets
+                }
+            )
+        except ValueError as exc:
+            raise RuntimeError("required RED/NIR assets could not be resolved") from exc
+
+        required = {roles["red"], roles["nir"]}
+        if len(required) > self.asset_adapter.config.max_assets_per_job:
+            raise AssetAccessFailure(
+                AssetAccessStatus.ASSET_TOO_LARGE, "ASSET_COUNT_LIMIT"
+            )
+        prepared: list[SatelliteAsset] = []
+        access_records: list[dict[str, Any]] = []
+        job_bytes = 0
+        for asset in assets:
+            if asset.asset_key not in required:
+                prepared.append(asset)
+                continue
+            if asset.local_reference:
+                try:
+                    self.object_storage.read_local_path(asset.local_reference)
+                    prepared.append(replace(asset, href=asset.local_reference))
+                    access_records.append(
+                        {
+                            "asset_id": asset.id,
+                            "asset_key": asset.asset_key,
+                            "status": AssetAccessStatus.CACHED.value,
+                            "local_reference": asset.local_reference,
+                            "checksum_local": asset.checksum_local,
+                        }
+                    )
+                    continue
+                except ObjectStorageError:  # stale cache is re-acquired below
+                    pass
+            if asset.href.startswith("local://"):
+                self.object_storage.read_local_path(asset.href)
+                prepared.append(asset)
+                access_records.append(
+                    {
+                        "asset_id": asset.id,
+                        "asset_key": asset.asset_key,
+                        "status": AssetAccessStatus.CACHED.value,
+                        "local_reference": asset.href,
+                        "checksum_local": asset.checksum_local,
+                    }
+                )
+                continue
+            with self.store.tenant_transaction(tenant_id, platform_admin):
+                self.store.audit(
+                    tenant_id,
+                    actor,
+                    "ASSET_ACCESS_STARTED",
+                    "satellite_asset",
+                    asset.id,
+                    {"asset_key": asset.asset_key, "policy": "PROCESS_REQUIRED"},
+                    new_id(),
+                    now_utc(),
+                )
+            result = self.asset_adapter.download(
+                asset.href,
+                f"tenants/{tenant_id}/assets/{asset.id}/{asset.asset_key.replace('/', '_')}",
+                max_job_bytes=self.asset_adapter.config.max_job_bytes - job_bytes,
+            )
+            access_record = {
+                "asset_id": asset.id,
+                "asset_key": asset.asset_key,
+                "status": result.status.value,
+                "bucket": result.bucket,
+                "object_key": result.object_key,
+                "size_bytes": result.size_bytes,
+                "bytes_downloaded": result.bytes_downloaded,
+                "checksum_algorithm": result.checksum_algorithm,
+                "checksum_local": result.checksum_local,
+                "checksum_provider": result.checksum_provider,
+                "local_reference": result.local_reference,
+                "failure_code": result.failure_code,
+            }
+            access_records.append(access_record)
+            with self.store.tenant_transaction(tenant_id, platform_admin):
+                self.repository.update_asset_access(
+                    tenant_id,
+                    asset.id,
+                    status=result.status.value,
+                    checksum_provider=result.checksum_provider,
+                    checksum_local=result.checksum_local,
+                    checksum_algorithm=result.checksum_algorithm,
+                    size_bytes=result.size_bytes,
+                    bytes_downloaded=result.bytes_downloaded,
+                    local_reference=result.local_reference,
+                    started_at=result.started_at,
+                    finished_at=result.finished_at,
+                )
+                self.store.audit(
+                    tenant_id,
+                    actor,
+                    "ASSET_ACCESS_COMPLETED"
+                    if result.local_reference
+                    else "ASSET_ACCESS_FAILED",
+                    "satellite_asset",
+                    asset.id,
+                    {
+                        "asset_key": asset.asset_key,
+                        "status": result.status.value,
+                        "failure_code": result.failure_code,
+                        "bytes_downloaded": result.bytes_downloaded,
+                    },
+                    new_id(),
+                    now_utc(),
+                )
+            if (
+                result.status
+                not in {
+                    AssetAccessStatus.SUCCEEDED,
+                    AssetAccessStatus.CACHED,
+                }
+                or not result.local_reference
+            ):
+                raise AssetAccessFailure(
+                    result.status, result.failure_code or "ASSET_UNAVAILABLE"
+                )
+            job_bytes += result.bytes_downloaded
+            prepared.append(replace(asset, href=result.local_reference))
+        return prepared, access_records
 
     def _source(self, tenant_id: str) -> Source:
         source_id = str(uuid5(NAMESPACE_URL, f"ribeira:{tenant_id}:{self.provider_id}"))
@@ -439,11 +613,53 @@ class GeospatialApplication:
         with self.store.tenant_transaction(tenant_id, platform_admin):
             self.repository.mark_job(tenant_id, job.id, ProcessingJobStatus.RUNNING)
         try:
+            processing_assets, access_records = self._prepare_processing_assets(
+                tenant_id, job.id, assets, actor, platform_admin
+            )
             output = self.processor.process(
-                assets,
+                processing_assets,
                 aoi,
                 f"tenants/{tenant_id}/derived/{job.id}/ndvi.tif",
             )
+        except AssetAccessFailure as exc:
+            quality = {
+                AssetAccessStatus.BLOCKED_BY_CREDENTIAL: GeospatialQuality.ASSET_UNAVAILABLE,
+                AssetAccessStatus.PROVIDER_AUTHENTICATION_FAILED: GeospatialQuality.PROVIDER_AUTHENTICATION_FAILED,
+                AssetAccessStatus.ASSET_TOO_LARGE: GeospatialQuality.ASSET_TOO_LARGE,
+                AssetAccessStatus.INVALID_ASSET_REFERENCE: GeospatialQuality.INVALID_ASSET_REFERENCE,
+                AssetAccessStatus.SOURCE_UNAVAILABLE: GeospatialQuality.SOURCE_UNAVAILABLE,
+            }.get(exc.status, GeospatialQuality.ASSET_UNAVAILABLE)
+            with self.store.tenant_transaction(tenant_id, platform_admin):
+                failed = self.repository.mark_job(
+                    tenant_id,
+                    job.id,
+                    ProcessingJobStatus.FAILED,
+                    exc.status.value,
+                )
+                self.store.create_quality_event(
+                    tenant_id,
+                    job.property_id,
+                    None,
+                    quality.value,
+                    {
+                        "job_id": job.id,
+                        "access_status": exc.status.value,
+                        "failure_code": exc.code,
+                    },
+                    new_id(),
+                    now_utc(),
+                )
+                self.store.audit(
+                    tenant_id,
+                    actor,
+                    "ASSET_ACCESS_FAILED",
+                    "processing_job",
+                    job.id,
+                    {"status": exc.status.value, "failure_code": exc.code},
+                    new_id(),
+                    now_utc(),
+                )
+            return NdviResult(failed, None, [])
         except RasterProcessingError as exc:
             with self.store.tenant_transaction(tenant_id, platform_admin):
                 failed = self.repository.mark_job(
@@ -469,6 +685,21 @@ class GeospatialApplication:
                     now_utc(),
                 )
             return NdviResult(failed, None, [])
+        except RuntimeError as exc:
+            with self.store.tenant_transaction(tenant_id, platform_admin):
+                failed = self.repository.mark_job(
+                    tenant_id, job.id, ProcessingJobStatus.FAILED, str(exc)
+                )
+                self.store.create_quality_event(
+                    tenant_id,
+                    job.property_id,
+                    None,
+                    GeospatialQuality.ASSET_UNAVAILABLE.value,
+                    {"job_id": job.id, "message": str(exc)},
+                    new_id(),
+                    now_utc(),
+                )
+            return NdviResult(failed, None, [])
         product = DerivedProduct(
             id=new_id(),
             tenant_id=tenant_id,
@@ -489,6 +720,12 @@ class GeospatialApplication:
                 "scene_id": scene.id,
                 "external_item_id": scene.external_item_id,
                 "acquisition_datetime": scene.acquisition_datetime,
+                "input_asset_ids": [
+                    asset.id
+                    for asset in processing_assets
+                    if asset.asset_key in output.input_asset_keys
+                ],
+                "asset_access": access_records,
             },
             limitations=output.limitations
             + ["NDVI is not a disease diagnosis or causal explanation"],

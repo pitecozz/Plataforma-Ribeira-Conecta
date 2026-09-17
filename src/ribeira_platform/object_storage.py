@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,7 @@ class LocalObjectStorage:
     """
 
     def __init__(
-        self, root: str | Path | None = None, max_object_bytes: int = 50_000_000
+        self, root: str | Path | None = None, max_object_bytes: int = 500_000_000
     ):
         root_value = (
             root or os.getenv("RIBEIRA_OBJECT_STORAGE_ROOT") or ".local/object-storage"
@@ -51,6 +52,61 @@ class LocalObjectStorage:
             payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
         return self.put_bytes(key, encoded, "application/json")
+
+    def put_file(
+        self,
+        key: str,
+        source: str | Path,
+        media_type: str | None = None,
+        max_bytes: int | None = None,
+    ) -> tuple[str, str, int]:
+        """Atomically store a bounded local file and calculate its SHA-256.
+
+        The source is deliberately accepted only as a local path. Remote asset
+        adapters must perform their own validation and streaming before handing
+        a file to this adapter.
+        """
+        source_path = Path(source)
+        if not source_path.is_file():
+            raise ObjectStorageError("source file does not exist")
+        limit = (
+            self.max_object_bytes
+            if max_bytes is None
+            else min(max_bytes, self.max_object_bytes)
+        )
+        size = source_path.stat().st_size
+        if size > limit:
+            raise ObjectStorageError("object exceeds configured size limit")
+        destination = self._path(key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary_name: str | None = None
+        digest = hashlib.sha256()
+        copied = 0
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=destination.parent, prefix=f".{destination.name}.", delete=False
+            ) as temporary:
+                temporary_name = temporary.name
+                with source_path.open("rb") as input_file:
+                    while True:
+                        chunk = input_file.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        copied += len(chunk)
+                        if copied > limit:
+                            raise ObjectStorageError(
+                                "object exceeds configured size limit"
+                            )
+                        digest.update(chunk)
+                        temporary.write(chunk)
+                temporary.flush()
+                os.fsync(temporary.fileno())
+            os.replace(temporary_name, destination)
+            temporary_name = None
+        finally:
+            if temporary_name is not None:
+                Path(temporary_name).unlink(missing_ok=True)
+        return f"local://{key}", digest.hexdigest(), copied
 
     def read_local_path(self, reference: str) -> str:
         if not reference.startswith("local://"):

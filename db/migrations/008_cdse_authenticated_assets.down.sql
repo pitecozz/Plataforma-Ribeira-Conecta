@@ -1,0 +1,11 @@
+ALTER TABLE satellite_asset DROP CONSTRAINT IF EXISTS satellite_asset_bytes_downloaded_check;
+ALTER TABLE satellite_asset DROP COLUMN IF EXISTS bytes_downloaded;
+ALTER TABLE satellite_asset DROP COLUMN IF EXISTS local_reference;
+ALTER TABLE satellite_asset DROP COLUMN IF EXISTS download_finished_at;
+ALTER TABLE satellite_asset DROP COLUMN IF EXISTS download_started_at;
+ALTER TABLE satellite_asset DROP COLUMN IF EXISTS download_status;
+ALTER TABLE satellite_asset DROP COLUMN IF EXISTS checksum_algorithm;
+ALTER TABLE satellite_asset DROP COLUMN IF EXISTS checksum_local;
+ALTER TABLE satellite_asset DROP COLUMN IF EXISTS checksum_provider;
+ALTER TABLE provider_registry DROP COLUMN IF EXISTS asset_bucket;
+ALTER TABLE provider_registry DROP COLUMN IF EXISTS asset_endpoint;

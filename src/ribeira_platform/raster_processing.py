@@ -102,6 +102,13 @@ class NdviProcessor:
                         GeospatialQuality.PROCESSING_FAILED,
                         "NDVI window contains no valid pixels",
                     )
+                if bool(np.any(valid_values < -1.0)) or bool(
+                    np.any(valid_values > 1.0)
+                ):
+                    raise RasterProcessingError(
+                        GeospatialQuality.NDVI_OUT_OF_RANGE,
+                        "NDVI contains values outside the theoretical range [-1, 1]",
+                    )
                 stats = NdviStatistics(
                     valid_count=valid_count,
                     nodata_count=nodata_count,

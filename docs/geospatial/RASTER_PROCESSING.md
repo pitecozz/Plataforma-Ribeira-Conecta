@@ -13,6 +13,19 @@ formula, input asset keys, AOI checksum, scene ID, acquisition time, output
 checksum and limitations.
 
 The development object store uses `local://` references and refuses remote URLs,
-path traversal and oversized objects. A production object-store adapter and a
-controlled CDSE asset downloader remain gaps. CDSE assets are not downloaded
-automatically during metadata discovery.
+path traversal and oversized objects. `CdseS3AssetAdapter` is a separate
+provider-specific acquisition adapter: it validates the exact bucket, validates
+the configured HTTPS endpoint, checks object size with `HeadObject`, streams the
+object with bounded reads, computes a local SHA-256, and stores it atomically.
+Only the RED and NIR assets resolved by the validated collection mapping are
+requested for NDVI; metadata discovery never downloads assets.
+
+The initial strategy is controlled local download rather than remote GDAL/range
+reads. This makes the bytes, checksum, cleanup and retry boundary explicit and
+reproducible. Per-object, per-job, asset-count, timeout and retry limits are
+configuration, not infinite defaults. A future remote-window implementation
+must preserve the same provenance and SSRF controls.
+
+COG output is reopened and validated for driver/layout, nodata, CRS and
+transform. NDVI values outside `[-1, 1]` fail the job; they are not silently
+clamped.

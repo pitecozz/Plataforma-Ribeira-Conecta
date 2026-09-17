@@ -62,6 +62,18 @@ os riscos residuais não foram marcados como resolvidos por documentação.
 | Cache/raw metadata poisoning | checksum and tenant-keyed raw references; no global scene dedup | repository/idempotency tests | immutable object storage is future operational control |
 | False agronomic diagnosis | NDVI only classified `DERIVED`, limitations explicitly recorded | NDVI test and documentation | future agronomic models need separate validation |
 
+## Revisão pós-Fase 1C.1 — acesso autenticado a assets
+
+| Ameaça | Controle | Evidência/teste | Risco residual |
+|---|---|---|---|
+| Credential leakage | credential provider externo; exceções e resultados não carregam segredo; não há credenciais em logs/auditoria | `tests/test_cdse_s3.py::test_authentication_error_is_redacted`, secret scan | rotação e secret manager são responsabilidade operacional futura |
+| Bucket confusion | parser aceita somente `s3://eodata/<key>` e endpoint não é derivado da URI | `test_reference_requires_exact_cdse_bucket_and_safe_key` | mudança de bucket oficial exige alteração de configuração revisada |
+| SSRF via S3 URI | endpoint HTTPS exato e allowlistado; host da URI não escolhe rede | adapter + `NetworkPolicy` | egress enforcement/DNS rebinding continuam controles de infraestrutura |
+| Malicious object/path traversal | object key validado, destino local gerado pelo sistema, `put_file` usa raiz controlada | adapter tests e object-storage safety tests | provider comprometido ainda pode enviar conteúdo raster malformado |
+| Oversized raster/resource exhaustion | `HeadObject`, limite de streaming, limite por job/asset, número limitado de assets | `test_oversized_object_is_rejected_before_download` | limites precisam ser calibrados por observação real |
+| Stale/invalid credentials | estados explícitos `BLOCKED_BY_CREDENTIAL` e `PROVIDER_AUTHENTICATION_FAILED`; sem fallback silencioso | adapter tests; external test opt-in | renovação operacional ainda depende do CDSE |
+| Cache/tenant leak | chave local inclui tenant e asset; atualização de asset é tenant-scoped | repository/application tests | object storage compartilhado de produção exige política imutável e revisão |
+
 ## Revisão pós-Fase 1B
 
 Foi incluída a migration `006_business_domain.sql`, executada em PostgreSQL

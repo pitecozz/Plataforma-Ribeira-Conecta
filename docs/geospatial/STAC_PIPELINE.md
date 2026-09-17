@@ -9,6 +9,8 @@ Property geometry + explicit CRS
   -> tenant-scoped scene and asset catalogue
   -> explicit scene-selection policy
   -> evidence and audit
+  -> authenticated CDSE S3 RED/NIR acquisition when processing is requested
+  -> bounded AOI NDVI processing and validated COG
 ```
 
 The request requires a timezone-aware start and end. No default time window is
@@ -23,3 +25,8 @@ raw reference accidentally.
 
 The internal API exposes domain operations (search, list scenes, create/run
 NDVI job, provenance), not generic STAC CRUD.
+
+An STAC `s3://` href is only a catalog reference until the provider-specific
+adapter validates its exact bucket and obtains authenticated access. Missing or
+rejected credentials are explicit processing outcomes; they do not trigger a
+different provider or synthetic raster.

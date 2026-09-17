@@ -40,6 +40,12 @@ its formula and input asset keys, and does not assert disease, cause or current
 field condition. When provider assets are unavailable, the job records
 `ASSET_UNAVAILABLE` and no statistic is emitted.
 
+With authenticated assets, the chain also records the configured CDSE endpoint
+and bucket, object keys, access status, acquired byte count, local checksum,
+provider checksum when explicitly returned, local object reference, AOI
+checksum, algorithm/version and processing timestamps. Secret keys and
+authorization headers are never provenance or audit data.
+
 ## Conflitos
 
 Valores diferentes do mesmo métrico e timestamp, provenientes de fontes

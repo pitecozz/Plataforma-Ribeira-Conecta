@@ -85,6 +85,8 @@ def default_copernicus_registry(
                 # The live CDSE response uses s3://eodata/... asset references;
                 # this is an explicit provider reference, not a wildcard host.
                 asset_hosts=frozenset({host, "eodata"}),
+                asset_endpoint="https://eodata.dataspace.copernicus.eu",
+                asset_bucket="eodata",
             )
         ]
     )

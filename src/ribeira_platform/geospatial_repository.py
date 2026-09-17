@@ -52,6 +52,9 @@ CREATE TABLE IF NOT EXISTS satellite_asset (
   id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, scene_id TEXT NOT NULL, asset_key TEXT NOT NULL,
   href TEXT NOT NULL, media_type TEXT, roles TEXT NOT NULL, title TEXT,
   band_metadata TEXT NOT NULL, download_policy TEXT NOT NULL, checksum TEXT, size_bytes INTEGER,
+  checksum_provider TEXT, checksum_local TEXT, checksum_algorithm TEXT,
+  download_status TEXT, download_started_at TEXT, download_finished_at TEXT,
+  local_reference TEXT, bytes_downloaded INTEGER,
   created_at TEXT NOT NULL, UNIQUE(tenant_id, scene_id, asset_key)
 );
 CREATE TABLE IF NOT EXISTS satellite_search_candidate (
@@ -291,15 +294,26 @@ class GeospatialRepository:
             item.download_policy.value,
             item.checksum,
             item.size_bytes,
+            item.checksum_provider,
+            item.checksum_local,
+            item.checksum_algorithm,
+            item.download_status,
+            item.download_started_at,
+            item.download_finished_at,
+            item.local_reference,
+            item.bytes_downloaded,
             now_utc(),
         ]
         sql = f"""INSERT INTO satellite_asset
-          (id,tenant_id,scene_id,asset_key,href,media_type,roles,title,band_metadata,download_policy,checksum,size_bytes,created_at)
+          (id,tenant_id,scene_id,asset_key,href,media_type,roles,title,band_metadata,download_policy,checksum,size_bytes,
+           checksum_provider,checksum_local,checksum_algorithm,download_status,download_started_at,download_finished_at,
+           local_reference,bytes_downloaded,created_at)
           VALUES ({",".join([self.p] * len(values))})
           ON CONFLICT (tenant_id,scene_id,asset_key) DO UPDATE SET href=excluded.href,
             media_type=excluded.media_type, roles=excluded.roles, title=excluded.title,
             band_metadata=excluded.band_metadata, download_policy=excluded.download_policy,
-            checksum=excluded.checksum, size_bytes=excluded.size_bytes"""  # nosec B608
+            checksum=COALESCE(excluded.checksum, satellite_asset.checksum),
+            size_bytes=COALESCE(excluded.size_bytes, satellite_asset.size_bytes)"""  # nosec B608
         self._execute(
             sql,
             [str(value) if isinstance(value, Decimal) else value for value in values],
@@ -459,9 +473,82 @@ class GeospatialRepository:
                 DownloadPolicy(row["download_policy"]),
                 row["checksum"],
                 row["size_bytes"],
+                row["checksum_provider"],
+                row["checksum_local"],
+                row["checksum_algorithm"],
+                row["download_status"],
+                self._timestamp(row["download_started_at"]),
+                self._timestamp(row["download_finished_at"]),
+                row["local_reference"],
+                row["bytes_downloaded"],
             )
             for row in rows
         ]
+
+    def update_asset_access(
+        self,
+        tenant_id: str,
+        asset_id: str,
+        *,
+        status: str,
+        checksum_provider: str | None = None,
+        checksum_local: str | None = None,
+        checksum_algorithm: str | None = None,
+        size_bytes: int | None = None,
+        bytes_downloaded: int | None = None,
+        local_reference: str | None = None,
+        started_at: str | None = None,
+        finished_at: str | None = None,
+    ) -> SatelliteAsset:
+        p = self.p
+        self._execute(
+            f"""UPDATE satellite_asset SET download_status={p}, checksum_provider={p},
+              checksum_local={p}, checksum_algorithm={p}, size_bytes=COALESCE({p}, size_bytes),
+              bytes_downloaded={p}, local_reference={p}, download_started_at={p},
+              download_finished_at={p}
+              WHERE tenant_id={p} AND id={p}""",  # nosec B608
+            [
+                status,
+                checksum_provider,
+                checksum_local,
+                checksum_algorithm,
+                size_bytes,
+                bytes_downloaded,
+                local_reference,
+                started_at,
+                finished_at,
+                tenant_id,
+                asset_id,
+            ],
+        )
+        row = self._one(
+            f"SELECT * FROM satellite_asset WHERE tenant_id={p} AND id={p}",  # nosec B608
+            [tenant_id, asset_id],
+        )
+        if row is None:
+            raise LookupError("satellite asset not found")
+        return SatelliteAsset(
+            str(row["id"]),
+            str(row["tenant_id"]),
+            str(row["scene_id"]),
+            row["asset_key"],
+            row["href"],
+            row["media_type"],
+            self._decode(row["roles"], []),
+            row["title"],
+            self._decode(row["band_metadata"], {}),
+            DownloadPolicy(row["download_policy"]),
+            row["checksum"],
+            row["size_bytes"],
+            row["checksum_provider"],
+            row["checksum_local"],
+            row["checksum_algorithm"],
+            row["download_status"],
+            self._timestamp(row["download_started_at"]),
+            self._timestamp(row["download_finished_at"]),
+            row["local_reference"],
+            row["bytes_downloaded"],
+        )
 
     def create_evidence(self, evidence: Evidence) -> Evidence:
         return self.store.create_evidence(evidence)

@@ -48,6 +48,11 @@ class GeospatialQuality(StrEnum):
     PROCESSING_FAILED = "PROCESSING_FAILED"
     INVALID_GEOMETRY = "INVALID_GEOMETRY"
     SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
+    PROVIDER_AUTHENTICATION_FAILED = "PROVIDER_AUTHENTICATION_FAILED"
+    ASSET_TOO_LARGE = "ASSET_TOO_LARGE"
+    INVALID_ASSET_REFERENCE = "INVALID_ASSET_REFERENCE"
+    PROCESSING_QUALITY_EVENT = "PROCESSING_QUALITY_EVENT"
+    NDVI_OUT_OF_RANGE = "NDVI_OUT_OF_RANGE"
 
 
 class GeospatialError(ValueError):
@@ -143,6 +148,14 @@ class SatelliteAsset:
     download_policy: DownloadPolicy = DownloadPolicy.METADATA_ONLY
     checksum: str | None = None
     size_bytes: int | None = None
+    checksum_provider: str | None = None
+    checksum_local: str | None = None
+    checksum_algorithm: str | None = None
+    download_status: str | None = None
+    download_started_at: str | None = None
+    download_finished_at: str | None = None
+    local_reference: str | None = None
+    bytes_downloaded: int | None = None
 
 
 @dataclass(frozen=True)
