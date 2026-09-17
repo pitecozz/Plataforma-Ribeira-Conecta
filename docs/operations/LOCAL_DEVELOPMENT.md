@@ -72,6 +72,25 @@ O provider de desenvolvimento é deliberadamente explícito e não é uma
 autenticação de produção. Produção deve configurar JWT/OIDC com issuer,
 audience e chave pública/JWKS; MFA/passkeys ficam no Identity Provider.
 
+## Farm 360 frontend
+
+The Farm 360 frontend is intentionally loopback-only for local development:
+
+```bash
+cd frontend
+npm install
+VITE_RIBEIRA_API_URL=http://127.0.0.1:8080 \
+VITE_RIBEIRA_TENANT_ID=<tenant-id> \
+VITE_RIBEIRA_PROPERTY_ID=<property-id> \
+VITE_RIBEIRA_ACCESS_TOKEN=<session-token> npm run dev
+```
+
+Use SSH port forwarding for remote development; do not bind Vite to `0.0.0.0`
+or disable UFW. `VITE_RIBEIRA_ACCESS_TOKEN` is an existing browser session token,
+never a CDSE S3 credential. The COG itself remains server-side and is served as
+authorized PNG tiles. See `docs/geospatial/FARM_360_V1.md` for the tile and
+evidence flow.
+
 ## Comandos úteis
 
 - `make db-up`, `make db-migrate`, `make test`, `make security`;

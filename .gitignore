@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 venv/
 dist/
+node_modules/
 build/
 *.egg-info/
 *.sqlite3

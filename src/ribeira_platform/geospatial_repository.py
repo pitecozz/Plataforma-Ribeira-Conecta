@@ -757,3 +757,17 @@ class GeospatialRepository:
             [GeospatialQuality(item) for item in self._decode(row["quality"], [])],
             self._timestamp(row["created_at"]) or "",
         )
+
+    def list_derived_products(
+        self, tenant_id: str, property_id: str
+    ) -> list[DerivedProduct]:
+        p = self.p
+        rows = self._execute(
+            f"SELECT id FROM derived_product WHERE tenant_id={p} AND property_id={p} ORDER BY created_at DESC, id",  # nosec B608
+            [tenant_id, property_id],
+        ).fetchall()
+        return [
+            item
+            for row in rows
+            if (item := self.get_derived_product(tenant_id, str(row["id"]))) is not None
+        ]

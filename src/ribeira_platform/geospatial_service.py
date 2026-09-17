@@ -776,6 +776,10 @@ class GeospatialApplication:
         with self.store.tenant_transaction(tenant_id):
             return self.repository.list_scenes(tenant_id, property_id)
 
+    def list_assets(self, tenant_id: str, scene_id: str) -> list[SatelliteAsset]:
+        with self.store.tenant_transaction(tenant_id):
+            return self.repository.list_assets(tenant_id, scene_id)
+
     def get_job(self, tenant_id: str, job_id: str) -> ProcessingJob | None:
         with self.store.tenant_transaction(tenant_id):
             return self.repository.get_job(tenant_id, job_id)
@@ -783,3 +787,36 @@ class GeospatialApplication:
     def get_product(self, tenant_id: str, product_id: str) -> DerivedProduct | None:
         with self.store.tenant_transaction(tenant_id):
             return self.repository.get_derived_product(tenant_id, product_id)
+
+    def list_products(self, tenant_id: str, property_id: str) -> list[DerivedProduct]:
+        with self.store.tenant_transaction(tenant_id):
+            return self.repository.list_derived_products(tenant_id, property_id)
+
+    def provenance(self, tenant_id: str, product_id: str) -> dict[str, Any] | None:
+        """Return the persisted chain; HTTP presentation removes storage references."""
+        with self.store.tenant_transaction(tenant_id):
+            product = self.repository.get_derived_product(tenant_id, product_id)
+            if product is None:
+                return None
+            job = self.repository.get_job(tenant_id, product.processing_job_id)
+            scene = self.repository.get_scene(tenant_id, product.scene_id)
+            assets = (
+                self.repository.list_assets(tenant_id, scene.id)
+                if scene is not None
+                else []
+            )
+            evidence = self.store.evidence_for_reference(tenant_id, product.id)
+            scene_evidence = self.store.evidence_for_reference(
+                tenant_id, product.scene_id
+            )
+        return {
+            "product": product,
+            "processing_job": job,
+            "scene": scene,
+            "assets": [
+                asset for asset in assets if asset.asset_key in product.input_asset_keys
+            ],
+            "evidence": [
+                item for item in (evidence, scene_evidence) if item is not None
+            ],
+        }

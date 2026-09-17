@@ -200,6 +200,17 @@ class SQLiteStore:
             row["created_at"],
         )
 
+    def list_properties(self, tenant_id: str) -> list[Property]:
+        rows = self.connection.execute(
+            "SELECT id FROM properties WHERE tenant_id = ? ORDER BY created_at DESC, id",
+            (tenant_id,),
+        ).fetchall()
+        return [
+            item
+            for row in rows
+            if (item := self.get_property(tenant_id, str(row["id"]))) is not None
+        ]
+
     def create_source(self, item: Source) -> Source:
         if not self.tenant_exists(item.tenant_id):
             raise TenantBoundaryError("tenant does not exist")

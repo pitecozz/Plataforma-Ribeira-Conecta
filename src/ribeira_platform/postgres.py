@@ -131,6 +131,17 @@ class PostgresStore:
             row["created_at"].isoformat(),
         )
 
+    def list_properties(self, tenant_id: str) -> list[Property]:
+        rows = self.connection.execute(
+            "SELECT id FROM property WHERE tenant_id=%s ORDER BY created_at DESC, id",
+            (tenant_id,),
+        ).fetchall()
+        return [
+            item
+            for row in rows
+            if (item := self.get_property(tenant_id, self._id(row["id"]))) is not None
+        ]
+
     def create_source(self, item: Source) -> Source:
         if not self.tenant_exists(item.tenant_id):
             raise PermissionError("tenant does not exist or is outside context")

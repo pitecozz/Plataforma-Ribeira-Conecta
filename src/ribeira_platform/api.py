@@ -8,12 +8,14 @@ from decimal import Decimal
 from typing import Any, Callable
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from pyproj import Geod
+from shapely.geometry import shape
 
 from .audit_context import request_context as audit_request_context
 from .business import (
@@ -37,7 +39,7 @@ from .business import (
     ServicePlan,
 )
 from .epistemology import RuleAuthority
-from .geospatial import SceneSelectionPolicy, SatelliteSearchRequest
+from .geospatial import GeometryService, SceneSelectionPolicy, SatelliteSearchRequest
 from .iam import (
     AuthContext,
     AuthenticationError,
@@ -47,8 +49,10 @@ from .iam import (
     JwtIdentityProvider,
     AuthorizationPolicy,
 )
-from .models import RuleDefinition, new_id, now_utc, to_jsonable
+from .models import Property, RuleDefinition, new_id, now_utc, to_jsonable
+from .object_storage import ObjectStorageError
 from .postgres import PostgresStore
+from .raster_tiles import InvalidTile, RasterUnavailable, render_ndvi_tile
 from .service import RibeiraApplication
 from .storage import SQLiteStore
 
@@ -60,6 +64,8 @@ REQUESTS = Counter(
 LATENCY = Histogram(
     "ribeira_http_request_duration_seconds", "HTTP request latency", ["method", "path"]
 )
+TILE_LATENCY = Histogram("ribeira_raster_tile_duration_seconds", "Raster tile latency")
+TILE_FAILURES = Counter("ribeira_raster_tile_failures_total", "Raster tile failures")
 
 
 @dataclass(frozen=True)
@@ -484,7 +490,9 @@ def create_app(
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = (
-            "no-store"
+            response.headers.get("Cache-Control", "private, max-age=300")
+            if "/tiles/" in path
+            else "no-store"
             if path.startswith("/v1")
             else response.headers.get("Cache-Control", "no-cache")
         )
@@ -565,6 +573,103 @@ def create_app(
     def authorize(ctx: AuthContext, permission: str, tenant_id: str) -> None:
         policy.require(ctx, permission, tenant_id=tenant_id)
 
+    def property_area_hectares(item: Property) -> str | None:
+        """Calculate only from an explicit, valid geometry; never estimate area."""
+        if item.geometry_geojson is None or item.geometry_crs is None:
+            return None
+        try:
+            geometry, _, _ = GeometryService.to_wgs84(item)
+            square_metres, _ = Geod(ellps="WGS84").geometry_area_perimeter(
+                shape(geometry)
+            )
+            return format(abs(Decimal(str(square_metres))) / Decimal("10000"), "f")
+        except Exception:
+            return None
+
+    def safe_property(item: Property, status: str | None = None) -> dict[str, Any]:
+        return {
+            "id": item.id,
+            "name": item.name,
+            "tenant_id": item.tenant_id,
+            "geometry_geojson": item.geometry_geojson,
+            "geometry_crs": item.geometry_crs,
+            "area_hectares": property_area_hectares(item),
+            "classification": item.classification.value,
+            "created_at": item.created_at,
+            "data_status": status or "UNKNOWN",
+        }
+
+    def safe_scene(item: Any, assets: list[Any] | None = None) -> dict[str, Any]:
+        return {
+            "id": item.id,
+            "property_id": item.property_id,
+            "provider": item.provider_id,
+            "collection": item.collection_id,
+            "scene_id": item.external_item_id,
+            "acquisition_datetime": item.acquisition_datetime,
+            "provider_published_datetime": item.provider_published_datetime,
+            "cloud_cover": item.cloud_cover,
+            "platform": item.platform,
+            "constellation": item.constellation,
+            "processing_level": item.processing_level,
+            "checksum": item.checksum,
+            "source_status": "METADATA_CATALOGUED",
+            "assets": [
+                {
+                    "id": asset.id,
+                    "asset_key": asset.asset_key,
+                    "title": asset.title,
+                    "roles": asset.roles,
+                    "checksum": asset.checksum_local
+                    or asset.checksum_provider
+                    or asset.checksum,
+                    "download_status": asset.download_status or "METADATA_ONLY",
+                    "bytes_downloaded": asset.bytes_downloaded,
+                }
+                for asset in (assets or [])
+            ],
+        }
+
+    def safe_product(item: Any) -> dict[str, Any]:
+        stats = item.statistics
+        return {
+            "id": item.id,
+            "property_id": item.property_id,
+            "scene_id": item.scene_id,
+            "processing_job_id": item.processing_job_id,
+            "product_type": item.product_type,
+            "classification": item.classification.value,
+            "statistics": {
+                "minimum": stats.minimum,
+                "maximum": stats.maximum,
+                "mean": stats.mean,
+                "median": stats.median,
+                "valid_count": stats.valid_count,
+                "nodata_count": stats.nodata_count,
+                "coverage_percentage": stats.coverage_percentage,
+            },
+            "checksum": item.output_checksum,
+            "generated_at": item.created_at,
+            "processing_status": "SUCCEEDED"
+            if item.output_reference
+            else "DADO_INSUFICIENTE",
+            "algorithm_id": item.algorithm_id,
+            "algorithm_version": item.algorithm_version,
+            "formula": item.formula,
+            "input_asset_keys": item.input_asset_keys,
+            "limitations": item.limitations,
+            "quality": [quality.value for quality in item.quality],
+        }
+
+    def data_status(products: list[Any], scenes: list[Any]) -> str:
+        if any(product.output_reference for product in products):
+            return "READY"
+        if products:
+            return "DADO_INSUFICIENTE"
+        if scenes:
+            return "DADO_INSUFICIENTE"
+        return "UNKNOWN"
+
     @app.post("/v1/tenants", status_code=201, tags=["tenants"])
     async def create_tenant(
         payload: TenantRequest, ctx: AuthContext = Depends(context)
@@ -588,6 +693,47 @@ def create_app(
                 ctx.is_platform_admin,
             )
         )
+
+    @app.get("/v1/tenants/{tenant_id}/properties", tags=["farm-360"])
+    async def list_properties(tenant_id: str, ctx: AuthContext = Depends(context)):
+        authorize(ctx, "property:read", tenant_id)
+        with application.store.tenant_transaction(tenant_id, ctx.is_platform_admin):
+            properties = application.store.list_properties(tenant_id)
+        return {"items": [safe_property(item) for item in properties]}
+
+    @app.get("/v1/tenants/{tenant_id}/properties/{property_id}", tags=["farm-360"])
+    async def get_property(
+        tenant_id: str, property_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "property:read", tenant_id)
+        with application.store.tenant_transaction(tenant_id, ctx.is_platform_admin):
+            item = application.store.get_property(tenant_id, property_id)
+        if item is None:
+            raise LookupError("property not found in tenant")
+        products = application.geospatial.list_products(tenant_id, property_id)
+        scenes = application.geospatial.list_scenes(tenant_id, property_id)
+        return safe_property(item, data_status(products, scenes))
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/geospatial",
+        tags=["farm-360"],
+    )
+    async def get_property_geospatial(
+        tenant_id: str, property_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "geospatial:read", tenant_id)
+        with application.store.tenant_transaction(tenant_id, ctx.is_platform_admin):
+            item = application.store.get_property(tenant_id, property_id)
+        if item is None:
+            raise LookupError("property not found in tenant")
+        products = application.geospatial.list_products(tenant_id, property_id)
+        scenes = application.geospatial.list_scenes(tenant_id, property_id)
+        return {
+            "property_id": item.id,
+            "aoi": item.geometry_geojson,
+            "geometry_crs": item.geometry_crs,
+            "data_status": data_status(products, scenes),
+        }
 
     @app.post("/v1/tenants/{tenant_id}/sources", status_code=201, tags=["sources"])
     async def create_source(
@@ -1261,7 +1407,39 @@ def create_app(
         tenant_id: str, property_id: str, ctx: AuthContext = Depends(context)
     ):
         authorize(ctx, "geospatial:read", tenant_id)
-        return to_jsonable(application.geospatial.list_scenes(tenant_id, property_id))
+        with application.store.tenant_transaction(tenant_id, ctx.is_platform_admin):
+            property_item = application.store.get_property(tenant_id, property_id)
+        if property_item is None:
+            raise LookupError("property not found in tenant")
+        scenes = application.geospatial.list_scenes(tenant_id, property_id)
+        return {
+            "items": [
+                safe_scene(
+                    scene,
+                    application.geospatial.list_assets(tenant_id, scene.id),
+                )
+                for scene in scenes
+            ]
+        }
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/derived-products",
+        tags=["farm-360"],
+    )
+    async def list_derived_products(
+        tenant_id: str, property_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "geospatial:read", tenant_id)
+        with application.store.tenant_transaction(tenant_id, ctx.is_platform_admin):
+            property_item = application.store.get_property(tenant_id, property_id)
+        if property_item is None:
+            raise LookupError("property not found in tenant")
+        return {
+            "items": [
+                safe_product(item)
+                for item in application.geospatial.list_products(tenant_id, property_id)
+            ]
+        }
 
     @app.post(
         "/v1/tenants/{tenant_id}/properties/{property_id}/ndvi-jobs",
@@ -1320,11 +1498,96 @@ def create_app(
         tenant_id: str, product_id: str, ctx: AuthContext = Depends(context)
     ):
         authorize(ctx, "geospatial:read", tenant_id)
-        result = application.geospatial.get_product(tenant_id, product_id)
+        result = application.geospatial.provenance(tenant_id, product_id)
         if result is None:
             raise LookupError("derived product not found in tenant")
-        evidence = application.store.evidence_for_reference(tenant_id, product_id)
-        return to_jsonable({"product": result, "evidence": evidence})
+        product = result["product"]
+        scene = result["scene"]
+        job = result["processing_job"]
+        return to_jsonable(
+            {
+                "product": safe_product(product),
+                "processing_job": {
+                    "id": job.id if job else None,
+                    "status": job.status if job else "UNKNOWN",
+                    "algorithm_id": job.algorithm_id if job else None,
+                    "algorithm_version": job.algorithm_version if job else None,
+                    "created_at": job.created_at if job else None,
+                    "started_at": job.started_at if job else None,
+                    "finished_at": job.finished_at if job else None,
+                },
+                "assets": [
+                    {
+                        "id": asset.id,
+                        "asset_key": asset.asset_key,
+                        "title": asset.title,
+                        "checksum": asset.checksum_local
+                        or asset.checksum_provider
+                        or asset.checksum,
+                        "download_status": asset.download_status or "METADATA_ONLY",
+                    }
+                    for asset in result["assets"]
+                ],
+                "scene": safe_scene(scene) if scene else None,
+                "provider": {
+                    "id": scene.provider_id if scene else "UNKNOWN",
+                    "collection": scene.collection_id if scene else "UNKNOWN",
+                    "catalog_source": "COPERNICUS_CDSE_STAC" if scene else "UNKNOWN",
+                },
+                "evidence": result["evidence"],
+            }
+        )
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/derived-products/{product_id}/tiles/{z}/{x}/{y}",
+        tags=["farm-360"],
+    )
+    async def get_derived_product_tile(
+        tenant_id: str,
+        product_id: str,
+        z: int,
+        x: int,
+        y: int,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "geospatial:read", tenant_id)
+        product = application.geospatial.get_product(tenant_id, product_id)
+        if product is None:
+            raise LookupError("derived product not found in tenant")
+        if not product.output_reference:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "RASTER_UNAVAILABLE",
+                    "message": "derived product has no raster",
+                },
+            )
+        started = time.perf_counter()
+        try:
+            path = application.geospatial.object_storage.read_local_path(
+                product.output_reference
+            )
+            tile = render_ndvi_tile(path, z, x, y)
+        except InvalidTile:
+            TILE_FAILURES.inc()
+            raise
+        except (ObjectStorageError, RasterUnavailable, OSError, ValueError) as exc:
+            TILE_FAILURES.inc()
+            logger.warning("raster tile unavailable", extra={"product_id": product.id})
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "RASTER_UNAVAILABLE",
+                    "message": "derived raster is unavailable",
+                },
+            ) from exc
+        finally:
+            TILE_LATENCY.observe(time.perf_counter() - started)
+        return Response(
+            content=tile.payload,
+            media_type="image/png",
+            headers={"Cache-Control": "private, max-age=300", "Vary": "Authorization"},
+        )
 
     return app
 

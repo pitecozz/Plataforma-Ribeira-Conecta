@@ -1,0 +1,237 @@
+"""Farm 360 read API tests use explicitly synthetic_test_data raster bytes only."""
+
+from __future__ import annotations
+
+import tempfile
+import unittest
+from dataclasses import replace
+from pathlib import Path
+
+import numpy as np
+import rasterio
+from fastapi.testclient import TestClient
+from rasterio.transform import from_origin
+from shapely.geometry import Polygon, mapping
+
+from ribeira_platform.api import Settings, create_app
+from ribeira_platform.geospatial import (
+    ProviderSearchResult,
+    SatelliteCollection,
+    SatelliteSearchRequest,
+)
+from ribeira_platform.geospatial_service import GeospatialApplication
+from ribeira_platform.iam import AuthContext, DevelopmentIdentityProvider
+from ribeira_platform.object_storage import LocalObjectStorage
+from ribeira_platform.models import new_id
+from ribeira_platform.service import RibeiraApplication
+from ribeira_platform.storage import SQLiteStore
+
+
+class SyntheticProvider:
+    def get_collection(self, collection_id: str) -> SatelliteCollection:
+        return SatelliteCollection(
+            "",
+            "COPERNICUS_CDSE",
+            collection_id,
+            "synthetic_test_data",
+            None,
+            "L2A",
+            "10m",
+            {},
+            {},
+            "other",
+            "1.1.0",
+            {"synthetic_test_data": True},
+        )
+
+    def search(
+        self, request: SatelliteSearchRequest, aoi_geojson: dict
+    ) -> ProviderSearchResult:
+        item = {
+            "type": "Feature",
+            "stac_version": "1.1.0",
+            "id": "SYNTHETIC_TEST_SCENE",
+            "geometry": aoi_geojson,
+            "bbox": [0, 0, 1, 1],
+            "properties": {"datetime": "2025-01-15T10:00:00Z", "eo:cloud_cover": 12.0},
+            "assets": {
+                "B04_10m": {
+                    "href": "local://assets/red.tif",
+                    "roles": ["reflectance"],
+                    "title": "Red (band 4) - 10m",
+                },
+                "B08_10m": {
+                    "href": "local://assets/nir.tif",
+                    "roles": ["reflectance"],
+                    "title": "NIR 1 (band 8) - 10m",
+                },
+            },
+        }
+        return ProviderSearchResult([item], [{"features": [item]}])
+
+
+class Farm360ApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.store = SQLiteStore()
+        self.storage = LocalObjectStorage(Path(self.temporary.name) / "objects")
+        self._write_synthetic_test_rasters()
+        provider = SyntheticProvider()
+        self.application = RibeiraApplication(
+            self.store, geospatial_provider=provider, object_storage=self.storage
+        )
+        self.application.geospatial = GeospatialApplication(
+            self.store, provider, self.storage
+        )
+        self.tenant = self.application.create_tenant("Synthetic test tenant")
+        self.other_tenant = self.application.create_tenant("Other test tenant")
+        polygon = mapping(
+            Polygon(
+                [(0.05, 0.05), (0.95, 0.05), (0.95, 0.95), (0.05, 0.95), (0.05, 0.05)]
+            )
+        )
+        self.property = self.application.create_property(
+            self.tenant.id, "TEST_AOI_ONLY", polygon, "EPSG:4326"
+        )
+        search = self.application.geospatial.search_satellite(
+            self.tenant.id,
+            SatelliteSearchRequest(
+                self.property.id,
+                "sentinel-2-l2a",
+                "2025-01-01T00:00:00Z",
+                "2025-02-01T00:00:00Z",
+            ),
+        )
+        job = self.application.geospatial.create_ndvi_job(
+            self.tenant.id, self.property.id, search.search.id
+        )
+        result = self.application.geospatial.run_ndvi_job(self.tenant.id, job.id)
+        assert result.product is not None
+        self.product = result.product
+        settings = Settings("test", "sqlite", None, (), "development", 1_000_000)
+        self.client = TestClient(
+            create_app(
+                self.application,
+                DevelopmentIdentityProvider(
+                    "admin",
+                    AuthContext(
+                        "admin",
+                        None,
+                        roles=frozenset({"PLATFORM_ADMIN"}),
+                        is_platform_admin=True,
+                    ),
+                ),
+                settings=settings,
+            )
+        )
+        self.tenant_client = TestClient(
+            create_app(
+                self.application,
+                DevelopmentIdentityProvider(
+                    "tenant-b",
+                    AuthContext(
+                        "tenant-b", self.other_tenant.id, roles=frozenset({"VIEWER"})
+                    ),
+                ),
+                settings=settings,
+            )
+        )
+
+    def tearDown(self) -> None:
+        self.store.close()
+        self.temporary.cleanup()
+
+    def _write_synthetic_test_rasters(self) -> None:
+        profile = {
+            "driver": "GTiff",
+            "height": 4,
+            "width": 4,
+            "count": 1,
+            "dtype": "float32",
+            "crs": "EPSG:4326",
+            "transform": from_origin(0, 1, 0.25, 0.25),
+            "nodata": -9999.0,
+        }
+        for key, value in (("red.tif", 1.0), ("nir.tif", 3.0)):
+            path = Path(self.temporary.name) / "objects" / "assets" / key
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with rasterio.open(path, "w", **profile) as dataset:
+                dataset.write(np.full((1, 4, 4), value, dtype="float32"))
+
+    def test_property_scene_product_and_provenance_are_safe_and_tenant_scoped(
+        self,
+    ) -> None:
+        headers = {"Authorization": "Bearer admin"}
+        property_response = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}",
+            headers=headers,
+        )
+        scenes = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/scenes",
+            headers=headers,
+        )
+        products = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/derived-products",
+            headers=headers,
+        )
+        provenance = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/derived-products/{self.product.id}/provenance",
+            headers=headers,
+        )
+        self.assertEqual(property_response.json()["data_status"], "READY")
+        self.assertEqual(scenes.json()["items"][0]["scene_id"], "SYNTHETIC_TEST_SCENE")
+        self.assertEqual(
+            products.json()["items"][0]["checksum"], self.product.output_checksum
+        )
+        self.assertIn(
+            "B04_10m", [asset["asset_key"] for asset in provenance.json()["assets"]]
+        )
+        self.assertNotIn("local://", provenance.text)
+        denied = self.tenant_client.get(
+            f"/v1/tenants/{self.tenant.id}/derived-products/{self.product.id}/provenance",
+            headers={"Authorization": "Bearer tenant-b"},
+        )
+        self.assertEqual(denied.status_code, 403)
+
+    def test_tile_is_png_and_invalid_or_unknown_resources_are_not_served(self) -> None:
+        headers = {"Authorization": "Bearer admin"}
+        tile = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/derived-products/{self.product.id}/tiles/0/0/0",
+            headers=headers,
+        )
+        self.assertEqual(tile.status_code, 200)
+        self.assertEqual(tile.headers["content-type"], "image/png")
+        self.assertEqual(tile.headers["cache-control"], "private, max-age=300")
+        self.assertTrue(tile.content.startswith(b"\x89PNG"))
+        invalid = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/derived-products/{self.product.id}/tiles/99/0/0",
+            headers=headers,
+        )
+        self.assertEqual(invalid.status_code, 422)
+        missing = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/derived-products/not-a-product/tiles/0/0/0",
+            headers=headers,
+        )
+        self.assertEqual(missing.status_code, 404)
+        traversal = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/derived-products/..%2F..%2Fetc%2Fpasswd/tiles/0/0/0",
+            headers=headers,
+        )
+        self.assertEqual(traversal.status_code, 404)
+        no_raster = replace(
+            self.product,
+            id=new_id(),
+            processing_job_id=new_id(),
+            output_reference=None,
+            output_checksum=None,
+        )
+        self.application.geospatial.repository.create_derived_product(no_raster)
+        unavailable = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/derived-products/{no_raster.id}/tiles/0/0/0",
+            headers=headers,
+        )
+        self.assertEqual(unavailable.status_code, 409)
+
+
+if __name__ == "__main__":
+    unittest.main()
