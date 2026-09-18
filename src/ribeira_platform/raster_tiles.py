@@ -68,14 +68,18 @@ def _colourize_delta(values: np.ndarray) -> np.ndarray:
     rgb = np.empty((*values.shape, 3), dtype="float32")
     rgb[lower] = stops[0] + (stops[1] - stops[0]) * (normalized[lower, None] * 2.0)
     high = ~lower
-    rgb[high] = stops[1] + (stops[2] - stops[1]) * ((normalized[high, None] - 0.5) * 2.0)
+    rgb[high] = stops[1] + (stops[2] - stops[1]) * (
+        (normalized[high, None] - 0.5) * 2.0
+    )
     for channel in range(3):
         rgba[channel][valid] = rgb[..., channel][valid].astype("uint8")
     rgba[3][valid] = 255
     return rgba
 
 
-def render_ndvi_tile(path: str, z: int, x: int, y: int, *, delta: bool = False) -> RasterTile:
+def render_ndvi_tile(
+    path: str, z: int, x: int, y: int, *, delta: bool = False
+) -> RasterTile:
     bounds = _tile_bounds(z, x, y)
     with rasterio.open(path) as dataset:
         if dataset.count != 1 or dataset.crs is None:

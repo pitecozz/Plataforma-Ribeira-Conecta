@@ -773,31 +773,73 @@ class GeospatialApplication:
         return NdviResult(completed, product, [evidence.id])
 
     def create_quality_masked_ndvi_job(
-        self, tenant_id: str, property_id: str, source_product_id: str,
-        actor: str = "system", platform_admin: bool = False,
+        self,
+        tenant_id: str,
+        property_id: str,
+        source_product_id: str,
+        actor: str = "system",
+        platform_admin: bool = False,
     ) -> ProcessingJob:
         """Create a persisted reprocessing job that adds the official SCL mask."""
         policy = Sentinel2QualityPolicy()
         with self.store.tenant_transaction(tenant_id, platform_admin):
-            source_product = self.repository.get_derived_product(tenant_id, source_product_id)
+            source_product = self.repository.get_derived_product(
+                tenant_id, source_product_id
+            )
         if source_product is None:
             raise LookupError("source NDVI product not found in tenant")
-        if source_product.property_id != property_id or source_product.product_type not in {"NDVI", "NDVI_QUALITY_MASKED"}:
-            raise ValueError("quality-masked NDVI requires an NDVI product of the requested property")
-        params = {"source_product_id": source_product.id, "quality_mask_policy": policy.record(), **algorithm_parameters({"type": "quality-masked-ndvi", "source_product_id": source_product.id})}
+        if (
+            source_product.property_id != property_id
+            or source_product.product_type not in {"NDVI", "NDVI_QUALITY_MASKED"}
+        ):
+            raise ValueError(
+                "quality-masked NDVI requires an NDVI product of the requested property"
+            )
+        params = {
+            "source_product_id": source_product.id,
+            "quality_mask_policy": policy.record(),
+            **algorithm_parameters(
+                {"type": "quality-masked-ndvi", "source_product_id": source_product.id}
+            ),
+        }
         job = ProcessingJob(
-            id=new_id(), tenant_id=tenant_id, property_id=property_id, scene_id=source_product.scene_id,
-            job_type="QUALITY_MASKED_NDVI", algorithm_id="NDVI_QUALITY_MASKED", algorithm_version="1.0.3",
-            parameters=params, status=ProcessingJobStatus.PENDING,
-            idempotency_key=processing_idempotency_key(source_product.scene_id, property_id, "NDVI_QUALITY_MASKED", "1.0.3", params),
+            id=new_id(),
+            tenant_id=tenant_id,
+            property_id=property_id,
+            scene_id=source_product.scene_id,
+            job_type="QUALITY_MASKED_NDVI",
+            algorithm_id="NDVI_QUALITY_MASKED",
+            algorithm_version="1.0.3",
+            parameters=params,
+            status=ProcessingJobStatus.PENDING,
+            idempotency_key=processing_idempotency_key(
+                source_product.scene_id,
+                property_id,
+                "NDVI_QUALITY_MASKED",
+                "1.0.3",
+                params,
+            ),
         )
         with self.store.tenant_transaction(tenant_id, platform_admin):
             persisted = self.repository.create_job(job)
-            self.store.audit(tenant_id, actor, "QUALITY_MASKED_NDVI_JOB_CREATED", "processing_job", persisted.id, {"source_product_id": source_product.id, "policy": policy.policy_id}, new_id(), now_utc())
+            self.store.audit(
+                tenant_id,
+                actor,
+                "QUALITY_MASKED_NDVI_JOB_CREATED",
+                "processing_job",
+                persisted.id,
+                {"source_product_id": source_product.id, "policy": policy.policy_id},
+                new_id(),
+                now_utc(),
+            )
         return persisted
 
     def run_quality_masked_ndvi_job(
-        self, tenant_id: str, job_id: str, actor: str = "system", platform_admin: bool = False,
+        self,
+        tenant_id: str,
+        job_id: str,
+        actor: str = "system",
+        platform_admin: bool = False,
     ) -> NdviResult:
         with self.store.tenant_transaction(tenant_id, platform_admin):
             job = self.repository.get_job(tenant_id, job_id)
@@ -805,7 +847,9 @@ class GeospatialApplication:
             raise LookupError("quality-masked NDVI processing job not found in tenant")
         if job.status == ProcessingJobStatus.SUCCEEDED and job.output_product_id:
             with self.store.tenant_transaction(tenant_id, platform_admin):
-                product = self.repository.get_derived_product(tenant_id, job.output_product_id)
+                product = self.repository.get_derived_product(
+                    tenant_id, job.output_product_id
+                )
             return NdviResult(job, product, [])
         with self.store.tenant_transaction(tenant_id, platform_admin):
             property_item = self.store.get_property(tenant_id, job.property_id)
@@ -815,116 +859,315 @@ class GeospatialApplication:
             raise LookupError("processing references are outside tenant")
         policy = Sentinel2QualityPolicy()
         if policy.scl_asset_key not in {asset.asset_key for asset in assets}:
-            raise ValueError("scene does not expose the required official SCL_20m asset")
+            raise ValueError(
+                "scene does not expose the required official SCL_20m asset"
+            )
         from .geospatial import GeometryService
+
         aoi, _, _ = GeometryService.to_wgs84(property_item)
         with self.store.tenant_transaction(tenant_id, platform_admin):
             self.repository.mark_job(tenant_id, job.id, ProcessingJobStatus.RUNNING)
         try:
             prepared, access_records = self._prepare_processing_assets(
-                tenant_id, job.id, assets, actor, platform_admin,
+                tenant_id,
+                job.id,
+                assets,
+                actor,
+                platform_admin,
                 required_asset_keys={"B04_10m", "B08_10m", policy.scl_asset_key},
             )
-            output = self.processor.process(prepared, aoi, f"tenants/{tenant_id}/derived/{job.id}/quality-masked-ndvi.tif", quality_policy=policy)
-        except (AssetAccessFailure, RasterProcessingError, RuntimeError, TypeError, ValueError) as exc:
+            output = self.processor.process(
+                prepared,
+                aoi,
+                f"tenants/{tenant_id}/derived/{job.id}/quality-masked-ndvi.tif",
+                quality_policy=policy,
+            )
+        except (
+            AssetAccessFailure,
+            RasterProcessingError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:
             with self.store.tenant_transaction(tenant_id, platform_admin):
                 failure = getattr(exc, "code", type(exc).__name__)
-                failed = self.repository.mark_job(tenant_id, job.id, ProcessingJobStatus.FAILED, failure)
-                self.store.audit(tenant_id, actor, "QUALITY_MASKED_NDVI_JOB_FAILED", "processing_job", job.id, {"failure": failure}, new_id(), now_utc())
+                failed = self.repository.mark_job(
+                    tenant_id, job.id, ProcessingJobStatus.FAILED, failure
+                )
+                self.store.audit(
+                    tenant_id,
+                    actor,
+                    "QUALITY_MASKED_NDVI_JOB_FAILED",
+                    "processing_job",
+                    job.id,
+                    {"failure": failure},
+                    new_id(),
+                    now_utc(),
+                )
             return NdviResult(failed, None, [])
         quality_mask = dict(output.quality_mask or {})
         scl_access = next(
-            (record for record in access_records if record["asset_key"] == policy.scl_asset_key),
+            (
+                record
+                for record in access_records
+                if record["asset_key"] == policy.scl_asset_key
+            ),
             None,
         )
         if scl_access is not None:
             quality_mask["scl_asset_id"] = scl_access["asset_id"]
             quality_mask["scl_checksum"] = scl_access.get("checksum_local")
         product = DerivedProduct(
-            id=new_id(), tenant_id=tenant_id, property_id=job.property_id, scene_id=scene.id,
-            processing_job_id=job.id, product_type="NDVI_QUALITY_MASKED", classification=DataClassification.DERIVED,
-            statistics=output.statistics, output_reference=output.output_reference, output_checksum=output.output_checksum,
-            algorithm_id="NDVI_QUALITY_MASKED", algorithm_version="1.0.3", formula=NdviProcessor.formula,
+            id=new_id(),
+            tenant_id=tenant_id,
+            property_id=job.property_id,
+            scene_id=scene.id,
+            processing_job_id=job.id,
+            product_type="NDVI_QUALITY_MASKED",
+            classification=DataClassification.DERIVED,
+            statistics=output.statistics,
+            output_reference=output.output_reference,
+            output_checksum=output.output_checksum,
+            algorithm_id="NDVI_QUALITY_MASKED",
+            algorithm_version="1.0.3",
+            formula=NdviProcessor.formula,
             input_asset_keys=output.input_asset_keys,
-            parameters={**job.parameters, "scene_id": scene.id, "acquisition_datetime": scene.acquisition_datetime, "input_asset_ids": [asset.id for asset in prepared if asset.asset_key in output.input_asset_keys], "asset_access": access_records, "quality_mask": quality_mask},
-            limitations=output.limitations + ["SCL is a scene-classification quality policy, not a causal diagnosis"], quality=output.quality,
+            parameters={
+                **job.parameters,
+                "scene_id": scene.id,
+                "acquisition_datetime": scene.acquisition_datetime,
+                "input_asset_ids": [
+                    asset.id
+                    for asset in prepared
+                    if asset.asset_key in output.input_asset_keys
+                ],
+                "asset_access": access_records,
+                "quality_mask": quality_mask,
+            },
+            limitations=output.limitations
+            + ["SCL is a scene-classification quality policy, not a causal diagnosis"],
+            quality=output.quality,
         )
         with self.store.tenant_transaction(tenant_id, platform_admin):
             self.repository.create_derived_product(product)
-            completed = self.repository.mark_job(tenant_id, job.id, ProcessingJobStatus.SUCCEEDED, output_product_id=product.id)
+            completed = self.repository.mark_job(
+                tenant_id,
+                job.id,
+                ProcessingJobStatus.SUCCEEDED,
+                output_product_id=product.id,
+            )
             source = self._source(tenant_id)
-            evidence = Evidence(id=new_id(), tenant_id=tenant_id, evidence_type="DERIVED_PRODUCT", reference_id=product.id, classification=DataClassification.DERIVED, source_id=source.id, observed_at=scene.acquisition_datetime, transformation=f"NDVI_QUALITY_MASKED 1.0.3: {NdviProcessor.formula}; {policy.policy_id}", limitations=product.limitations)
+            evidence = Evidence(
+                id=new_id(),
+                tenant_id=tenant_id,
+                evidence_type="DERIVED_PRODUCT",
+                reference_id=product.id,
+                classification=DataClassification.DERIVED,
+                source_id=source.id,
+                observed_at=scene.acquisition_datetime,
+                transformation=f"NDVI_QUALITY_MASKED 1.0.3: {NdviProcessor.formula}; {policy.policy_id}",
+                limitations=product.limitations,
+            )
             self.repository.create_evidence(evidence)
-            self.store.audit(tenant_id, actor, "QUALITY_MASKED_NDVI_JOB_COMPLETED", "derived_product", product.id, {"processing_job_id": job.id, "output_checksum": product.output_checksum, "policy": policy.record()}, new_id(), now_utc())
+            self.store.audit(
+                tenant_id,
+                actor,
+                "QUALITY_MASKED_NDVI_JOB_COMPLETED",
+                "derived_product",
+                product.id,
+                {
+                    "processing_job_id": job.id,
+                    "output_checksum": product.output_checksum,
+                    "policy": policy.record(),
+                },
+                new_id(),
+                now_utc(),
+            )
         return NdviResult(completed, product, [evidence.id])
 
     def create_temporal_delta_job(
-        self, tenant_id: str, property_id: str, baseline_product_id: str, target_product_id: str,
-        actor: str = "system", platform_admin: bool = False,
+        self,
+        tenant_id: str,
+        property_id: str,
+        baseline_product_id: str,
+        target_product_id: str,
+        actor: str = "system",
+        platform_admin: bool = False,
     ) -> ProcessingJob:
         with self.store.tenant_transaction(tenant_id, platform_admin):
-            baseline = self.repository.get_derived_product(tenant_id, baseline_product_id)
+            baseline = self.repository.get_derived_product(
+                tenant_id, baseline_product_id
+            )
             target = self.repository.get_derived_product(tenant_id, target_product_id)
         if baseline is None or target is None:
             raise LookupError("quality-masked NDVI product not found in tenant")
         if baseline.property_id != property_id or target.property_id != property_id:
-            raise ValueError("baseline and target must belong to the requested property")
-        if baseline.id == target.id or baseline.product_type != "NDVI_QUALITY_MASKED" or target.product_type != "NDVI_QUALITY_MASKED":
-            raise ValueError("temporal delta requires two different quality-masked NDVI products")
-        params = {"baseline_product_id": baseline.id, "target_product_id": target.id, "target_grid": "baseline", "alignment_resampling": "bilinear"}
+            raise ValueError(
+                "baseline and target must belong to the requested property"
+            )
+        if (
+            baseline.id == target.id
+            or baseline.product_type != "NDVI_QUALITY_MASKED"
+            or target.product_type != "NDVI_QUALITY_MASKED"
+        ):
+            raise ValueError(
+                "temporal delta requires two different quality-masked NDVI products"
+            )
+        params = {
+            "baseline_product_id": baseline.id,
+            "target_product_id": target.id,
+            "target_grid": "baseline",
+            "alignment_resampling": "bilinear",
+        }
         job = ProcessingJob(
-            id=new_id(), tenant_id=tenant_id, property_id=property_id, scene_id=baseline.scene_id,
-            job_type="TEMPORAL_DELTA", algorithm_id=TemporalDeltaProcessor.algorithm_id, algorithm_version=TemporalDeltaProcessor.algorithm_version,
-            parameters=params, status=ProcessingJobStatus.PENDING,
-            idempotency_key=processing_idempotency_key(baseline.scene_id, property_id, TemporalDeltaProcessor.algorithm_id, TemporalDeltaProcessor.algorithm_version, params),
+            id=new_id(),
+            tenant_id=tenant_id,
+            property_id=property_id,
+            scene_id=baseline.scene_id,
+            job_type="TEMPORAL_DELTA",
+            algorithm_id=TemporalDeltaProcessor.algorithm_id,
+            algorithm_version=TemporalDeltaProcessor.algorithm_version,
+            parameters=params,
+            status=ProcessingJobStatus.PENDING,
+            idempotency_key=processing_idempotency_key(
+                baseline.scene_id,
+                property_id,
+                TemporalDeltaProcessor.algorithm_id,
+                TemporalDeltaProcessor.algorithm_version,
+                params,
+            ),
         )
         with self.store.tenant_transaction(tenant_id, platform_admin):
             persisted = self.repository.create_job(job)
-            self.store.audit(tenant_id, actor, "TEMPORAL_DELTA_JOB_CREATED", "processing_job", persisted.id, params, new_id(), now_utc())
+            self.store.audit(
+                tenant_id,
+                actor,
+                "TEMPORAL_DELTA_JOB_CREATED",
+                "processing_job",
+                persisted.id,
+                params,
+                new_id(),
+                now_utc(),
+            )
         return persisted
 
-    def run_temporal_delta_job(self, tenant_id: str, job_id: str, actor: str = "system", platform_admin: bool = False) -> NdviResult:
+    def run_temporal_delta_job(
+        self,
+        tenant_id: str,
+        job_id: str,
+        actor: str = "system",
+        platform_admin: bool = False,
+    ) -> NdviResult:
         with self.store.tenant_transaction(tenant_id, platform_admin):
             job = self.repository.get_job(tenant_id, job_id)
         if job is None or job.job_type != "TEMPORAL_DELTA":
             raise LookupError("temporal delta processing job not found in tenant")
         if job.status == ProcessingJobStatus.SUCCEEDED and job.output_product_id:
             with self.store.tenant_transaction(tenant_id, platform_admin):
-                product = self.repository.get_derived_product(tenant_id, job.output_product_id)
+                product = self.repository.get_derived_product(
+                    tenant_id, job.output_product_id
+                )
             return NdviResult(job, product, [])
         baseline_id = str(job.parameters.get("baseline_product_id") or "")
         target_id = str(job.parameters.get("target_product_id") or "")
         with self.store.tenant_transaction(tenant_id, platform_admin):
             baseline = self.repository.get_derived_product(tenant_id, baseline_id)
             target = self.repository.get_derived_product(tenant_id, target_id)
-        if baseline is None or target is None or not baseline.output_reference or not target.output_reference:
+        if (
+            baseline is None
+            or target is None
+            or not baseline.output_reference
+            or not target.output_reference
+        ):
             raise LookupError("temporal delta inputs are unavailable in tenant")
         with self.store.tenant_transaction(tenant_id, platform_admin):
             self.repository.mark_job(tenant_id, job.id, ProcessingJobStatus.RUNNING)
         try:
-            output = TemporalDeltaProcessor(self.object_storage).process(baseline.output_reference, target.output_reference, f"tenants/{tenant_id}/derived/{job.id}/ndvi-delta.tif")
+            output = TemporalDeltaProcessor(self.object_storage).process(
+                baseline.output_reference,
+                target.output_reference,
+                f"tenants/{tenant_id}/derived/{job.id}/ndvi-delta.tif",
+            )
         except (RasterProcessingError, ObjectStorageError, OSError, ValueError) as exc:
             with self.store.tenant_transaction(tenant_id, platform_admin):
-                failed = self.repository.mark_job(tenant_id, job.id, ProcessingJobStatus.FAILED, type(exc).__name__)
+                failed = self.repository.mark_job(
+                    tenant_id, job.id, ProcessingJobStatus.FAILED, type(exc).__name__
+                )
             return NdviResult(failed, None, [])
         product = DerivedProduct(
-            id=new_id(), tenant_id=tenant_id, property_id=job.property_id, scene_id=baseline.scene_id, processing_job_id=job.id,
-            product_type="NDVI_DELTA", classification=DataClassification.DERIVED, statistics=output.statistics,
-            output_reference=output.output_reference, output_checksum=output.output_checksum,
-            algorithm_id=TemporalDeltaProcessor.algorithm_id, algorithm_version=TemporalDeltaProcessor.algorithm_version,
-            formula=TemporalDeltaProcessor.formula, input_asset_keys=[],
-            parameters={**job.parameters, "alignment": output.alignment, "quality_mask_policies": [baseline.parameters.get("quality_mask"), target.parameters.get("quality_mask")]},
-            limitations=["Delta is only the target NDVI minus baseline NDVI for pixels valid in both quality-masked products", "Delta does not identify a cause, diagnosis, gain, loss, or field condition"], quality=[],
+            id=new_id(),
+            tenant_id=tenant_id,
+            property_id=job.property_id,
+            scene_id=baseline.scene_id,
+            processing_job_id=job.id,
+            product_type="NDVI_DELTA",
+            classification=DataClassification.DERIVED,
+            statistics=output.statistics,
+            output_reference=output.output_reference,
+            output_checksum=output.output_checksum,
+            algorithm_id=TemporalDeltaProcessor.algorithm_id,
+            algorithm_version=TemporalDeltaProcessor.algorithm_version,
+            formula=TemporalDeltaProcessor.formula,
+            input_asset_keys=[],
+            parameters={
+                **job.parameters,
+                "alignment": output.alignment,
+                "quality_mask_policies": [
+                    baseline.parameters.get("quality_mask"),
+                    target.parameters.get("quality_mask"),
+                ],
+            },
+            limitations=[
+                "Delta is only the target NDVI minus baseline NDVI for pixels valid in both quality-masked products",
+                "Delta does not identify a cause, diagnosis, gain, loss, or field condition",
+            ],
+            quality=[],
         )
         with self.store.tenant_transaction(tenant_id, platform_admin):
             self.repository.create_derived_product(product)
-            self.repository.create_product_dependency(DerivedProductDependency(tenant_id, product.id, baseline.id, "BASELINE_NDVI"))
-            self.repository.create_product_dependency(DerivedProductDependency(tenant_id, product.id, target.id, "TARGET_NDVI"))
-            completed = self.repository.mark_job(tenant_id, job.id, ProcessingJobStatus.SUCCEEDED, output_product_id=product.id)
+            self.repository.create_product_dependency(
+                DerivedProductDependency(
+                    tenant_id, product.id, baseline.id, "BASELINE_NDVI"
+                )
+            )
+            self.repository.create_product_dependency(
+                DerivedProductDependency(
+                    tenant_id, product.id, target.id, "TARGET_NDVI"
+                )
+            )
+            completed = self.repository.mark_job(
+                tenant_id,
+                job.id,
+                ProcessingJobStatus.SUCCEEDED,
+                output_product_id=product.id,
+            )
             source = self._source(tenant_id)
-            evidence = Evidence(id=new_id(), tenant_id=tenant_id, evidence_type="DERIVED_PRODUCT", reference_id=product.id, classification=DataClassification.DERIVED, source_id=source.id, observed_at=None, transformation=f"{TemporalDeltaProcessor.algorithm_id} {TemporalDeltaProcessor.algorithm_version}: {TemporalDeltaProcessor.formula}", limitations=product.limitations)
+            evidence = Evidence(
+                id=new_id(),
+                tenant_id=tenant_id,
+                evidence_type="DERIVED_PRODUCT",
+                reference_id=product.id,
+                classification=DataClassification.DERIVED,
+                source_id=source.id,
+                observed_at=None,
+                transformation=f"{TemporalDeltaProcessor.algorithm_id} {TemporalDeltaProcessor.algorithm_version}: {TemporalDeltaProcessor.formula}",
+                limitations=product.limitations,
+            )
             self.repository.create_evidence(evidence)
-            self.store.audit(tenant_id, actor, "TEMPORAL_DELTA_JOB_COMPLETED", "derived_product", product.id, {"baseline_product_id": baseline.id, "target_product_id": target.id, "output_checksum": product.output_checksum}, new_id(), now_utc())
+            self.store.audit(
+                tenant_id,
+                actor,
+                "TEMPORAL_DELTA_JOB_COMPLETED",
+                "derived_product",
+                product.id,
+                {
+                    "baseline_product_id": baseline.id,
+                    "target_product_id": target.id,
+                    "output_checksum": product.output_checksum,
+                },
+                new_id(),
+                now_utc(),
+            )
         return NdviResult(completed, product, [evidence.id])
 
     def get_search(self, tenant_id: str, search_id: str) -> SatelliteSearch | None:
@@ -969,23 +1212,35 @@ class GeospatialApplication:
         legacy aggregate comparison remains explicitly non-pixel-comparable.
         """
         with self.store.tenant_transaction(tenant_id):
-            baseline = self.repository.get_derived_product(tenant_id, baseline_product_id)
+            baseline = self.repository.get_derived_product(
+                tenant_id, baseline_product_id
+            )
             target = self.repository.get_derived_product(tenant_id, target_product_id)
             if baseline is None or target is None:
                 raise LookupError("derived product not found in tenant")
             if baseline.property_id != property_id or target.property_id != property_id:
                 raise ValueError("both products must belong to the requested property")
-            if baseline.product_type not in {"NDVI", "NDVI_QUALITY_MASKED"} or target.product_type not in {"NDVI", "NDVI_QUALITY_MASKED"}:
+            if baseline.product_type not in {
+                "NDVI",
+                "NDVI_QUALITY_MASKED",
+            } or target.product_type not in {"NDVI", "NDVI_QUALITY_MASKED"}:
                 raise ValueError("temporal comparison supports NDVI products only")
-            baseline_job = self.repository.get_job(tenant_id, baseline.processing_job_id)
+            baseline_job = self.repository.get_job(
+                tenant_id, baseline.processing_job_id
+            )
             target_job = self.repository.get_job(tenant_id, target.processing_job_id)
 
         delta = None
         with self.store.tenant_transaction(tenant_id):
-            delta = self.repository.find_temporal_delta(tenant_id, baseline.id, target.id)
+            delta = self.repository.find_temporal_delta(
+                tenant_id, baseline.id, target.id
+            )
         if delta is not None and delta.output_reference:
             return {
-                "status": "READY", "baseline": baseline, "target": target, "delta": delta,
+                "status": "READY",
+                "baseline": baseline,
+                "target": target,
+                "delta": delta,
                 "delta_mean": delta.statistics.mean,
                 "comparable_valid_pixels": delta.statistics.valid_count,
                 "comparable_coverage_percentage": delta.statistics.coverage_percentage,
@@ -1003,9 +1258,8 @@ class GeospatialApplication:
                 "delta_mean": None,
                 "comparable_valid_pixels": None,
                 "comparable_coverage_percentage": None,
-                "limitations": limitations + [
-                    "Baseline and target must be different derived products"
-                ],
+                "limitations": limitations
+                + ["Baseline and target must be different derived products"],
             }
         baseline_mean = baseline.statistics.mean
         target_mean = target.statistics.mean
@@ -1029,7 +1283,8 @@ class GeospatialApplication:
                 "delta_mean": None,
                 "comparable_valid_pixels": None,
                 "comparable_coverage_percentage": None,
-                "limitations": limitations + [
+                "limitations": limitations
+                + [
                     "Both persisted NDVI products require successful processing and valid means"
                 ],
             }
@@ -1060,21 +1315,35 @@ class GeospatialApplication:
             scene_evidence = self.store.evidence_for_reference(
                 tenant_id, product.scene_id
             )
-            dependencies = self.repository.list_product_dependencies(tenant_id, product.id)
+            dependencies = self.repository.list_product_dependencies(
+                tenant_id, product.id
+            )
             upstreams = []
             for dependency in dependencies:
-                upstream = self.repository.get_derived_product(tenant_id, dependency.upstream_product_id)
+                upstream = self.repository.get_derived_product(
+                    tenant_id, dependency.upstream_product_id
+                )
                 if upstream is None:
                     continue
                 upstream_scene = self.repository.get_scene(tenant_id, upstream.scene_id)
-                upstream_assets = self.repository.list_assets(tenant_id, upstream.scene_id)
-                upstreams.append({
-                    "relationship": dependency.relationship,
-                    "product": upstream,
-                    "scene": upstream_scene,
-                    "assets": [asset for asset in upstream_assets if asset.asset_key in upstream.input_asset_keys],
-                    "evidence": self.store.evidence_for_reference(tenant_id, upstream.id),
-                })
+                upstream_assets = self.repository.list_assets(
+                    tenant_id, upstream.scene_id
+                )
+                upstreams.append(
+                    {
+                        "relationship": dependency.relationship,
+                        "product": upstream,
+                        "scene": upstream_scene,
+                        "assets": [
+                            asset
+                            for asset in upstream_assets
+                            if asset.asset_key in upstream.input_asset_keys
+                        ],
+                        "evidence": self.store.evidence_for_reference(
+                            tenant_id, upstream.id
+                        ),
+                    }
+                )
         return {
             "product": product,
             "processing_job": job,

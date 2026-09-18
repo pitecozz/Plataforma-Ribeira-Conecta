@@ -13,4 +13,6 @@ build/
 *.db
 .env
 .local/
+frontend/test-results/
+frontend/e2e-artifacts/
 .DS_Store

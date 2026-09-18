@@ -1518,13 +1518,31 @@ def create_app(
                     "comparable_coverage_percentage": comparison[
                         "comparable_coverage_percentage"
                     ],
-                    "classification": "PIXEL_ALIGNED_DELTA" if comparison.get("delta") else "DERIVED_AGGREGATE" if comparison["status"] == "READY" else "INCONCLUSIVE",
-                    "delta_product_id": comparison["delta"].id if comparison.get("delta") else None,
-                    "delta_minimum": comparison["delta"].statistics.minimum if comparison.get("delta") else None,
-                    "delta_maximum": comparison["delta"].statistics.maximum if comparison.get("delta") else None,
-                    "delta_median": comparison["delta"].statistics.median if comparison.get("delta") else None,
-                    "quality_mask_policy": comparison["delta"].parameters.get("quality_mask_policies") if comparison.get("delta") else None,
-                    "alignment_summary": comparison["delta"].parameters.get("alignment") if comparison.get("delta") else None,
+                    "classification": "PIXEL_ALIGNED_DELTA"
+                    if comparison.get("delta")
+                    else "DERIVED_AGGREGATE"
+                    if comparison["status"] == "READY"
+                    else "INCONCLUSIVE",
+                    "delta_product_id": comparison["delta"].id
+                    if comparison.get("delta")
+                    else None,
+                    "delta_minimum": comparison["delta"].statistics.minimum
+                    if comparison.get("delta")
+                    else None,
+                    "delta_maximum": comparison["delta"].statistics.maximum
+                    if comparison.get("delta")
+                    else None,
+                    "delta_median": comparison["delta"].statistics.median
+                    if comparison.get("delta")
+                    else None,
+                    "quality_mask_policy": comparison["delta"].parameters.get(
+                        "quality_mask_policies"
+                    )
+                    if comparison.get("delta")
+                    else None,
+                    "alignment_summary": comparison["delta"].parameters.get("alignment")
+                    if comparison.get("delta")
+                    else None,
                     "limitations": comparison["limitations"],
                 },
             }
@@ -1554,25 +1572,48 @@ def create_app(
 
     @app.post(
         "/v1/tenants/{tenant_id}/properties/{property_id}/quality-masked-ndvi-jobs",
-        status_code=202, tags=["geospatial"],
+        status_code=202,
+        tags=["geospatial"],
     )
     async def create_quality_masked_ndvi_job(
-        tenant_id: str, property_id: str, payload: ProductJobRequest,
+        tenant_id: str,
+        property_id: str,
+        payload: ProductJobRequest,
         ctx: AuthContext = Depends(context),
     ):
         authorize(ctx, "geospatial:process", tenant_id)
-        return to_jsonable(application.geospatial.create_quality_masked_ndvi_job(tenant_id, property_id, payload.product_id, ctx.subject, ctx.is_platform_admin))
+        return to_jsonable(
+            application.geospatial.create_quality_masked_ndvi_job(
+                tenant_id,
+                property_id,
+                payload.product_id,
+                ctx.subject,
+                ctx.is_platform_admin,
+            )
+        )
 
     @app.post(
         "/v1/tenants/{tenant_id}/properties/{property_id}/temporal-delta-jobs",
-        status_code=202, tags=["temporal"],
+        status_code=202,
+        tags=["temporal"],
     )
     async def create_temporal_delta_job(
-        tenant_id: str, property_id: str, payload: TemporalDeltaJobRequest,
+        tenant_id: str,
+        property_id: str,
+        payload: TemporalDeltaJobRequest,
         ctx: AuthContext = Depends(context),
     ):
         authorize(ctx, "geospatial:process", tenant_id)
-        return to_jsonable(application.geospatial.create_temporal_delta_job(tenant_id, property_id, payload.baseline_product_id, payload.target_product_id, ctx.subject, ctx.is_platform_admin))
+        return to_jsonable(
+            application.geospatial.create_temporal_delta_job(
+                tenant_id,
+                property_id,
+                payload.baseline_product_id,
+                payload.target_product_id,
+                ctx.subject,
+                ctx.is_platform_admin,
+            )
+        )
 
     @app.get(
         "/v1/tenants/{tenant_id}/processing-jobs/{job_id}",
@@ -1605,7 +1646,9 @@ def create_app(
         }.get(job.job_type)
         if runner is None:
             raise ValueError("unsupported processing job type")
-        return to_jsonable(runner(tenant_id, job_id, ctx.subject, ctx.is_platform_admin))
+        return to_jsonable(
+            runner(tenant_id, job_id, ctx.subject, ctx.is_platform_admin)
+        )
 
     @app.get(
         "/v1/tenants/{tenant_id}/derived-products/{product_id}/provenance",
@@ -1656,9 +1699,17 @@ def create_app(
                     {
                         "relationship": upstream["relationship"],
                         "product": safe_product(upstream["product"]),
-                        "scene": safe_scene(upstream["scene"]) if upstream["scene"] else None,
+                        "scene": safe_scene(upstream["scene"])
+                        if upstream["scene"]
+                        else None,
                         "assets": [
-                            {"id": asset.id, "asset_key": asset.asset_key, "checksum": asset.checksum_local or asset.checksum_provider or asset.checksum}
+                            {
+                                "id": asset.id,
+                                "asset_key": asset.asset_key,
+                                "checksum": asset.checksum_local
+                                or asset.checksum_provider
+                                or asset.checksum,
+                            }
                             for asset in upstream["assets"]
                         ],
                         "evidence": upstream["evidence"],
@@ -1697,7 +1748,9 @@ def create_app(
             path = application.geospatial.object_storage.read_local_path(
                 product.output_reference
             )
-            tile = render_ndvi_tile(path, z, x, y, delta=product.product_type == "NDVI_DELTA")
+            tile = render_ndvi_tile(
+                path, z, x, y, delta=product.product_type == "NDVI_DELTA"
+            )
         except InvalidTile:
             TILE_FAILURES.inc()
             raise

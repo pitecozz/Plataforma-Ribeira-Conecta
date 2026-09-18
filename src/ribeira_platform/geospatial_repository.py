@@ -731,8 +731,20 @@ class GeospatialRepository:
     ) -> DerivedProductDependency:
         self._insert(
             "derived_product_dependency",
-            ["tenant_id", "derived_product_id", "upstream_product_id", "relationship", "created_at"],
-            [item.tenant_id, item.derived_product_id, item.upstream_product_id, item.relationship, item.created_at],
+            [
+                "tenant_id",
+                "derived_product_id",
+                "upstream_product_id",
+                "relationship",
+                "created_at",
+            ],
+            [
+                item.tenant_id,
+                item.derived_product_id,
+                item.upstream_product_id,
+                item.relationship,
+                item.created_at,
+            ],
         )
         return item
 
@@ -746,8 +758,10 @@ class GeospatialRepository:
         ).fetchall()
         return [
             DerivedProductDependency(
-                str(row["tenant_id"]), str(row["derived_product_id"]),
-                str(row["upstream_product_id"]), row["relationship"],
+                str(row["tenant_id"]),
+                str(row["derived_product_id"]),
+                str(row["upstream_product_id"]),
+                row["relationship"],
                 self._timestamp(row["created_at"]) or "",
             )
             for row in rows
