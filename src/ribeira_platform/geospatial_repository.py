@@ -846,7 +846,7 @@ class GeospatialRepository:
         """Return abandoned RUNNING jobs to QUEUED or terminally fail exhausted jobs."""
         p = self.p
         rows = self._execute(
-            f"SELECT * FROM processing_job WHERE status={p} AND heartbeat_at IS NOT NULL AND heartbeat_at < {p}",  # nosec B608
+            f"SELECT * FROM processing_job WHERE status={p} AND (heartbeat_at IS NULL OR heartbeat_at < {p})",  # nosec B608
             [ProcessingJobStatus.RUNNING.value, stale_before],
         ).fetchall()
         recovered = 0
@@ -861,21 +861,20 @@ class GeospatialRepository:
             reason = (
                 "worker heartbeat expired; job was recovered without producing a result"
             )
+            schedule_update = (
+                f"next_attempt_at={p},finished_at=NULL"
+                if target == ProcessingJobStatus.QUEUED
+                else f"next_attempt_at=NULL,finished_at={p}"
+            )
             result = self._execute(
                 f"""UPDATE processing_job SET status={p},failure_code={p},failure_reason={p},
-                    next_attempt_at=CASE WHEN {p}={p} THEN {p} ELSE NULL END,
-                    finished_at=CASE WHEN {p}={p} THEN {p} ELSE NULL END,
+                    {schedule_update},
                     claimed_by=NULL,claimed_at=NULL,heartbeat_at=NULL
-                    WHERE id={p} AND status={p} AND heartbeat_at < {p}""",  # nosec B608
+                    WHERE id={p} AND status={p} AND (heartbeat_at IS NULL OR heartbeat_at < {p})""",  # nosec B608
                 [
                     target.value,
                     code,
                     reason,
-                    target.value,
-                    ProcessingJobStatus.QUEUED.value,
-                    now_utc(),
-                    target.value,
-                    ProcessingJobStatus.FAILED.value,
                     now_utc(),
                     old.id,
                     ProcessingJobStatus.RUNNING.value,

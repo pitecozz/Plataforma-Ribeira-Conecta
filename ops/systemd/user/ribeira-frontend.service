@@ -1,0 +1,24 @@
+[Unit]
+Description=Ribeira static Farm 360 frontend (private loopback runtime)
+After=network-online.target ribeira-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ribeira/Plataforma-Ribeira-Conecta
+Environment=PYTHONPATH=/home/ribeira/Plataforma-Ribeira-Conecta/src
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ribeira/Plataforma-Ribeira-Conecta/.venv/bin/python -m ribeira_platform.static_server --root /home/ribeira/Plataforma-Ribeira-Conecta/frontend/dist --host 127.0.0.1 --port 5173
+ExecStartPost=/home/ribeira/Plataforma-Ribeira-Conecta/.venv/bin/python -m ribeira_platform.runtime_health frontend --wait-seconds 30
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ribeira-frontend
+
+[Install]
+WantedBy=default.target

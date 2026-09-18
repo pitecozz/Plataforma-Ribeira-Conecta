@@ -1,0 +1,27 @@
+[Unit]
+Description=Ribeira private geospatial worker
+After=network-online.target ribeira-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ribeira/Plataforma-Ribeira-Conecta
+EnvironmentFile=/home/ribeira/.config/ribeira/runtime.env
+EnvironmentFile=/home/ribeira/.config/ribeira/cdse.env
+Environment=PYTHONPATH=/home/ribeira/Plataforma-Ribeira-Conecta/src
+Environment=PYTHONUNBUFFERED=1
+Environment=RIBEIRA_GEOSPATIAL_METRICS_PORT=9109
+ExecStart=/home/ribeira/Plataforma-Ribeira-Conecta/.venv/bin/python -m ribeira_platform.geospatial_worker
+ExecStartPost=/home/ribeira/Plataforma-Ribeira-Conecta/.venv/bin/python -m ribeira_platform.runtime_health worker --wait-seconds 30
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=180
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ribeira-geospatial-worker
+
+[Install]
+WantedBy=default.target

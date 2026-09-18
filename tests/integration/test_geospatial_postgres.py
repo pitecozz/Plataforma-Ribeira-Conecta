@@ -28,6 +28,7 @@ from ribeira_platform.object_storage import LocalObjectStorage
 from ribeira_platform.postgres import PostgresStore
 from ribeira_platform.raster_processing import validate_cog
 from ribeira_platform.service import RibeiraApplication
+from tests.integration.tenant_cleanup import delete_test_tenants
 
 
 DATABASE_URL = os.getenv("RIBEIRA_TEST_DATABASE_URL")
@@ -115,13 +116,22 @@ class GeospatialPostgresTests(unittest.TestCase):
         self.store = PostgresStore(DATABASE_URL)  # type: ignore[arg-type]
         self.application = RibeiraApplication(self.store)
         self.repo = self.application.geospatial.repository
+        self._test_tenant_ids: list[str] = []
+
+    def create_test_tenant(self, name: str, application: RibeiraApplication | None = None):
+        tenant = (application or self.application).create_tenant(name)
+        self._test_tenant_ids.append(tenant.id)
+        return tenant
 
     def tearDown(self) -> None:
-        self.store.close()
+        try:
+            delete_test_tenants(self._test_tenant_ids)
+        finally:
+            self.store.close()
 
     def test_postgis_scene_and_rls_block_cross_tenant_access(self) -> None:
-        tenant_a = self.application.create_tenant("Geo A")
-        tenant_b = self.application.create_tenant("Geo B")
+        tenant_a = self.create_test_tenant("Geo A")
+        tenant_b = self.create_test_tenant("Geo B")
         polygon = {
             "type": "Polygon",
             "coordinates": [
@@ -211,8 +221,8 @@ class GeospatialPostgresTests(unittest.TestCase):
         self,
     ) -> None:
         """Uses PostgreSQL/RLS; fixture identifiers do not represent client data."""
-        tenant_a = self.application.create_tenant("Async queue A")
-        tenant_b = self.application.create_tenant("Async queue B")
+        tenant_a = self.create_test_tenant("Async queue A")
+        tenant_b = self.create_test_tenant("Async queue B")
         polygon = {
             "type": "Polygon",
             "coordinates": [
@@ -402,8 +412,8 @@ class GeospatialPostgresTests(unittest.TestCase):
             application.geospatial = GeospatialApplication(
                 self.store, provider, storage, asset_adapter=adapter
             )
-            tenant_a = application.create_tenant("Synthetic geospatial tenant")
-            tenant_b = application.create_tenant("Other geospatial tenant")
+            tenant_a = self.create_test_tenant("Synthetic geospatial tenant", application)
+            tenant_b = self.create_test_tenant("Other geospatial tenant", application)
             property_a = application.create_property(
                 tenant_a.id, "Synthetic AOI", polygon, "EPSG:4326"
             )

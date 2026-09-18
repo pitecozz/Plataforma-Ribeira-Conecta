@@ -6,8 +6,8 @@ import argparse
 import logging
 import os
 import socket
+import signal
 import threading
-import time
 from datetime import UTC, datetime, timedelta
 from time import perf_counter
 
@@ -16,6 +16,7 @@ from prometheus_client import Counter, Gauge, Histogram, start_http_server
 from .api import Settings, _build_store
 from .geospatial import ProcessingJob, ProcessingJobStatus
 from .geospatial_repository import GeospatialRepository
+from .logging_config import configure_structured_logging
 from .postgres import PostgresStore
 from .service import RibeiraApplication
 
@@ -202,6 +203,7 @@ def main() -> None:
     ):
         raise ValueError("invalid worker poll, stale timeout, or metrics port")
     settings = Settings.from_env()
+    configure_structured_logging()
     application = RibeiraApplication(_build_store(settings))
     worker = GeospatialJobWorker(
         application,
@@ -213,13 +215,24 @@ def main() -> None:
     if args.metrics_port:
         start_http_server(args.metrics_port, addr="127.0.0.1")
         LOGGER.info("geospatial worker metrics listening on loopback")
+    stop_requested = threading.Event()
+
+    def request_stop(signum: int, _: object) -> None:
+        LOGGER.info(
+            "geospatial worker graceful shutdown requested",
+            extra={"status": signal.Signals(signum).name},
+        )
+        stop_requested.set()
+
+    signal.signal(signal.SIGTERM, request_stop)
+    signal.signal(signal.SIGINT, request_stop)
     try:
-        while True:
+        while not stop_requested.is_set():
             job = worker.process_one()
             if args.once:
                 return
             if job is None:
-                time.sleep(args.poll_seconds)
+                stop_requested.wait(args.poll_seconds)
     finally:
         application.store.close()
 

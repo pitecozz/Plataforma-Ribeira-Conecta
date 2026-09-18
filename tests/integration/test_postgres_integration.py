@@ -23,6 +23,7 @@ from ribeira_platform.models import RuleDefinition, new_id
 from ribeira_platform.postgres import PostgresStore
 from ribeira_platform.service import RibeiraApplication
 from ribeira_platform.sources import SyntheticFixtureAdapter
+from tests.integration.tenant_cleanup import delete_test_tenants
 
 
 DATABASE_URL = os.getenv("RIBEIRA_TEST_DATABASE_URL")
@@ -36,12 +37,21 @@ class PostgresIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.store = PostgresStore(DATABASE_URL)  # type: ignore[arg-type]
         self.application = RibeiraApplication(self.store)
+        self._test_tenant_ids: list[str] = []
+
+    def create_test_tenant(self, name: str):
+        tenant = self.application.create_tenant(name)
+        self._test_tenant_ids.append(tenant.id)
+        return tenant
 
     def tearDown(self) -> None:
-        self.store.close()
+        try:
+            delete_test_tenants(self._test_tenant_ids)
+        finally:
+            self.store.close()
 
     def test_postgis_round_trip_and_evidence_first_slice(self) -> None:
-        tenant = self.application.create_tenant("PG integration tenant")
+        tenant = self.create_test_tenant("PG integration tenant")
         with request_context("req-pg", "corr-pg"):
             property = self.application.create_property(
                 tenant.id,
@@ -107,8 +117,8 @@ class PostgresIntegrationTests(unittest.TestCase):
             self.assertEqual(audit["correlation_id"], "corr-pg")
 
     def test_rls_denies_cross_tenant_read_write_and_references(self) -> None:
-        tenant_a = self.application.create_tenant("Tenant A PG")
-        tenant_b = self.application.create_tenant("Tenant B PG")
+        tenant_a = self.create_test_tenant("Tenant A PG")
+        tenant_b = self.create_test_tenant("Tenant B PG")
         property_a = self.application.create_property(tenant_a.id, "Property A")
         source_a = self.application.create_source(
             tenant_a.id, "Source A", "TEST", "fixture"
@@ -197,8 +207,8 @@ class PostgresIntegrationTests(unittest.TestCase):
     def test_business_domain_is_persisted_and_rls_blocks_cross_tenant_references(
         self,
     ) -> None:
-        tenant_a = self.application.create_tenant("Business Tenant A")
-        tenant_b = self.application.create_tenant("Business Tenant B")
+        tenant_a = self.create_test_tenant("Business Tenant A")
+        tenant_b = self.create_test_tenant("Business Tenant B")
         property_a = self.application.create_property(
             tenant_a.id, "Business Property A"
         )

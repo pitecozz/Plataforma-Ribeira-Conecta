@@ -49,6 +49,7 @@ from .iam import (
     JwtIdentityProvider,
     AuthorizationPolicy,
 )
+from .logging_config import configure_structured_logging
 from .models import Property, RuleDefinition, new_id, now_utc, to_jsonable
 from .object_storage import ObjectStorageError
 from .postgres import PostgresStore
@@ -1818,10 +1819,12 @@ def create_app(
 def main() -> None:
     import uvicorn
 
+    configure_structured_logging()
     uvicorn.run(
         create_app(),
         host=os.getenv("RIBEIRA_API_HOST", "127.0.0.1"),
         port=int(os.getenv("RIBEIRA_API_PORT", "8080")),
+        log_config=None,
     )
 
 

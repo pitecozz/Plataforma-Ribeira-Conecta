@@ -20,7 +20,7 @@ test-unit:
 	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests -v
 
 test-integration:
-	@RIBEIRA_TEST_DATABASE_URL=$(DATABASE_URL) PYTHONPATH=src $(PYTHON) -m unittest discover -s tests/integration -v
+	@RIBEIRA_TEST_DATABASE_URL=$(DATABASE_URL) RIBEIRA_TEST_MIGRATION_DATABASE_URL=$(MIGRATION_DATABASE_URL) PYTHONPATH=src $(PYTHON) -m unittest discover -s tests/integration -v
 
 test: test-unit test-integration
 
