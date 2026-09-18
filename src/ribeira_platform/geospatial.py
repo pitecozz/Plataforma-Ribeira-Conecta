@@ -24,10 +24,11 @@ class DownloadPolicy(StrEnum):
 
 
 class ProcessingJobStatus(StrEnum):
-    PENDING = "PENDING"
+    QUEUED = "QUEUED"
     RUNNING = "RUNNING"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
     CANCELLED = "CANCELLED"
 
 
@@ -213,6 +214,33 @@ class ProcessingJob:
     created_at: str = field(default_factory=now_utc)
     started_at: str | None = None
     finished_at: str | None = None
+    failure_code: str | None = None
+    attempt: int = 0
+    max_attempts: int = 3
+    next_attempt_at: str | None = None
+    heartbeat_at: str | None = None
+    claimed_by: str | None = None
+    claimed_at: str | None = None
+    requested_by: str | None = None
+    request_id: str | None = None
+    correlation_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ProcessingJobTransition:
+    id: str
+    tenant_id: str
+    job_id: str
+    from_status: ProcessingJobStatus | None
+    to_status: ProcessingJobStatus
+    attempt: int
+    actor: str
+    worker_id: str | None
+    failure_code: str | None
+    failure_reason: str | None
+    request_id: str | None
+    correlation_id: str | None
+    created_at: str = field(default_factory=now_utc)
 
 
 @dataclass(frozen=True)

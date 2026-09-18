@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
+from .audit_context import current_context
 from .epistemology import DataClassification
 from .geospatial import (
     BandResolver,
@@ -57,6 +58,11 @@ class GeospatialApplication:
     """Application service for the auditable CDSE discovery and NDVI slice."""
 
     provider_id = "COPERNICUS_CDSE"
+
+    @staticmethod
+    def _max_job_attempts() -> int:
+        value = int(os.getenv("RIBEIRA_GEOSPATIAL_JOB_MAX_ATTEMPTS", "3"))
+        return min(max(value, 1), 10)
 
     def __init__(
         self,
@@ -558,6 +564,7 @@ class GeospatialApplication:
             NdviProcessor.algorithm_version,
             parameters,
         )
+        request_id, correlation_id = current_context()
         job = ProcessingJob(
             id=new_id(),
             tenant_id=tenant_id,
@@ -567,11 +574,15 @@ class GeospatialApplication:
             algorithm_id=NdviProcessor.algorithm_id,
             algorithm_version=NdviProcessor.algorithm_version,
             parameters=parameters,
-            status=ProcessingJobStatus.PENDING,
+            status=ProcessingJobStatus.QUEUED,
             idempotency_key=key,
+            max_attempts=self._max_job_attempts(),
+            requested_by=actor,
+            request_id=request_id,
+            correlation_id=correlation_id,
         )
         with self.store.tenant_transaction(tenant_id, platform_admin):
-            persisted = self.repository.create_job(job)
+            persisted = self.repository.create_job(job, actor)
             self.store.audit(
                 tenant_id,
                 actor,
@@ -594,6 +605,7 @@ class GeospatialApplication:
         job_id: str,
         actor: str = "system",
         platform_admin: bool = False,
+        worker_id: str | None = None,
     ) -> NdviResult:
         with self.store.tenant_transaction(tenant_id, platform_admin):
             job = self.repository.get_job(tenant_id, job_id)
@@ -615,7 +627,13 @@ class GeospatialApplication:
 
         aoi, _, _ = GeometryService.to_wgs84(property_item)
         with self.store.tenant_transaction(tenant_id, platform_admin):
-            self.repository.mark_job(tenant_id, job.id, ProcessingJobStatus.RUNNING)
+            self.repository.mark_job(
+                tenant_id,
+                job.id,
+                ProcessingJobStatus.RUNNING,
+                actor=actor,
+                worker_id=worker_id,
+            )
         try:
             processing_assets, access_records = self._prepare_processing_assets(
                 tenant_id, job.id, assets, actor, platform_admin
@@ -637,8 +655,13 @@ class GeospatialApplication:
                 failed = self.repository.mark_job(
                     tenant_id,
                     job.id,
-                    ProcessingJobStatus.FAILED,
-                    exc.status.value,
+                    ProcessingJobStatus.BLOCKED
+                    if exc.status == AssetAccessStatus.BLOCKED_BY_CREDENTIAL
+                    else ProcessingJobStatus.FAILED,
+                    failure_reason=exc.status.value,
+                    failure_code=exc.code,
+                    actor=actor,
+                    worker_id=worker_id,
                 )
                 self.store.create_quality_event(
                     tenant_id,
@@ -667,14 +690,20 @@ class GeospatialApplication:
         except RasterProcessingError as exc:
             with self.store.tenant_transaction(tenant_id, platform_admin):
                 failed = self.repository.mark_job(
-                    tenant_id, job.id, ProcessingJobStatus.FAILED, str(exc)
+                    tenant_id,
+                    job.id,
+                    ProcessingJobStatus.FAILED,
+                    failure_reason=type(exc).__name__,
+                    failure_code=type(exc).__name__,
+                    actor=actor,
+                    worker_id=worker_id,
                 )
                 self.store.create_quality_event(
                     tenant_id,
                     job.property_id,
                     None,
                     exc.quality.value,
-                    {"job_id": job.id, "message": str(exc)},
+                    {"job_id": job.id, "error_type": type(exc).__name__},
                     new_id(),
                     now_utc(),
                 )
@@ -684,7 +713,7 @@ class GeospatialApplication:
                     "NDVI_JOB_FAILED",
                     "processing_job",
                     job.id,
-                    {"quality": exc.quality.value, "message": str(exc)},
+                    {"quality": exc.quality.value, "error_type": type(exc).__name__},
                     new_id(),
                     now_utc(),
                 )
@@ -692,14 +721,20 @@ class GeospatialApplication:
         except RuntimeError as exc:
             with self.store.tenant_transaction(tenant_id, platform_admin):
                 failed = self.repository.mark_job(
-                    tenant_id, job.id, ProcessingJobStatus.FAILED, str(exc)
+                    tenant_id,
+                    job.id,
+                    ProcessingJobStatus.FAILED,
+                    failure_reason=type(exc).__name__,
+                    failure_code=type(exc).__name__,
+                    actor=actor,
+                    worker_id=worker_id,
                 )
                 self.store.create_quality_event(
                     tenant_id,
                     job.property_id,
                     None,
                     GeospatialQuality.ASSET_UNAVAILABLE.value,
-                    {"job_id": job.id, "message": str(exc)},
+                    {"job_id": job.id, "error_type": type(exc).__name__},
                     new_id(),
                     now_utc(),
                 )
@@ -742,6 +777,8 @@ class GeospatialApplication:
                 job.id,
                 ProcessingJobStatus.SUCCEEDED,
                 output_product_id=product.id,
+                actor=actor,
+                worker_id=worker_id,
             )
             source = self._source(tenant_id)
             evidence = Evidence(
@@ -802,6 +839,7 @@ class GeospatialApplication:
                 {"type": "quality-masked-ndvi", "source_product_id": source_product.id}
             ),
         }
+        request_id, correlation_id = current_context()
         job = ProcessingJob(
             id=new_id(),
             tenant_id=tenant_id,
@@ -811,7 +849,7 @@ class GeospatialApplication:
             algorithm_id="NDVI_QUALITY_MASKED",
             algorithm_version="1.0.3",
             parameters=params,
-            status=ProcessingJobStatus.PENDING,
+            status=ProcessingJobStatus.QUEUED,
             idempotency_key=processing_idempotency_key(
                 source_product.scene_id,
                 property_id,
@@ -819,9 +857,13 @@ class GeospatialApplication:
                 "1.0.3",
                 params,
             ),
+            max_attempts=self._max_job_attempts(),
+            requested_by=actor,
+            request_id=request_id,
+            correlation_id=correlation_id,
         )
         with self.store.tenant_transaction(tenant_id, platform_admin):
-            persisted = self.repository.create_job(job)
+            persisted = self.repository.create_job(job, actor)
             self.store.audit(
                 tenant_id,
                 actor,
@@ -840,6 +882,7 @@ class GeospatialApplication:
         job_id: str,
         actor: str = "system",
         platform_admin: bool = False,
+        worker_id: str | None = None,
     ) -> NdviResult:
         with self.store.tenant_transaction(tenant_id, platform_admin):
             job = self.repository.get_job(tenant_id, job_id)
@@ -866,7 +909,13 @@ class GeospatialApplication:
 
         aoi, _, _ = GeometryService.to_wgs84(property_item)
         with self.store.tenant_transaction(tenant_id, platform_admin):
-            self.repository.mark_job(tenant_id, job.id, ProcessingJobStatus.RUNNING)
+            self.repository.mark_job(
+                tenant_id,
+                job.id,
+                ProcessingJobStatus.RUNNING,
+                actor=actor,
+                worker_id=worker_id,
+            )
         try:
             prepared, access_records = self._prepare_processing_assets(
                 tenant_id,
@@ -892,7 +941,16 @@ class GeospatialApplication:
             with self.store.tenant_transaction(tenant_id, platform_admin):
                 failure = getattr(exc, "code", type(exc).__name__)
                 failed = self.repository.mark_job(
-                    tenant_id, job.id, ProcessingJobStatus.FAILED, failure
+                    tenant_id,
+                    job.id,
+                    ProcessingJobStatus.BLOCKED
+                    if isinstance(exc, AssetAccessFailure)
+                    and exc.status == AssetAccessStatus.BLOCKED_BY_CREDENTIAL
+                    else ProcessingJobStatus.FAILED,
+                    failure_reason=type(exc).__name__,
+                    failure_code=failure,
+                    actor=actor,
+                    worker_id=worker_id,
                 )
                 self.store.audit(
                     tenant_id,
@@ -955,6 +1013,8 @@ class GeospatialApplication:
                 job.id,
                 ProcessingJobStatus.SUCCEEDED,
                 output_product_id=product.id,
+                actor=actor,
+                worker_id=worker_id,
             )
             source = self._source(tenant_id)
             evidence = Evidence(
@@ -1019,6 +1079,7 @@ class GeospatialApplication:
             "target_grid": "baseline",
             "alignment_resampling": "bilinear",
         }
+        request_id, correlation_id = current_context()
         job = ProcessingJob(
             id=new_id(),
             tenant_id=tenant_id,
@@ -1028,7 +1089,7 @@ class GeospatialApplication:
             algorithm_id=TemporalDeltaProcessor.algorithm_id,
             algorithm_version=TemporalDeltaProcessor.algorithm_version,
             parameters=params,
-            status=ProcessingJobStatus.PENDING,
+            status=ProcessingJobStatus.QUEUED,
             idempotency_key=processing_idempotency_key(
                 baseline.scene_id,
                 property_id,
@@ -1036,9 +1097,13 @@ class GeospatialApplication:
                 TemporalDeltaProcessor.algorithm_version,
                 params,
             ),
+            max_attempts=self._max_job_attempts(),
+            requested_by=actor,
+            request_id=request_id,
+            correlation_id=correlation_id,
         )
         with self.store.tenant_transaction(tenant_id, platform_admin):
-            persisted = self.repository.create_job(job)
+            persisted = self.repository.create_job(job, actor)
             self.store.audit(
                 tenant_id,
                 actor,
@@ -1057,6 +1122,7 @@ class GeospatialApplication:
         job_id: str,
         actor: str = "system",
         platform_admin: bool = False,
+        worker_id: str | None = None,
     ) -> NdviResult:
         with self.store.tenant_transaction(tenant_id, platform_admin):
             job = self.repository.get_job(tenant_id, job_id)
@@ -1081,7 +1147,13 @@ class GeospatialApplication:
         ):
             raise LookupError("temporal delta inputs are unavailable in tenant")
         with self.store.tenant_transaction(tenant_id, platform_admin):
-            self.repository.mark_job(tenant_id, job.id, ProcessingJobStatus.RUNNING)
+            self.repository.mark_job(
+                tenant_id,
+                job.id,
+                ProcessingJobStatus.RUNNING,
+                actor=actor,
+                worker_id=worker_id,
+            )
         try:
             output = TemporalDeltaProcessor(self.object_storage).process(
                 baseline.output_reference,
@@ -1091,7 +1163,13 @@ class GeospatialApplication:
         except (RasterProcessingError, ObjectStorageError, OSError, ValueError) as exc:
             with self.store.tenant_transaction(tenant_id, platform_admin):
                 failed = self.repository.mark_job(
-                    tenant_id, job.id, ProcessingJobStatus.FAILED, type(exc).__name__
+                    tenant_id,
+                    job.id,
+                    ProcessingJobStatus.FAILED,
+                    failure_reason=type(exc).__name__,
+                    failure_code=type(exc).__name__,
+                    actor=actor,
+                    worker_id=worker_id,
                 )
             return NdviResult(failed, None, [])
         product = DerivedProduct(
@@ -1140,6 +1218,8 @@ class GeospatialApplication:
                 job.id,
                 ProcessingJobStatus.SUCCEEDED,
                 output_product_id=product.id,
+                actor=actor,
+                worker_id=worker_id,
             )
             source = self._source(tenant_id)
             evidence = Evidence(

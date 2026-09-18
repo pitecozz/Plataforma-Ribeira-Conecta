@@ -31,6 +31,10 @@ class PostgresStore:
     """
 
     def __init__(self, dsn: str) -> None:
+        # Kept only by the private process so it can open a separate
+        # short-lived connection for worker heartbeats. It is never exposed
+        # through an API response or log record.
+        self.dsn = dsn
         self.connection = psycopg.connect(dsn, row_factory=dict_row)
         self._transaction_depth = 0
 

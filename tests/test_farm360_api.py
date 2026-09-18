@@ -195,6 +195,46 @@ class Farm360ApiTests(unittest.TestCase):
         )
         self.assertEqual(denied.status_code, 403)
 
+    def test_ndvi_enqueue_is_202_and_never_runs_in_the_http_request(self) -> None:
+        polygon = mapping(
+            Polygon([(0.1, 0.1), (0.2, 0.1), (0.2, 0.2), (0.1, 0.2), (0.1, 0.1)])
+        )
+        queued_property = self.application.create_property(
+            self.tenant.id, "TEST_AOI_ONLY_ASYNC", polygon, "EPSG:4326"
+        )
+        search = self.application.geospatial.search_satellite(
+            self.tenant.id,
+            SatelliteSearchRequest(
+                queued_property.id,
+                "sentinel-2-l2a",
+                "2025-01-01T00:00:00Z",
+                "2025-02-01T00:00:00Z",
+            ),
+        )
+        headers = {"Authorization": "Bearer admin"}
+        response = self.client.post(
+            f"/v1/tenants/{self.tenant.id}/properties/{queued_property.id}/ndvi-jobs",
+            headers=headers,
+            json={"search_id": search.search.id},
+        )
+        self.assertEqual(response.status_code, 202)
+        body = response.json()
+        self.assertEqual(body["status"], "QUEUED")
+        self.assertEqual(body["attempt"], 0)
+        self.assertIsNone(body["output_product_id"])
+        fetched = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/processing-jobs/{body['id']}",
+            headers=headers,
+        )
+        self.assertEqual(fetched.status_code, 200)
+        self.assertEqual(fetched.json()["status"], "QUEUED")
+        compatibility = self.client.post(
+            f"/v1/tenants/{self.tenant.id}/processing-jobs/{body['id']}/run",
+            headers=headers,
+        )
+        self.assertEqual(compatibility.status_code, 202)
+        self.assertEqual(compatibility.json()["status"], "QUEUED")
+
     def test_tile_is_png_and_invalid_or_unknown_resources_are_not_served(self) -> None:
         headers = {"Authorization": "Bearer admin"}
         tile = self.client.get(

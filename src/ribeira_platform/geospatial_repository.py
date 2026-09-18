@@ -4,6 +4,7 @@ import json
 from decimal import Decimal
 from typing import Any, Iterable
 
+from .audit_context import current_context
 from .epistemology import DataClassification
 from .geospatial import (
     DerivedProduct,
@@ -14,13 +15,14 @@ from .geospatial import (
     NdviStatistics,
     ProcessingJob,
     ProcessingJobStatus,
+    ProcessingJobTransition,
     SatelliteAsset,
     SatelliteCollection,
     SatelliteScene,
     SatelliteSearch,
     SatelliteSearchCandidate,
 )
-from .models import Evidence, now_utc
+from .models import Evidence, new_id, now_utc
 
 
 SQLITE_GEOSPATIAL_SCHEMA = """
@@ -67,8 +69,15 @@ CREATE TABLE IF NOT EXISTS processing_job (
   id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, property_id TEXT NOT NULL, scene_id TEXT NOT NULL,
   job_type TEXT NOT NULL, algorithm_id TEXT NOT NULL, algorithm_version TEXT NOT NULL,
   parameters TEXT NOT NULL, status TEXT NOT NULL, idempotency_key TEXT NOT NULL,
-  output_product_id TEXT, failure_reason TEXT, created_at TEXT NOT NULL, started_at TEXT,
-  finished_at TEXT, UNIQUE(tenant_id, idempotency_key)
+  output_product_id TEXT, failure_code TEXT, failure_reason TEXT, created_at TEXT NOT NULL, started_at TEXT,
+  finished_at TEXT, attempt INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
+  next_attempt_at TEXT, heartbeat_at TEXT, claimed_by TEXT, claimed_at TEXT, requested_by TEXT,
+  request_id TEXT, correlation_id TEXT, UNIQUE(tenant_id, idempotency_key)
+);
+CREATE TABLE IF NOT EXISTS processing_job_transition (
+  id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, job_id TEXT NOT NULL, from_status TEXT,
+  to_status TEXT NOT NULL, attempt INTEGER NOT NULL, actor TEXT NOT NULL, worker_id TEXT,
+  failure_code TEXT, failure_reason TEXT, request_id TEXT, correlation_id TEXT, created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS derived_product (
   id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, property_id TEXT NOT NULL, scene_id TEXT NOT NULL,
@@ -561,7 +570,7 @@ class GeospatialRepository:
     def create_evidence(self, evidence: Evidence) -> Evidence:
         return self.store.create_evidence(evidence)
 
-    def create_job(self, item: ProcessingJob) -> ProcessingJob:
+    def create_job(self, item: ProcessingJob, actor: str = "system") -> ProcessingJob:
         p = self.p
         existing = self._one(
             f"SELECT * FROM processing_job WHERE tenant_id={p} AND idempotency_key={p}",  # nosec B608
@@ -583,10 +592,20 @@ class GeospatialRepository:
                 "status",
                 "idempotency_key",
                 "output_product_id",
+                "failure_code",
                 "failure_reason",
                 "created_at",
                 "started_at",
                 "finished_at",
+                "attempt",
+                "max_attempts",
+                "next_attempt_at",
+                "heartbeat_at",
+                "claimed_by",
+                "claimed_at",
+                "requested_by",
+                "request_id",
+                "correlation_id",
             ],
             [
                 item.id,
@@ -600,12 +619,23 @@ class GeospatialRepository:
                 item.status.value,
                 item.idempotency_key,
                 item.output_product_id,
+                item.failure_code,
                 item.failure_reason,
                 item.created_at,
                 item.started_at,
                 item.finished_at,
+                item.attempt,
+                item.max_attempts,
+                item.next_attempt_at,
+                item.heartbeat_at,
+                item.claimed_by,
+                item.claimed_at,
+                item.requested_by,
+                item.request_id,
+                item.correlation_id,
             ],
         )
+        self._record_transition(item, None, item.status, actor, None)
         return item
 
     def _job(self, row: Any) -> ProcessingJob:
@@ -625,6 +655,20 @@ class GeospatialRepository:
             self._timestamp(row["created_at"]) or "",
             self._timestamp(row["started_at"]),
             self._timestamp(row["finished_at"]),
+            row["failure_code"] if "failure_code" in row.keys() else None,
+            int(row["attempt"]) if "attempt" in row.keys() else 0,
+            int(row["max_attempts"]) if "max_attempts" in row.keys() else 3,
+            self._timestamp(row["next_attempt_at"])
+            if "next_attempt_at" in row.keys()
+            else None,
+            self._timestamp(row["heartbeat_at"])
+            if "heartbeat_at" in row.keys()
+            else None,
+            row["claimed_by"] if "claimed_by" in row.keys() else None,
+            self._timestamp(row["claimed_at"]) if "claimed_at" in row.keys() else None,
+            row["requested_by"] if "requested_by" in row.keys() else None,
+            row["request_id"] if "request_id" in row.keys() else None,
+            row["correlation_id"] if "correlation_id" in row.keys() else None,
         )
 
     def get_job(self, tenant_id: str, job_id: str) -> ProcessingJob | None:
@@ -635,6 +679,255 @@ class GeospatialRepository:
         )
         return self._job(row) if row else None
 
+    def _record_transition(
+        self,
+        job: ProcessingJob,
+        from_status: ProcessingJobStatus | None,
+        to_status: ProcessingJobStatus,
+        actor: str,
+        worker_id: str | None,
+    ) -> None:
+        request_id, correlation_id = current_context()
+        item = ProcessingJobTransition(
+            new_id(),
+            job.tenant_id,
+            job.id,
+            from_status,
+            to_status,
+            job.attempt,
+            actor,
+            worker_id,
+            job.failure_code,
+            job.failure_reason,
+            request_id or job.request_id,
+            correlation_id or job.correlation_id,
+        )
+        self._insert(
+            "processing_job_transition",
+            [
+                "id",
+                "tenant_id",
+                "job_id",
+                "from_status",
+                "to_status",
+                "attempt",
+                "actor",
+                "worker_id",
+                "failure_code",
+                "failure_reason",
+                "request_id",
+                "correlation_id",
+                "created_at",
+            ],
+            [
+                item.id,
+                item.tenant_id,
+                item.job_id,
+                item.from_status.value if item.from_status else None,
+                item.to_status.value,
+                item.attempt,
+                item.actor,
+                item.worker_id,
+                item.failure_code,
+                item.failure_reason,
+                item.request_id,
+                item.correlation_id,
+                item.created_at,
+            ],
+        )
+
+    def list_job_transitions(
+        self, tenant_id: str, job_id: str
+    ) -> list[ProcessingJobTransition]:
+        p = self.p
+        rows = self._execute(
+            f"SELECT * FROM processing_job_transition WHERE tenant_id={p} AND job_id={p} ORDER BY created_at, id",  # nosec B608
+            [tenant_id, job_id],
+        ).fetchall()
+        return [
+            ProcessingJobTransition(
+                str(row["id"]),
+                str(row["tenant_id"]),
+                str(row["job_id"]),
+                ProcessingJobStatus(row["from_status"]) if row["from_status"] else None,
+                ProcessingJobStatus(row["to_status"]),
+                int(row["attempt"]),
+                row["actor"],
+                row["worker_id"],
+                row["failure_code"],
+                row["failure_reason"],
+                row["request_id"],
+                row["correlation_id"],
+                self._timestamp(row["created_at"]) or "",
+            )
+            for row in rows
+        ]
+
+    def claim_next_job(self, worker_id: str) -> ProcessingJob | None:
+        """Atomically move one eligible job to RUNNING; callers hold no long DB transaction."""
+        p = self.p
+        now = now_utc()
+        if self.postgres:
+            row = self._one(
+                f"""WITH candidate AS (
+                    SELECT id FROM processing_job
+                    WHERE status={p} AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+                    ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1
+                )
+                UPDATE processing_job AS job
+                SET status={p}, attempt=attempt+1, started_at=COALESCE(started_at,{p}),
+                    heartbeat_at={p}, claimed_by={p}, claimed_at={p},
+                    failure_code=NULL, failure_reason=NULL, next_attempt_at=NULL
+                FROM candidate WHERE job.id=candidate.id
+                RETURNING job.*""",  # nosec B608
+                [
+                    ProcessingJobStatus.QUEUED.value,
+                    ProcessingJobStatus.RUNNING.value,
+                    now,
+                    now,
+                    worker_id,
+                    now,
+                ],
+            )
+        else:
+            candidate = self._one(
+                f"SELECT * FROM processing_job WHERE status={p} AND (next_attempt_at IS NULL OR next_attempt_at <= {p}) ORDER BY created_at, id LIMIT 1",  # nosec B608
+                [ProcessingJobStatus.QUEUED.value, now],
+            )
+            if candidate is None:
+                return None
+            result = self._execute(
+                f"""UPDATE processing_job SET status={p},attempt=attempt+1,
+                    started_at=COALESCE(started_at,{p}),heartbeat_at={p},claimed_by={p},claimed_at={p},
+                    failure_code=NULL,failure_reason=NULL,next_attempt_at=NULL
+                    WHERE id={p} AND status={p}""",  # nosec B608
+                [
+                    ProcessingJobStatus.RUNNING.value,
+                    now,
+                    now,
+                    worker_id,
+                    now,
+                    candidate["id"],
+                    ProcessingJobStatus.QUEUED.value,
+                ],
+            )
+            if result.rowcount != 1:
+                return None
+            row = self._one(
+                f"SELECT * FROM processing_job WHERE id={p}", [candidate["id"]]
+            )
+        if row is None:
+            return None
+        claimed = self._job(row)
+        self._record_transition(
+            claimed,
+            ProcessingJobStatus.QUEUED,
+            ProcessingJobStatus.RUNNING,
+            actor=f"worker:{worker_id}",
+            worker_id=worker_id,
+        )
+        return claimed
+
+    def heartbeat(self, tenant_id: str, job_id: str, worker_id: str) -> bool:
+        p = self.p
+        result = self._execute(
+            f"UPDATE processing_job SET heartbeat_at={p} WHERE tenant_id={p} AND id={p} AND status={p} AND claimed_by={p}",  # nosec B608
+            [
+                now_utc(),
+                tenant_id,
+                job_id,
+                ProcessingJobStatus.RUNNING.value,
+                worker_id,
+            ],
+        )
+        return result.rowcount == 1
+
+    def recover_stale_jobs(self, stale_before: str, actor: str) -> int:
+        """Return abandoned RUNNING jobs to QUEUED or terminally fail exhausted jobs."""
+        p = self.p
+        rows = self._execute(
+            f"SELECT * FROM processing_job WHERE status={p} AND heartbeat_at IS NOT NULL AND heartbeat_at < {p}",  # nosec B608
+            [ProcessingJobStatus.RUNNING.value, stale_before],
+        ).fetchall()
+        recovered = 0
+        for row in rows:
+            old = self._job(row)
+            target = (
+                ProcessingJobStatus.FAILED
+                if old.attempt >= old.max_attempts
+                else ProcessingJobStatus.QUEUED
+            )
+            code = "WORKER_HEARTBEAT_EXPIRED"
+            reason = (
+                "worker heartbeat expired; job was recovered without producing a result"
+            )
+            result = self._execute(
+                f"""UPDATE processing_job SET status={p},failure_code={p},failure_reason={p},
+                    next_attempt_at=CASE WHEN {p}={p} THEN {p} ELSE NULL END,
+                    finished_at=CASE WHEN {p}={p} THEN {p} ELSE NULL END,
+                    claimed_by=NULL,claimed_at=NULL,heartbeat_at=NULL
+                    WHERE id={p} AND status={p} AND heartbeat_at < {p}""",  # nosec B608
+                [
+                    target.value,
+                    code,
+                    reason,
+                    target.value,
+                    ProcessingJobStatus.QUEUED.value,
+                    now_utc(),
+                    target.value,
+                    ProcessingJobStatus.FAILED.value,
+                    now_utc(),
+                    old.id,
+                    ProcessingJobStatus.RUNNING.value,
+                    stale_before,
+                ],
+            )
+            if result.rowcount == 1:
+                current = self.get_job(old.tenant_id, old.id)
+                if current is not None:
+                    self._record_transition(
+                        current, old.status, target, actor, old.claimed_by
+                    )
+                    recovered += 1
+        return recovered
+
+    def retry_job(self, tenant_id: str, job_id: str, actor: str) -> ProcessingJob:
+        """Explicit, auditable retry; never creates a second idempotency key."""
+        previous = self.get_job(tenant_id, job_id)
+        if previous is None:
+            raise LookupError("processing job not found")
+        if previous.status not in {
+            ProcessingJobStatus.FAILED,
+            ProcessingJobStatus.BLOCKED,
+        }:
+            raise ValueError("only terminal unsuccessful jobs may be retried")
+        if previous.attempt >= previous.max_attempts:
+            raise ValueError("processing job retry budget is exhausted")
+        p = self.p
+        result = self._execute(
+            f"UPDATE processing_job SET status={p},failure_code=NULL,failure_reason=NULL,next_attempt_at={p},finished_at=NULL,claimed_by=NULL,claimed_at=NULL,heartbeat_at=NULL WHERE tenant_id={p} AND id={p} AND status={p}",  # nosec B608
+            [
+                ProcessingJobStatus.QUEUED.value,
+                now_utc(),
+                tenant_id,
+                job_id,
+                previous.status.value,
+            ],
+        )
+        if result.rowcount != 1:
+            raise RuntimeError("processing job retry transition was not acquired")
+        current = self.get_job(tenant_id, job_id)
+        if current is None:
+            raise LookupError("processing job not found")
+        self._record_transition(current, previous.status, current.status, actor, None)
+        return current
+
+    def job_counts(self) -> dict[str, int]:
+        rows = self._execute(
+            "SELECT status, count(*) AS count FROM processing_job GROUP BY status"
+        ).fetchall()
+        return {str(row["status"]): int(row["count"]) for row in rows}
+
     def mark_job(
         self,
         tenant_id: str,
@@ -642,29 +935,79 @@ class GeospatialRepository:
         status: ProcessingJobStatus,
         failure_reason: str | None = None,
         output_product_id: str | None = None,
+        failure_code: str | None = None,
+        actor: str = "system",
+        worker_id: str | None = None,
     ) -> ProcessingJob:
         p = self.p
         now = now_utc()
-        if status == ProcessingJobStatus.RUNNING:
+        previous = self.get_job(tenant_id, job_id)
+        if previous is None:
+            raise LookupError("processing job not found")
+        terminal = {
+            ProcessingJobStatus.SUCCEEDED,
+            ProcessingJobStatus.FAILED,
+            ProcessingJobStatus.BLOCKED,
+            ProcessingJobStatus.CANCELLED,
+        }
+        if status == ProcessingJobStatus.RUNNING and previous.status == status:
             self._execute(
-                f"UPDATE processing_job SET status={p},started_at={p} WHERE tenant_id={p} AND id={p}",  # nosec B608
-                [status.value, now, tenant_id, job_id],
+                f"UPDATE processing_job SET heartbeat_at={p} WHERE tenant_id={p} AND id={p}",  # nosec B608
+                [now, tenant_id, job_id],
             )
-        else:
-            self._execute(
-                f"UPDATE processing_job SET status={p},failure_reason={p},output_product_id={p},finished_at={p} WHERE tenant_id={p} AND id={p}",  # nosec B608
+        elif status == ProcessingJobStatus.RUNNING:
+            result = self._execute(
+                f"UPDATE processing_job SET status={p},started_at=COALESCE(started_at,{p}),heartbeat_at={p},claimed_by=COALESCE(claimed_by,{p}),claimed_at=COALESCE(claimed_at,{p}) WHERE tenant_id={p} AND id={p} AND status={p}",  # nosec B608
                 [
                     status.value,
-                    failure_reason,
-                    output_product_id,
+                    now,
+                    now,
+                    worker_id,
                     now,
                     tenant_id,
                     job_id,
+                    ProcessingJobStatus.QUEUED.value,
                 ],
             )
+            if result.rowcount != 1:
+                raise RuntimeError(
+                    "processing job transition to RUNNING was not acquired"
+                )
+        else:
+            if status not in terminal or (
+                worker_id is not None and previous.status != ProcessingJobStatus.RUNNING
+            ):
+                raise ValueError("invalid processing job state transition")
+            lease_clause = f" AND status={p} AND claimed_by={p}" if worker_id else ""
+            values: list[Any] = [
+                status.value,
+                failure_code,
+                failure_reason,
+                output_product_id,
+                now,
+                tenant_id,
+                job_id,
+            ]
+            if worker_id:
+                values.extend([ProcessingJobStatus.RUNNING.value, worker_id])
+            result = self._execute(
+                f"UPDATE processing_job SET status={p},failure_code={p},failure_reason={p},output_product_id={p},finished_at={p},heartbeat_at={p} WHERE tenant_id={p} AND id={p}{lease_clause}",  # nosec B608
+                [
+                    *values[:4],
+                    now,
+                    now,
+                    *values[5:],
+                ],
+            )
+            if result.rowcount != 1:
+                raise RuntimeError("processing job completion lease was lost")
         result = self.get_job(tenant_id, job_id)
         if result is None:
             raise LookupError("processing job not found")
+        if previous.status != result.status:
+            self._record_transition(
+                result, previous.status, result.status, actor, worker_id
+            )
         return result
 
     def create_derived_product(self, item: DerivedProduct) -> DerivedProduct:

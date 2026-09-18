@@ -6,7 +6,7 @@ export default defineConfig({
   timeout: 90_000,
   fullyParallel: false,
   workers: 1,
-  reporter: [["list"], ["html", { outputFolder: "test-results/report", open: "never" }]],
+  reporter: [["list"], ["html", { outputFolder: process.env.RIBEIRA_PLAYWRIGHT_REPORT_DIR ?? "test-results/report", open: "never" }]],
   use: {
     baseURL: "http://127.0.0.1:5173",
     headless: true,
@@ -17,5 +17,5 @@ export default defineConfig({
       args: ["--no-sandbox"],
     },
   },
-  outputDir: "test-results/e2e",
+  outputDir: process.env.RIBEIRA_PLAYWRIGHT_OUTPUT_DIR ?? "test-results/e2e",
 });

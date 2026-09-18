@@ -15,6 +15,8 @@ from shapely.geometry import Polygon, mapping
 from ribeira_platform.cdse_s3 import AssetCredentials, CdseS3AssetAdapter, CdseS3Config
 from ribeira_platform.geospatial import (
     ProviderSearchResult,
+    ProcessingJob,
+    ProcessingJobStatus,
     SatelliteCollection,
     SatelliteScene,
     SatelliteSearchRequest,
@@ -204,6 +206,118 @@ class GeospatialPostgresTests(unittest.TestCase):
                     "INSERT INTO satellite_asset(id,tenant_id,scene_id,asset_key,href) VALUES (%s,%s,%s,%s,%s)",
                     (new_id(), tenant_b.id, scene.id, "B04_10m", "s3://not-used"),
                 )
+
+    def test_postgresql_queue_claim_is_atomic_and_job_history_is_rls_scoped(
+        self,
+    ) -> None:
+        """Uses PostgreSQL/RLS; fixture identifiers do not represent client data."""
+        tenant_a = self.application.create_tenant("Async queue A")
+        tenant_b = self.application.create_tenant("Async queue B")
+        polygon = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [-47.1, -24.1],
+                    [-47.0, -24.1],
+                    [-47.0, -24.0],
+                    [-47.1, -24.0],
+                    [-47.1, -24.1],
+                ]
+            ],
+        }
+        property_a = self.application.create_property(
+            tenant_a.id, "Async queue AOI", polygon, "EPSG:4326"
+        )
+        collection = SatelliteCollection(
+            id="",
+            provider_id="COPERNICUS_CDSE",
+            external_collection_id="sentinel-2-l2a",
+            title="Test collection",
+            mission="Sentinel-2",
+            processing_level="L2A",
+            spatial_resolution="[10]",
+            temporal_characteristics={},
+            bands={},
+            license="test-data-only",
+            stac_version="1.1.0",
+            metadata={"synthetic_test_data": True},
+        )
+        scene = SatelliteScene(
+            id=new_id(),
+            tenant_id=tenant_a.id,
+            property_id=property_a.id,
+            provider_id="COPERNICUS_CDSE",
+            collection_id="sentinel-2-l2a",
+            external_item_id=f"ASYNC_QUEUE_{new_id()}",
+            acquisition_datetime="2025-01-01T00:00:00+00:00",
+            provider_published_datetime=None,
+            geometry_geojson=polygon,
+            bbox=[-47.1, -24.1, -47.0, -24.0],
+            cloud_cover=None,
+            platform="sentinel-2a",
+            constellation="sentinel-2",
+            processing_level="L2A",
+            stac_version="1.1.0",
+            raw_metadata_reference="test://async-queue",
+            checksum="test-checksum",
+        )
+        with self.store.tenant_transaction(tenant_a.id):
+            self.repo.upsert_collection(collection)
+            self.repo.upsert_scene(scene)
+            job = self.repo.create_job(
+                ProcessingJob(
+                    new_id(),
+                    tenant_a.id,
+                    property_a.id,
+                    scene.id,
+                    "NDVI",
+                    "NDVI",
+                    "test",
+                    {},
+                    ProcessingJobStatus.QUEUED,
+                    f"async-queue-{new_id()}",
+                ),
+                "test-requester",
+            )
+            claimed = self.repo.claim_next_job("postgres-worker-a")
+        self.assertIsNotNone(claimed)
+        assert claimed is not None
+        self.assertEqual(claimed.status, ProcessingJobStatus.RUNNING)
+
+        second_store = PostgresStore(DATABASE_URL)  # type: ignore[arg-type]
+        try:
+            second_app = RibeiraApplication(second_store)
+            second_repo = second_app.geospatial.repository
+            with second_store.tenant_transaction(tenant_a.id):
+                self.assertIsNone(second_repo.claim_next_job("postgres-worker-b"))
+            with second_store.tenant_transaction(tenant_b.id):
+                self.assertIsNone(second_repo.get_job(tenant_b.id, job.id))
+                self.assertEqual(
+                    second_repo.list_job_transitions(tenant_b.id, job.id), []
+                )
+        finally:
+            second_store.close()
+
+        with self.store.tenant_transaction(tenant_a.id):
+            completed = self.repo.mark_job(
+                tenant_a.id,
+                job.id,
+                ProcessingJobStatus.FAILED,
+                failure_code="TEST_WORKER_FAILURE",
+                failure_reason="test worker failure",
+                actor="worker:postgres-worker-a",
+                worker_id="postgres-worker-a",
+            )
+            transitions = self.repo.list_job_transitions(tenant_a.id, job.id)
+        self.assertEqual(completed.status, ProcessingJobStatus.FAILED)
+        self.assertEqual(
+            [transition.to_status for transition in transitions],
+            [
+                ProcessingJobStatus.QUEUED,
+                ProcessingJobStatus.RUNNING,
+                ProcessingJobStatus.FAILED,
+            ],
+        )
 
         with self.assertRaises(psycopg.Error):
             with self.store.tenant_transaction(tenant_b.id):

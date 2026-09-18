@@ -1632,27 +1632,63 @@ def create_app(
             raise LookupError("processing job not found in tenant")
         return to_jsonable(result)
 
+    @app.get(
+        "/v1/tenants/{tenant_id}/processing-jobs/{job_id}/transitions",
+        tags=["geospatial"],
+    )
+    async def get_processing_job_transitions(
+        tenant_id: str, job_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "geospatial:read", tenant_id)
+        with application.store.tenant_transaction(tenant_id, ctx.is_platform_admin):
+            job = application.geospatial.get_job(tenant_id, job_id)
+            if job is None:
+                raise LookupError("processing job not found in tenant")
+            transitions = application.geospatial.repository.list_job_transitions(
+                tenant_id, job_id
+            )
+        return {"items": to_jsonable(transitions)}
+
     @app.post(
         "/v1/tenants/{tenant_id}/processing-jobs/{job_id}/run",
+        status_code=202,
         tags=["geospatial"],
     )
     async def run_processing_job(
         tenant_id: str, job_id: str, ctx: AuthContext = Depends(context)
     ):
         authorize(ctx, "geospatial:process", tenant_id)
+        # Kept as a compatibility acknowledgement. A private worker claims and
+        # executes persisted jobs; HTTP requests never invoke Rasterio/GDAL.
         job = application.geospatial.get_job(tenant_id, job_id)
         if job is None:
             raise LookupError("processing job not found in tenant")
-        runner = {
-            "NDVI": application.geospatial.run_ndvi_job,
-            "QUALITY_MASKED_NDVI": application.geospatial.run_quality_masked_ndvi_job,
-            "TEMPORAL_DELTA": application.geospatial.run_temporal_delta_job,
-        }.get(job.job_type)
-        if runner is None:
-            raise ValueError("unsupported processing job type")
-        return to_jsonable(
-            runner(tenant_id, job_id, ctx.subject, ctx.is_platform_admin)
-        )
+        return to_jsonable(job)
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/processing-jobs/{job_id}/retry",
+        status_code=202,
+        tags=["geospatial"],
+    )
+    async def retry_processing_job(
+        tenant_id: str, job_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "geospatial:process", tenant_id)
+        with application.store.tenant_transaction(tenant_id, ctx.is_platform_admin):
+            job = application.geospatial.repository.retry_job(
+                tenant_id, job_id, ctx.subject
+            )
+            application.store.audit(
+                tenant_id,
+                ctx.subject,
+                "PROCESSING_JOB_REQUEUED",
+                "processing_job",
+                job.id,
+                {"attempt": job.attempt},
+                new_id(),
+                now_utc(),
+            )
+        return to_jsonable(job)
 
     @app.get(
         "/v1/tenants/{tenant_id}/derived-products/{product_id}/provenance",

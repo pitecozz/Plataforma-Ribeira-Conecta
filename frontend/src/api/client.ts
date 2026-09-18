@@ -26,6 +26,7 @@ export class Farm360Api {
   provenance(tenantId: string, productId: string) { return this.get<Provenance>(`/v1/tenants/${encodeURIComponent(tenantId)}/derived-products/${encodeURIComponent(productId)}/provenance`); }
   searchSatellite(tenantId: string, propertyId: string, datetimeStart: string, datetimeEnd: string) { return this.post<SearchResult>(`/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/satellite-searches`, { datetime_start: datetimeStart, datetime_end: datetimeEnd }); }
   createNdviJob(tenantId: string, propertyId: string, searchId: string) { return this.post<ProcessingJob>(`/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/ndvi-jobs`, { search_id: searchId }); }
-  runJob(tenantId: string, jobId: string) { return this.post<{ job: ProcessingJob }>(`/v1/tenants/${encodeURIComponent(tenantId)}/processing-jobs/${encodeURIComponent(jobId)}/run`); }
+  job(tenantId: string, jobId: string) { return this.get<ProcessingJob>(`/v1/tenants/${encodeURIComponent(tenantId)}/processing-jobs/${encodeURIComponent(jobId)}`); }
+  retryJob(tenantId: string, jobId: string) { return this.post<ProcessingJob>(`/v1/tenants/${encodeURIComponent(tenantId)}/processing-jobs/${encodeURIComponent(jobId)}/retry`); }
   tileTemplate(tenantId: string, productId: string) { return `${this.baseUrl}/v1/tenants/${encodeURIComponent(tenantId)}/derived-products/${encodeURIComponent(productId)}/tiles/{z}/{x}/{y}`; }
 }
