@@ -13,7 +13,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     launchOptions: {
-      executablePath: process.env.RIBEIRA_BROWSER_EXECUTABLE || "/usr/bin/google-chrome",
+      executablePath: process.env.RIBEIRA_BROWSER_EXECUTABLE,
       args: ["--no-sandbox"],
     },
   },
