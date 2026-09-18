@@ -19,4 +19,3 @@ ALTER TABLE derived_product_dependency FORCE ROW LEVEL SECURITY;
 CREATE POLICY derived_product_dependency_tenant_isolation ON derived_product_dependency
   USING (tenant_id::text = current_setting('app.tenant_id', true) OR current_setting('app.platform_admin', true) = 'true')
   WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true) OR current_setting('app.platform_admin', true) = 'true');
-GRANT SELECT, INSERT, UPDATE, DELETE ON derived_product_dependency TO ribeira_app;
