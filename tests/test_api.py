@@ -96,6 +96,38 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(row["request_id"], "req-audit")
         self.assertEqual(row["correlation_id"], "corr-audit")
 
+    def test_property_boundary_provenance_is_explicit_and_calculated(self) -> None:
+        tenant = self.application.create_tenant("Tenant for boundary provenance")
+        response = self.client.post(
+            f"/v1/tenants/{tenant.id}/properties",
+            headers={"Authorization": "Bearer platform-secret-dev-only"},
+            json={
+                "name": "Boundary-confirmed property",
+                "geometry_geojson": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [-43.0, -22.0],
+                            [-42.99, -22.0],
+                            [-42.99, -22.01],
+                            [-43.0, -22.01],
+                            [-43.0, -22.0],
+                        ]
+                    ],
+                },
+                "geometry_crs": "EPSG:4326",
+                "boundary_source": "MANUAL_CONFIRMED survey record",
+                "classification": "MANUAL_CONFIRMED",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["boundary_source"], "MANUAL_CONFIRMED survey record")
+        self.assertEqual(body["classification"], "MANUAL_CONFIRMED")
+        self.assertEqual(body["geometry_crs"], "EPSG:4326")
+        self.assertIsNotNone(body["area_hectares"])
+        self.assertEqual(body["data_status"], "UNKNOWN")
+
     def test_business_customer_and_mrr_operations_are_authorized(self) -> None:
         tenant = self.application.create_tenant("Commercial API tenant")
         headers = {"Authorization": "Bearer platform-secret-dev-only"}

@@ -48,6 +48,7 @@ class PostgresIntegrationTests(unittest.TestCase):
                 "PG property",
                 {"type": "Point", "coordinates": [-47.0, -24.0]},
                 "EPSG:4326",
+                boundary_source="MANUAL_CONFIRMED integration boundary",
             )
         source = self.application.create_source(
             tenant.id, "PG fixture source", "TEST", "fixture"
@@ -94,6 +95,10 @@ class PostgresIntegrationTests(unittest.TestCase):
             ).fetchone()
             self.assertEqual(row["srid"], 4326)
             self.assertEqual(row["wkt"], "POINT(-47 -24)")
+            self.assertEqual(
+                self.store.get_property(tenant.id, property.id).boundary_source,
+                "MANUAL_CONFIRMED integration boundary",
+            )
             audit = self.store.connection.execute(
                 "SELECT request_id, correlation_id FROM audit_log WHERE entity_id=%s",
                 (property.id,),

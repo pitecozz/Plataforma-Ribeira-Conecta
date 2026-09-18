@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Farm360Api } from "../api/client";
 import type { NdviProduct, PropertyRecord, Provenance, Scene, TemporalComparison, TimelineItem } from "../types/farm360";
 import { MapCanvas } from "../features/map/MapCanvas";
@@ -8,6 +8,7 @@ import { SatellitePanel } from "../features/satellite/SatellitePanel";
 import { NdviPanel } from "../features/ndvi/NdviPanel";
 import { ProvenancePanel } from "../features/provenance/ProvenancePanel";
 import { TemporalPanel } from "../features/temporal/TemporalPanel";
+import { SceneOperationsPanel } from "../features/operations/SceneOperationsPanel";
 
 interface Props { api: Farm360Api; apiBaseUrl: string; tenantId: string; propertyId: string; token: string; }
 type LoadState = "loading" | "ready" | "empty" | "error";
@@ -32,29 +33,25 @@ export function Farm360Page({ api, apiBaseUrl, tenantId, propertyId, token }: Pr
   const [comparison, setComparison] = useState<TemporalComparison | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      setState("loading");
-      try {
-        const [propertyResult, scenesResult, timelineResult] = await Promise.all([api.property(tenantId, propertyId), api.scenes(tenantId, propertyId), api.timeline(tenantId, propertyId)]);
-        const selected = newestSucceeded(timelineResult.items);
-        const provenanceResult = selected ? await api.provenance(tenantId, selected.derived_product.id) : null;
-        if (!active) return;
-        setProperty(propertyResult);
-        setScenes(scenesResult.items);
-        setTimeline(timelineResult.items);
-        setSelectedProductId(selected?.derived_product.id ?? null);
-        setProvenanceProductId(selected?.derived_product.id ?? null);
-        setBaselineProductId(timelineResult.items[0]?.derived_product.id ?? null);
-        setTargetProductId(selected?.derived_product.id ?? timelineResult.items.at(-1)?.derived_product.id ?? null);
-        setProvenance(provenanceResult);
-        setState(selected || scenesResult.items.length > 0 ? "ready" : "empty");
-      } catch { if (active) setState("error"); }
-    };
-    void load();
-    return () => { active = false; };
+  const refresh = useCallback(async () => {
+    setState("loading");
+    try {
+      const [propertyResult, scenesResult, timelineResult] = await Promise.all([api.property(tenantId, propertyId), api.scenes(tenantId, propertyId), api.timeline(tenantId, propertyId)]);
+      const selected = newestSucceeded(timelineResult.items);
+      const provenanceResult = selected ? await api.provenance(tenantId, selected.derived_product.id) : null;
+      setProperty(propertyResult);
+      setScenes(scenesResult.items);
+      setTimeline(timelineResult.items);
+      setSelectedProductId(selected?.derived_product.id ?? null);
+      setProvenanceProductId(selected?.derived_product.id ?? null);
+      setBaselineProductId(timelineResult.items[0]?.derived_product.id ?? null);
+      setTargetProductId(selected?.derived_product.id ?? timelineResult.items.at(-1)?.derived_product.id ?? null);
+      setProvenance(provenanceResult);
+      setState(selected || scenesResult.items.length > 0 ? "ready" : "empty");
+    } catch { setState("error"); }
   }, [api, propertyId, tenantId]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
 
   const selected = timeline.find(item => item.derived_product.id === selectedProductId) ?? null;
   const product: NdviProduct | null = selected?.derived_product ?? null;
@@ -82,7 +79,7 @@ export function Farm360Page({ api, apiBaseUrl, tenantId, propertyId, token }: Pr
 
   if (state === "loading") return <main className="state">Carregando Farm 360…</main>;
   if (state === "error") return <main className="state">SOURCE_UNAVAILABLE — não foi possível carregar os dados persistidos.</main>;
-  if (!property || state === "empty") return <main className="state">DADO_INSUFICIENTE — esta propriedade não possui cena ou NDVI persistido.</main>;
+  if (!property) return <main className="state">DADO_INSUFICIENTE — esta propriedade não possui cena ou NDVI persistido.</main>;
 
-  return <main className="farm360"><div className="map-column"><MapCanvas aoi={property.geometry_geojson} apiBaseUrl={apiBaseUrl} tileUrl={tileUrl} deltaTileUrl={deltaTileUrl} ndviEnabled={ndviEnabled} deltaEnabled={deltaEnabled} token={token} /><div className="map-tools"><label><input type="checkbox" checked={ndviEnabled} onChange={event => setNdviEnabled(event.target.checked)} disabled={!product} /> NDVI</label><label><input type="checkbox" checked={deltaEnabled} onChange={event => setDeltaEnabled(event.target.checked)} disabled={!comparison?.comparison.delta_product_id} /> Δ NDVI</label>{comparison?.comparison.delta_product_id && <button type="button" onClick={() => setProvenanceProductId(comparison.comparison.delta_product_id)}>Proveniência do Δ NDVI</button>}<span className="legend"><i /> −1 solo/água <b /> +1 vegetação</span>{comparison?.comparison.delta_product_id && <span className="delta-legend">vermelho: NDVI menor no target · branco: próximo de zero · azul: NDVI maior no target</span>}{!product && <span>Nodata: transparente</span>}</div></div><aside><TemporalPanel items={timeline} selectedProductId={selectedProductId} mode={mode} baselineProductId={baselineProductId} targetProductId={targetProductId} comparison={comparison} comparisonLoading={comparisonLoading} onSelectProduct={productId => { setSelectedProductId(productId); setProvenanceProductId(productId); }} onModeChange={setMode} onBaselineChange={setBaselineProductId} onTargetChange={setTargetProductId} /><PropertyPanel property={property} /><SatellitePanel scene={scene} /><NdviPanel product={product} /><ProvenancePanel provenance={provenance} /></aside></main>;
+  return <main className="farm360"><div className="map-column"><MapCanvas aoi={property.geometry_geojson} apiBaseUrl={apiBaseUrl} tileUrl={tileUrl} deltaTileUrl={deltaTileUrl} ndviEnabled={ndviEnabled} deltaEnabled={deltaEnabled} token={token} /><div className="map-tools"><label><input type="checkbox" checked={ndviEnabled} onChange={event => setNdviEnabled(event.target.checked)} disabled={!product} /> NDVI</label><label><input type="checkbox" checked={deltaEnabled} onChange={event => setDeltaEnabled(event.target.checked)} disabled={!comparison?.comparison.delta_product_id} /> Δ NDVI</label>{comparison?.comparison.delta_product_id && <button type="button" onClick={() => setProvenanceProductId(comparison.comparison.delta_product_id)}>Proveniência do Δ NDVI</button>}<span className="legend"><i /> −1 solo/água <b /> +1 vegetação</span>{comparison?.comparison.delta_product_id && <span className="delta-legend">vermelho: NDVI menor no target · branco: próximo de zero · azul: NDVI maior no target</span>}{!product && <span>Nodata: transparente</span>}</div></div><aside><SceneOperationsPanel api={api} tenantId={tenantId} propertyId={propertyId} scenes={scenes} onChanged={refresh} /><TemporalPanel items={timeline} selectedProductId={selectedProductId} mode={mode} baselineProductId={baselineProductId} targetProductId={targetProductId} comparison={comparison} comparisonLoading={comparisonLoading} onSelectProduct={productId => { setSelectedProductId(productId); setProvenanceProductId(productId); }} onModeChange={setMode} onBaselineChange={setBaselineProductId} onTargetChange={setTargetProductId} /><PropertyPanel property={property} /><SatellitePanel scene={scene} /><NdviPanel product={product} /><ProvenancePanel provenance={provenance} /></aside></main>;
 }

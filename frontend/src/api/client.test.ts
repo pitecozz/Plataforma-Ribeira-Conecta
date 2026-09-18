@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Farm360Api } from "./client";
+import type { PropertyCreate } from "../types/farm360";
 
 describe("Farm360Api", () => {
   it("uses the tenant-scoped contract and bearer session", async () => {
@@ -7,5 +8,13 @@ describe("Farm360Api", () => {
     vi.stubGlobal("fetch", fetchMock);
     await new Farm360Api("https://api.example", "session-token").products("tenant / id", "property / id");
     expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/properties/property%20%2F%20id/derived-products", { headers: { Authorization: "Bearer session-token" } });
+  });
+
+  it("creates a property through the authenticated tenant-scoped contract", async () => {
+    const payload: PropertyCreate = { name: "AOI", geometry_geojson: { type: "Polygon", coordinates: [] }, geometry_crs: "EPSG:4326", boundary_source: "MANUAL_CONFIRMED", classification: "MANUAL_CONFIRMED" };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "property-id" }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await new Farm360Api("https://api.example", "session-token").createProperty("tenant", payload);
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant/properties", { method: "POST", headers: { Authorization: "Bearer session-token", "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   });
 });

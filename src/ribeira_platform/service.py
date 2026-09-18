@@ -8,6 +8,7 @@ from typing import Any
 from .engine import DecisionEngine, EvidenceEngine
 from .business_service import BusinessApplication
 from .epistemology import IngestionStatus
+from .epistemology import DataClassification
 from .geospatial_provider import CopernicusStacAdapter, default_copernicus_registry
 from .geospatial_service import GeospatialApplication
 from .models import (
@@ -67,8 +68,18 @@ class RibeiraApplication:
         geometry_geojson: dict[str, Any] | None = None,
         geometry_crs: str | None = None,
         platform_admin: bool = False,
+        boundary_source: str | None = None,
+        classification: DataClassification = DataClassification.MANUAL_CONFIRMED,
     ) -> Property:
-        property = Property(new_id(), tenant_id, name, geometry_geojson, geometry_crs)
+        property = Property(
+            new_id(),
+            tenant_id,
+            name,
+            geometry_geojson,
+            geometry_crs,
+            classification,
+            boundary_source=boundary_source,
+        )
         with self.store.tenant_transaction(tenant_id, platform_admin):
             self.store.create_property(property)
             self.store.audit(

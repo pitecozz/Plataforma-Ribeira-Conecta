@@ -38,7 +38,7 @@ from .business import (
     ServiceOffering,
     ServicePlan,
 )
-from .epistemology import RuleAuthority
+from .epistemology import DataClassification, RuleAuthority
 from .geospatial import GeometryService, SceneSelectionPolicy, SatelliteSearchRequest
 from .iam import (
     AuthContext,
@@ -104,6 +104,8 @@ class PropertyRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     geometry_geojson: dict[str, Any] | None = None
     geometry_crs: str | None = Field(default=None, max_length=32)
+    boundary_source: str | None = Field(default=None, min_length=1, max_length=500)
+    classification: DataClassification = DataClassification.MANUAL_CONFIRMED
 
 
 class SourceRequest(BaseModel):
@@ -604,6 +606,7 @@ def create_app(
             "tenant_id": item.tenant_id,
             "geometry_geojson": item.geometry_geojson,
             "geometry_crs": item.geometry_crs,
+            "boundary_source": item.boundary_source,
             "area_hectares": property_area_hectares(item),
             "classification": item.classification.value,
             "created_at": item.created_at,
@@ -709,15 +712,16 @@ def create_app(
         tenant_id: str, payload: PropertyRequest, ctx: AuthContext = Depends(context)
     ):
         authorize(ctx, "property:write", tenant_id)
-        return to_jsonable(
-            application.create_property(
-                tenant_id,
-                payload.name,
-                payload.geometry_geojson,
-                payload.geometry_crs,
-                ctx.is_platform_admin,
-            )
+        item = application.create_property(
+            tenant_id,
+            payload.name,
+            payload.geometry_geojson,
+            payload.geometry_crs,
+            platform_admin=ctx.is_platform_admin,
+            boundary_source=payload.boundary_source,
+            classification=payload.classification,
         )
+        return safe_property(item)
 
     @app.get("/v1/tenants/{tenant_id}/properties", tags=["farm-360"])
     async def list_properties(tenant_id: str, ctx: AuthContext = Depends(context)):

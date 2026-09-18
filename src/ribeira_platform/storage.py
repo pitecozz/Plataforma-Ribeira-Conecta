@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS tenants (
 );
 CREATE TABLE IF NOT EXISTS properties (
   id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id),
-  name TEXT NOT NULL, geometry_geojson TEXT, geometry_crs TEXT,
+  name TEXT NOT NULL, geometry_geojson TEXT, geometry_crs TEXT, boundary_source TEXT,
   classification TEXT NOT NULL, created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_properties_tenant ON properties(tenant_id);
@@ -168,7 +168,7 @@ class SQLiteStore:
         if not self.tenant_exists(item.tenant_id):
             raise TenantBoundaryError("tenant does not exist")
         self._insert(
-            "INSERT INTO properties(id,tenant_id,name,geometry_geojson,geometry_crs,classification,created_at) VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO properties(id,tenant_id,name,geometry_geojson,geometry_crs,boundary_source,classification,created_at) VALUES (?,?,?,?,?,?,?,?)",
             (
                 item.id,
                 item.tenant_id,
@@ -177,6 +177,7 @@ class SQLiteStore:
                 if item.geometry_geojson is not None
                 else None,
                 item.geometry_crs,
+                item.boundary_source,
                 item.classification.value,
                 item.created_at,
             ),
@@ -198,6 +199,7 @@ class SQLiteStore:
             row["geometry_crs"],
             DataClassification(row["classification"]),
             row["created_at"],
+            row["boundary_source"],
         )
 
     def list_properties(self, tenant_id: str) -> list[Property]:

@@ -99,8 +99,8 @@ class PostgresStore:
             else None
         )
         self.connection.execute(
-            """INSERT INTO property(id,tenant_id,name,geometry,geometry_crs,data_classification,created_at)
-               VALUES (%s,%s,%s,CASE WHEN %s::text IS NULL THEN NULL ELSE ST_SetSRID(ST_GeomFromGeoJSON(%s::text),4326) END,%s,%s,%s)""",
+            """INSERT INTO property(id,tenant_id,name,geometry,geometry_crs,boundary_source,data_classification,created_at)
+               VALUES (%s,%s,%s,CASE WHEN %s::text IS NULL THEN NULL ELSE ST_SetSRID(ST_GeomFromGeoJSON(%s::text),4326) END,%s,%s,%s,%s)""",
             (
                 item.id,
                 item.tenant_id,
@@ -108,6 +108,7 @@ class PostgresStore:
                 geometry,
                 geometry,
                 item.geometry_crs,
+                item.boundary_source,
                 item.classification.value,
                 item.created_at,
             ),
@@ -116,7 +117,7 @@ class PostgresStore:
 
     def get_property(self, tenant_id: str, property_id: str) -> Property | None:
         row = self._one(
-            "SELECT id,tenant_id,name,ST_AsGeoJSON(geometry) AS geometry_geojson,geometry_crs,data_classification,created_at FROM property WHERE tenant_id=%s AND id=%s",
+            "SELECT id,tenant_id,name,ST_AsGeoJSON(geometry) AS geometry_geojson,geometry_crs,data_classification,created_at,boundary_source FROM property WHERE tenant_id=%s AND id=%s",
             (tenant_id, property_id),
         )
         if row is None:
@@ -129,6 +130,7 @@ class PostgresStore:
             row["geometry_crs"],
             DataClassification(row["data_classification"]),
             row["created_at"].isoformat(),
+            row["boundary_source"],
         )
 
     def list_properties(self, tenant_id: str) -> list[Property]:

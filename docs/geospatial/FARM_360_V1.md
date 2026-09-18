@@ -1,8 +1,9 @@
 # Ribeira Maps / Farm 360 v1
 
-Farm 360 is a read-only operational view of data already persisted by the Phase
-1C pipeline. It does not discover Sentinel scenes, download CDSE assets or run
-NDVI as a side effect of a browser request.
+Farm 360 is an authenticated operational workspace over the Phase 1C pipeline.
+It can create a property AOI, request a CDSE STAC search and explicitly start
+an NDVI job for the scene selected by the persisted selection policy. It never
+downloads CDSE assets or runs NDVI as an implicit browser side effect.
 
 ```text
 Property (PostGIS AOI)
@@ -21,9 +22,35 @@ a scene, value, timestamp, coverage or statistic. NDVI is `DERIVED`, keeps its
 formula, input asset keys, checksum, limits and evidence. The display palette is
 generated only for the PNG tile and never alters the float NDVI COG.
 
-No demo customer or property is seeded by this feature. The tests use only
+No demo customer or property is seeded by this feature. Unit tests use only
 explicitly labelled `synthetic_test_data` and `TEST_AOI_ONLY`; neither is a
-customer observation or a commercial record.
+customer observation or a commercial record. The controlled real E2E run uses
+the separate `CDSE Real Evidence Validation` tenant; it is a validation tenant,
+not a customer tenant.
+
+Property creation requires a GeoJSON geometry in an explicit CRS and a boundary
+origin. The AOI area is calculated geodesically by the API; it is never guessed.
+The persisted `boundary_source` and `MANUAL_CONFIRMED` classification are shown
+alongside the property. Legacy properties legitimately retain `UNKNOWN` for a
+missing boundary origin.
+
+## Operations workspace
+
+The workspace lists tenant-scoped properties, keeps the map as the main view,
+and exposes the existing real flow:
+
+```text
+Property AOI -> persisted CDSE STAC search -> policy-selected candidate
+             -> persisted NDVI job -> explicit run -> real COG/product
+             -> timeline/comparison -> provenance/evidence
+```
+
+The scene list presents provider metadata exactly as returned (including an
+explicit `UNKNOWN` cloud value when absent). It does not fabricate a fallback
+scene or raster. A job reports its persisted status (`QUEUED`, `RUNNING`,
+`SUCCEEDED`, `FAILED`; access blocks are identified by their real failure code).
+Selection is policy-driven in this phase; a manual override workflow requires
+its own auditable approval policy and is deliberately not implied by the UI.
 
 ## Read endpoints
 
@@ -36,6 +63,13 @@ customer observation or a commercial record.
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/temporal-comparison?baseline_product_id={id}&target_product_id={id}`
 - `GET /v1/tenants/{tenant_id}/derived-products/{product_id}/provenance`
 - `GET /v1/tenants/{tenant_id}/derived-products/{product_id}/tiles/{z}/{x}/{y}`
+
+Write operations use the same tenant authorization and RLS context:
+
+- `POST /v1/tenants/{tenant_id}/properties`
+- `POST /v1/tenants/{tenant_id}/properties/{property_id}/satellite-searches`
+- `POST /v1/tenants/{tenant_id}/properties/{property_id}/ndvi-jobs`
+- `POST /v1/tenants/{tenant_id}/processing-jobs/{job_id}/run`
 
 All need the established bearer authentication and tenant authorization. The
 tile endpoint applies `geospatial:read`, resolves the product under the tenant

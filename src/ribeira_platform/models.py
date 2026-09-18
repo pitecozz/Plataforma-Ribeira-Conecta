@@ -39,6 +39,7 @@ class Property:
     geometry_crs: str | None = None
     classification: DataClassification = DataClassification.MANUAL_CONFIRMED
     created_at: str = field(default_factory=now_utc)
+    boundary_source: str | None = None
 
 
 @dataclass(frozen=True)
