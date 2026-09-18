@@ -5,7 +5,7 @@ import os
 import time
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any, Callable, cast
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -49,6 +49,7 @@ from .iam import (
     JwtIdentityProvider,
     AuthorizationPolicy,
 )
+from .identity_access import IdentityAccess
 from .logging_config import configure_structured_logging
 from .models import Property, RuleDefinition, new_id, now_utc, to_jsonable
 from .object_storage import ObjectStorageError
@@ -85,7 +86,7 @@ class Settings:
             for item in os.getenv("RIBEIRA_CORS_ORIGINS", "").split(",")
             if item.strip()
         )
-        return cls(
+        settings = cls(
             os.getenv("RIBEIRA_ENV", "development"),
             os.getenv("RIBEIRA_STORAGE", "postgres"),
             os.getenv("RIBEIRA_DATABASE_URL"),
@@ -93,6 +94,11 @@ class Settings:
             os.getenv("RIBEIRA_AUTH_MODE", "jwt"),
             int(os.getenv("RIBEIRA_MAX_BODY_BYTES", "1048576")),
         )
+        if settings.env == "production" and settings.auth_mode != "oidc":
+            raise ValueError("production requires RIBEIRA_AUTH_MODE=oidc")
+        if settings.env == "production" and os.getenv("RIBEIRA_DEV_AUTH_TOKEN"):
+            raise ValueError("production rejects RIBEIRA_DEV_AUTH_TOKEN")
+        return settings
 
 
 class TenantRequest(BaseModel):
@@ -382,12 +388,26 @@ def _build_identity_provider(settings: Settings) -> IdentityProvider:
                 is_platform_admin="PLATFORM_ADMIN" in roles,
             ),
         )
+    if settings.auth_mode != "oidc":
+        raise ValueError("authentication mode must be development or oidc")
     public_key = os.getenv("RIBEIRA_JWT_PUBLIC_KEY") or None
     jwks_url = os.getenv("RIBEIRA_JWT_JWKS_URL") or None
     issuer = os.getenv("RIBEIRA_JWT_ISSUER") or None
     audience = os.getenv("RIBEIRA_JWT_AUDIENCE") or None
+    algorithms = tuple(
+        item.strip()
+        for item in os.getenv("RIBEIRA_JWT_ALGORITHMS", "RS256").split(",")
+        if item.strip()
+    )
     return JwtIdentityProvider(
-        public_key=public_key, jwks_url=jwks_url, issuer=issuer, audience=audience
+        public_key=public_key,
+        jwks_url=jwks_url,
+        issuer=issuer,
+        audience=audience,
+        algorithms=algorithms,
+        jwks_cache_ttl_seconds=int(os.getenv("RIBEIRA_JWKS_CACHE_TTL_SECONDS", "300")),
+        jwks_refresh_seconds=int(os.getenv("RIBEIRA_JWKS_REFRESH_SECONDS", "30")),
+        jwks_timeout_seconds=int(os.getenv("RIBEIRA_JWKS_TIMEOUT_SECONDS", "3")),
     )
 
 
@@ -421,6 +441,12 @@ def create_app(
     app.state.identity_provider = identity_provider
     app.state.authorization = policy
     app.state.settings = settings
+    identity_store = application.store
+    identity_access = (
+        IdentityAccess(cast(PostgresStore, identity_store))
+        if settings.auth_mode == "oidc" and isinstance(identity_store, PostgresStore)
+        else None
+    )
 
     if settings.cors_origins:
         app.add_middleware(
@@ -527,6 +553,10 @@ def create_app(
 
     @app.exception_handler(AuthorizationError)
     async def authorization_error(_: Request, exc: AuthorizationError):
+        logger.warning(
+            "authorization denied",
+            extra={"status": "DENIED", "failure_code": "AUTHORIZATION_DENIED"},
+        )
         return JSONResponse(
             status_code=403,
             content={"error": {"code": "FORBIDDEN", "message": str(exc)}},
@@ -541,6 +571,10 @@ def create_app(
 
     @app.exception_handler(AuthenticationError)
     async def authentication_error(_: Request, exc: AuthenticationError):
+        logger.warning(
+            "authentication failed",
+            extra={"status": "DENIED", "failure_code": "AUTHENTICATION_FAILED"},
+        )
         return JSONResponse(
             status_code=401,
             content={"error": {"code": "INVALID_TOKEN", "message": str(exc)}},
@@ -582,7 +616,30 @@ def create_app(
         return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     def context(request: Request) -> AuthContext:
-        return _auth_context(request, identity_provider)
+        verified = _auth_context(request, identity_provider)
+        parts = request.url.path.split("/")
+        tenant_id = (
+            parts[3] if len(parts) > 3 and parts[1:3] == ["v1", "tenants"] else None
+        )
+        if identity_access and tenant_id:
+            try:
+                resolved = identity_access.for_tenant(verified, tenant_id)
+            except AuthorizationError:
+                logger.warning(
+                    "membership denied",
+                    extra={
+                        "tenant_id": tenant_id,
+                        "status": "DENIED",
+                        "failure_code": "MEMBERSHIP_DENIED",
+                    },
+                )
+                raise
+            logger.info(
+                "authentication succeeded",
+                extra={"tenant_id": tenant_id, "status": "SUCCEEDED"},
+            )
+            return resolved
+        return verified
 
     def authorize(ctx: AuthContext, permission: str, tenant_id: str) -> None:
         policy.require(ctx, permission, tenant_id=tenant_id)

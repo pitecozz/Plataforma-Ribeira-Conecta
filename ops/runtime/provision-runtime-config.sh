@@ -8,10 +8,18 @@ if [[ -z "${RIBEIRA_DATABASE_URL:-}" ]]; then
   exit 2
 fi
 runtime_environment="${RIBEIRA_ENV:-production}"
-auth_mode="${RIBEIRA_AUTH_MODE:-jwt}"
+auth_mode="${RIBEIRA_AUTH_MODE:-oidc}"
 repository_root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 if [[ "$runtime_environment" == "development" && "$auth_mode" != "development" ]]; then
   echo "development runtime must use explicit development authentication" >&2
+  exit 2
+fi
+if [[ "$runtime_environment" == "production" && "$auth_mode" != "oidc" ]]; then
+  echo "production runtime requires OIDC authentication" >&2
+  exit 2
+fi
+if [[ "$auth_mode" == "oidc" ]] && [[ -z "${RIBEIRA_JWT_ISSUER:-}" || -z "${RIBEIRA_JWT_AUDIENCE:-}" || -z "${RIBEIRA_JWT_JWKS_URL:-}" ]]; then
+  echo "OIDC requires issuer, audience, and JWKS URL" >&2
   exit 2
 fi
 if [[ "$auth_mode" == "development" && -z "${RIBEIRA_DEV_AUTH_TOKEN:-}" ]]; then
@@ -39,6 +47,14 @@ trap 'rm -f "$temporary_file"' EXIT
   if [[ "$auth_mode" == "development" ]]; then
     printf 'RIBEIRA_DEV_AUTH_TOKEN=%s\n' "$RIBEIRA_DEV_AUTH_TOKEN"
     printf '%s\n' 'RIBEIRA_DEV_AUTH_ROLES=PLATFORM_ADMIN'
+  else
+    printf 'RIBEIRA_JWT_ISSUER=%s\n' "$RIBEIRA_JWT_ISSUER"
+    printf 'RIBEIRA_JWT_AUDIENCE=%s\n' "$RIBEIRA_JWT_AUDIENCE"
+    printf 'RIBEIRA_JWT_JWKS_URL=%s\n' "$RIBEIRA_JWT_JWKS_URL"
+    printf '%s\n' 'RIBEIRA_JWT_ALGORITHMS=RS256'
+    printf '%s\n' 'RIBEIRA_JWKS_CACHE_TTL_SECONDS=300'
+    printf '%s\n' 'RIBEIRA_JWKS_REFRESH_SECONDS=30'
+    printf '%s\n' 'RIBEIRA_JWKS_TIMEOUT_SECONDS=3'
   fi
   printf '%s\n' 'RIBEIRA_GEOSPATIAL_WORKER_ID=ribeira-vps-01'
   printf '%s\n' 'RIBEIRA_GEOSPATIAL_STALE_AFTER_SECONDS=3600'

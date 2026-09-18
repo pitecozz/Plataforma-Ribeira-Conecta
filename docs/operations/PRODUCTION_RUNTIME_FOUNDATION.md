@@ -28,8 +28,10 @@ backup. The versioned `ops/runtime/runtime.env.example` is documentation only.
 Use `RIBEIRA_ENV=development` only for the current controlled private
 validation runtime, `test` for isolated test databases/doubles, and `production`
 for a deployed private service runtime. Templates for each mode live under
-`ops/runtime/`. Production requires real JWT/OIDC configuration; do not place a
-development bearer token in `frontend/dist`.
+`ops/runtime/`. Production requires real OIDC configuration; do not place a
+development bearer token in `frontend/dist`. See
+`PRODUCTION_IDENTITY_DISASTER_RECOVERY.md` for membership, PKCE, JWKS, and
+off-host recovery requirements.
 
 ## Install, start, stop, restart, status
 

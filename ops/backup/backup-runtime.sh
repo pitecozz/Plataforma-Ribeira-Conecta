@@ -29,5 +29,12 @@ mv -f "$temporary_dump" "$destination/postgres.dump"
 tar --create --file "$destination/object-storage.tar" --directory "$object_root" .
 cp "$repository_root/ops/runtime/runtime.env.example" "$destination/runtime.env.example"
 (cd "$destination" && sha256sum postgres.dump object-storage.tar runtime.env.example > SHA256SUMS)
+schema_state="$(docker compose -f "$repository_root/docker-compose.yml" exec -T postgres \
+  psql -U ribeira_admin -d "$database_name" -Atc \
+  "SELECT coalesce(json_agg(json_build_object('version', version, 'checksum', checksum) ORDER BY version)::text, '[]') FROM schema_migrations")"
+{
+  printf '{"backup_version":1,"backup_id":"%s","created_at":"%s","migration_state":%s,"files":{' "$stamp" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$schema_state"
+  awk 'BEGIN { first=1 } { if (!first) printf ","; first=0; printf "\"%s\":\"%s\"", $2, $1 } END { print "}}" }' "$destination/SHA256SUMS"
+} > "$destination/backup-manifest.json"
 chmod 600 "$destination"/*
 printf '%s\n' "$destination"
