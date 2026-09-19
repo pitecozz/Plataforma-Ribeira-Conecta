@@ -78,6 +78,10 @@ test("Farm 360 validates temporal delta, layer gates, provenance, and auth bound
   await settleNetwork(page, records);
   const portfolioRecord = jsonRecords(records, "/portfolio")[0];
   expect(portfolioRecord?.json).toBeTruthy();
+  const portfolio = portfolioRecord?.json as { items: Array<{ id: string; latest_ndvi_id: string | null }> };
+  expect(portfolio.items).toEqual(expect.arrayContaining([
+    expect.objectContaining({ latest_ndvi_id: expect.any(String) }),
+  ]));
   await expect(page.getByText("TEST_AOI_ONLY permanece dado de validação.", { exact: false })).toBeVisible();
   const webgl = await page.evaluate(() => {
     const canvas = document.createElement("canvas");

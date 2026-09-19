@@ -820,7 +820,8 @@ def create_app(
             products = application.store.connection.execute(
                 """SELECT DISTINCT ON (property_id) property_id,id,created_at,output_reference
                    FROM derived_product
-                   WHERE tenant_id=%s AND product_type='NDVI'
+                   WHERE tenant_id=%s
+                     AND product_type IN ('NDVI', 'NDVI_QUALITY_MASKED')
                    ORDER BY property_id, created_at DESC""",
                 (tenant_id,),
             ).fetchall()

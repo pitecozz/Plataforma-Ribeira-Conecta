@@ -28,6 +28,7 @@ from tests.integration.tenant_cleanup import delete_test_tenants
 
 
 DATABASE_URL = os.getenv("RIBEIRA_TEST_DATABASE_URL")
+MIGRATION_DATABASE_URL = os.getenv("RIBEIRA_TEST_MIGRATION_DATABASE_URL")
 
 
 @unittest.skipUnless(
@@ -132,10 +133,18 @@ class PostgresIntegrationTests(unittest.TestCase):
             self.assertEqual(audit["correlation_id"], "corr-pg")
 
     def test_ready_closes_its_read_transaction(self) -> None:
-        self.assertTrue(self.store.ready())
+        for _ in range(5):
+            self.assertTrue(self.store.ready())
         self.assertEqual(
             self.store.connection.info.transaction_status, pq.TransactionStatus.IDLE
         )
+        with psycopg.connect(MIGRATION_DATABASE_URL) as admin:  # type: ignore[arg-type]
+            row = admin.execute(
+                "SELECT state FROM pg_stat_activity WHERE pid=%s",
+                (self.store.connection.info.backend_pid,),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertNotEqual(row[0], "idle in transaction")
 
     def test_rls_denies_cross_tenant_read_write_and_references(self) -> None:
         tenant_a = self.create_test_tenant("Tenant A PG")
