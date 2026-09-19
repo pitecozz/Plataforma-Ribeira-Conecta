@@ -12,14 +12,16 @@ from typing import Any
 
 from .identity_provisioning import (
     ExternalIdentityProvisioningRequest,
+    ExternalMembershipRevocationRequest,
     IdentityProvisioningService,
     ProvisioningConflict,
+    ProvisioningNotFound,
     ProvisioningRequestError,
 )
 from .postgres import PostgresStore
 
 
-def load_request_file(path: Path) -> ExternalIdentityProvisioningRequest:
+def _load_secure_json(path: Path) -> dict[str, Any]:
     try:
         flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
         descriptor = os.open(path, flags)
@@ -39,7 +41,14 @@ def load_request_file(path: Path) -> ExternalIdentityProvisioningRequest:
             raise ProvisioningRequestError(
                 "provisioning request file is invalid"
             ) from exc
-    if not isinstance(payload, dict) or set(payload) != {
+    if not isinstance(payload, dict):
+        raise ProvisioningRequestError("provisioning request fields are invalid")
+    return payload
+
+
+def load_request_file(path: Path) -> ExternalIdentityProvisioningRequest:
+    payload = _load_secure_json(path)
+    if set(payload) != {
         "external_issuer",
         "external_subject",
         "tenant_id",
@@ -48,6 +57,21 @@ def load_request_file(path: Path) -> ExternalIdentityProvisioningRequest:
     }:
         raise ProvisioningRequestError("provisioning request fields are invalid")
     request = ExternalIdentityProvisioningRequest(**payload)
+    request.validate()
+    return request
+
+
+def load_revocation_request_file(path: Path) -> ExternalMembershipRevocationRequest:
+    payload = _load_secure_json(path)
+    if set(payload) != {
+        "external_issuer",
+        "external_subject",
+        "tenant_id",
+        "expected_role",
+        "operator_actor",
+    }:
+        raise ProvisioningRequestError("revocation request fields are invalid")
+    request = ExternalMembershipRevocationRequest(**payload)
     request.validate()
     return request
 
@@ -75,6 +99,31 @@ def provision(request_file: Path, *, dry_run: bool) -> int:
     return 0
 
 
+def revoke(request_file: Path, *, dry_run: bool) -> int:
+    request = load_revocation_request_file(request_file)
+    dsn = os.getenv("RIBEIRA_DATABASE_URL")
+    if not dsn:
+        raise ProvisioningRequestError("RIBEIRA_DATABASE_URL is required")
+    store = PostgresStore(dsn)
+    try:
+        result = IdentityProvisioningService(store).revoke_external_identity_membership(
+            request, dry_run=dry_run
+        )
+    finally:
+        store.close()
+    print("REQUEST_FILE=SECURE")
+    print("IDENTITY=FOUND")
+    print("TENANT=FOUND")
+    print("MEMBERSHIP=FOUND")
+    print(f"ROLE={result.role}")
+    print(f"CURRENT_STATUS={result.current_status}")
+    print(f"ACTION={result.action}")
+    print(f"AUDIT={result.audit}")
+    if dry_run:
+        print("DRY_RUN=PASS")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Private Ribeira OIDC identity administration"
@@ -83,14 +132,22 @@ def main() -> None:
     provision_parser = subcommands.add_parser("provision")
     provision_parser.add_argument("--request-file", type=Path, required=True)
     provision_parser.add_argument("--dry-run", action="store_true")
+    revoke_parser = subcommands.add_parser("revoke")
+    revoke_parser.add_argument("--request-file", type=Path, required=True)
+    revoke_parser.add_argument("--dry-run", action="store_true")
     arguments = parser.parse_args()
     try:
         if arguments.command == "provision":
             raise SystemExit(
                 provision(arguments.request_file, dry_run=arguments.dry_run)
             )
+        if arguments.command == "revoke":
+            raise SystemExit(revoke(arguments.request_file, dry_run=arguments.dry_run))
     except ProvisioningConflict:
         print("PROVISIONING=CONFLICT", file=sys.stderr)
+        raise SystemExit(2)
+    except ProvisioningNotFound:
+        print("PROVISIONING=NOT_FOUND", file=sys.stderr)
         raise SystemExit(2)
     except ProvisioningRequestError:
         print("PROVISIONING=INVALID_REQUEST", file=sys.stderr)

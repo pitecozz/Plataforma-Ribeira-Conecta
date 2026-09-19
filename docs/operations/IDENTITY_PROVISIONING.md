@@ -45,3 +45,31 @@ O papel `VIEWER` permite apenas `property:read` e `geospatial:read`; não
 concede escrita, aprovação de limites, administração de tenant ou privilégio
 de plataforma. O comando não recebe issuer, subject ou tenant como argumentos
 de linha de comando e não imprime esses identificadores, tokens ou segredos.
+
+## Revogação controlada
+
+Revogação preserva `identity_user`, a membership e o audit de provisioning. O
+arquivo privado, também modo `600`, exige o guardrail `expected_role`:
+
+```json
+{
+  "external_issuer": "<configured issuer>",
+  "external_subject": "<provider subject>",
+  "tenant_id": "<authorized tenant>",
+  "expected_role": "VIEWER",
+  "operator_actor": "SYSTEM_OPERATOR"
+}
+```
+
+Valide primeiro sem escrita:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m ribeira_platform.identity_admin revoke \
+  --request-file ~/.config/ribeira/revoke-membership-request.json --dry-run
+```
+
+Sem `--dry-run`, somente a membership `ACTIVE` do tenant e papel esperado faz
+a transição para `REVOKED`, junto ao evento
+`IDENTITY_MEMBERSHIP_REVOKED`. Repetir uma membership já revogada é
+idempotente e não cria um segundo audit. A revogação nunca exclui identity,
+membership, histórico ou desabilita RLS.
