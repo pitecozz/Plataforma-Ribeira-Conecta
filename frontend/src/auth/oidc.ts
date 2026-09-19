@@ -1,4 +1,5 @@
 export type OidcBrowserConfiguration = {
+  audience?: string;
   authorizationEndpoint: string;
   clientId: string;
   redirectUri: string;
@@ -26,7 +27,7 @@ export async function oidcAuthorizationUrl(config: OidcBrowserConfiguration): Pr
   sessionStorage.setItem(verifierKey, verifier);
   sessionStorage.setItem(stateKey, state);
   const url = new URL(config.authorizationEndpoint);
-  url.search = new URLSearchParams({
+  const parameters = new URLSearchParams({
     response_type: "code",
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
@@ -34,7 +35,9 @@ export async function oidcAuthorizationUrl(config: OidcBrowserConfiguration): Pr
     state,
     code_challenge: await challenge(verifier),
     code_challenge_method: "S256",
-  }).toString();
+  });
+  if (config.audience) parameters.set("audience", config.audience);
+  url.search = parameters.toString();
   return url.toString();
 }
 

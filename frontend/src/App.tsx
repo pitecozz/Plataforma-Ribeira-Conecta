@@ -1,4 +1,5 @@
 import { Farm360Api } from "./api/client";
+import { oidcConfigurationFromEnvironment } from "./auth/config";
 import { OidcSession } from "./auth/OidcSession";
 import { PropertyWorkspace } from "./pages/PropertyWorkspace";
 
@@ -19,10 +20,16 @@ export default function App() {
     return workspace(token);
   }
   if (authMode !== "oidc") return <main className="state">Modo de autenticação inválido.</main>;
-  const authorizationEndpoint = import.meta.env.VITE_RIBEIRA_OIDC_AUTHORIZATION_ENDPOINT;
-  const tokenEndpoint = import.meta.env.VITE_RIBEIRA_OIDC_TOKEN_ENDPOINT;
-  const clientId = import.meta.env.VITE_RIBEIRA_OIDC_CLIENT_ID;
-  const redirectUri = import.meta.env.VITE_RIBEIRA_OIDC_REDIRECT_URI;
-  if (!authorizationEndpoint || !tokenEndpoint || !clientId || !redirectUri) return <main className="state">Configuração OIDC necessária.</main>;
-  return <OidcSession config={{ authorizationEndpoint, tokenEndpoint, clientId, redirectUri, scope: "openid profile email" }}>{workspace}</OidcSession>;
+  try {
+    const oidcConfiguration = oidcConfigurationFromEnvironment({
+      VITE_RIBEIRA_OIDC_AUDIENCE: import.meta.env.VITE_RIBEIRA_OIDC_AUDIENCE,
+      VITE_RIBEIRA_OIDC_AUTHORIZATION_ENDPOINT: import.meta.env.VITE_RIBEIRA_OIDC_AUTHORIZATION_ENDPOINT,
+      VITE_RIBEIRA_OIDC_CLIENT_ID: import.meta.env.VITE_RIBEIRA_OIDC_CLIENT_ID,
+      VITE_RIBEIRA_OIDC_REDIRECT_URI: import.meta.env.VITE_RIBEIRA_OIDC_REDIRECT_URI,
+      VITE_RIBEIRA_OIDC_TOKEN_ENDPOINT: import.meta.env.VITE_RIBEIRA_OIDC_TOKEN_ENDPOINT,
+    });
+    return <OidcSession config={oidcConfiguration}>{workspace}</OidcSession>;
+  } catch {
+    return <main className="state">Configuração OIDC necessária.</main>;
+  }
 }
