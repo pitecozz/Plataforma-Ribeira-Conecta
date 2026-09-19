@@ -157,7 +157,14 @@ for _role in ("ANALYST", "OPERATOR", "VIEWER"):
 
 
 class AuthenticationError(PermissionError):
-    pass
+    def __init__(
+        self,
+        message: str = "invalid bearer token",
+        *,
+        failure_code: str = "JWT_INVALID",
+    ) -> None:
+        super().__init__(message)
+        self.failure_code = failure_code
 
 
 class AuthorizationError(PermissionError):
@@ -249,25 +256,55 @@ class JwtIdentityProvider:
                 not self._jwks
                 or now - self._jwks_fetched_at >= self.jwks_cache_ttl_seconds
             ):
-                raise AuthenticationError("OIDC JWKS is unavailable") from exc
+                raise AuthenticationError(
+                    "OIDC JWKS is unavailable", failure_code="JWKS_UNAVAILABLE"
+                ) from exc
 
     def _key_for(self, token: str) -> Any:
         header = jwt.get_unverified_header(token)
         if header.get("alg") not in self.algorithms:
-            raise AuthenticationError("JWT algorithm is not allowed")
+            raise AuthenticationError(
+                "JWT algorithm is not allowed", failure_code="JWT_ALGORITHM_INVALID"
+            )
         if self.public_key:
             return self.public_key
         kid = header.get("kid")
         if not isinstance(kid, str) or not kid:
-            raise AuthenticationError("JWT kid is required for JWKS")
+            raise AuthenticationError(
+                "JWT kid is required for JWKS", failure_code="JWT_KID_UNKNOWN"
+            )
         self._refresh_jwks()
         key = self._jwks.get(kid)
         if key is None:
             self._refresh_jwks(force=True)
             key = self._jwks.get(kid)
         if key is None:
-            raise AuthenticationError("JWT signing key is unknown")
+            raise AuthenticationError(
+                "JWT signing key is unknown", failure_code="JWT_KID_UNKNOWN"
+            )
         return key
+
+    @staticmethod
+    def _failure_code(exc: Exception) -> str:
+        if isinstance(exc, jwt.InvalidSignatureError):
+            return "JWT_SIGNATURE_INVALID"
+        if isinstance(exc, jwt.InvalidIssuerError):
+            return "JWT_ISSUER_INVALID"
+        if isinstance(exc, jwt.InvalidAudienceError):
+            return "JWT_AUDIENCE_INVALID"
+        if isinstance(exc, jwt.ExpiredSignatureError):
+            return "JWT_EXPIRED"
+        if isinstance(exc, jwt.ImmatureSignatureError):
+            return "JWT_NBF_INVALID"
+        if isinstance(exc, jwt.MissingRequiredClaimError):
+            claim = getattr(exc, "claim", "")
+            return {
+                "aud": "JWT_AUDIENCE_INVALID",
+                "sub": "JWT_SUB_INVALID",
+                "iss": "JWT_ISSUER_INVALID",
+                "nbf": "JWT_NBF_INVALID",
+            }.get(claim, "JWT_CLAIMS_INVALID")
+        return "JWT_INVALID"
 
     def authenticate(self, token: str) -> AuthContext:
         try:
@@ -278,14 +315,21 @@ class JwtIdentityProvider:
                 algorithms=list(self.algorithms),
                 issuer=self.issuer,
                 audience=self.audience,
-                options={"require": ["exp", "nbf", "sub", "iss"]},
+                options={"require": ["exp", "sub", "iss"]},
             )
         except (jwt.InvalidTokenError, ValueError) as exc:
-            raise AuthenticationError("invalid bearer token") from exc
+            raise AuthenticationError(
+                "invalid bearer token", failure_code=self._failure_code(exc)
+            ) from exc
+        subject = claims["sub"]
+        if not isinstance(subject, str) or not subject.strip():
+            raise AuthenticationError(
+                "invalid bearer token", failure_code="JWT_SUB_INVALID"
+            )
         # OIDC authenticates an identity only. Tenant roles and authority are
         # resolved locally from persistent membership, never token claims.
         return AuthContext(
-            subject=str(claims["sub"]),
+            subject=subject,
             tenant_id=None,
             issuer=str(claims["iss"]),
             token_id=str(claims["jti"]) if claims.get("jti") else None,

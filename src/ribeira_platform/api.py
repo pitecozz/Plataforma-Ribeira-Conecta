@@ -602,11 +602,16 @@ def create_app(
     async def authentication_error(_: Request, exc: AuthenticationError):
         logger.warning(
             "authentication failed",
-            extra={"status": "DENIED", "failure_code": "AUTHENTICATION_FAILED"},
+            extra={
+                "status": "DENIED",
+                "failure_code": getattr(exc, "failure_code", "AUTHENTICATION_FAILED"),
+            },
         )
         return JSONResponse(
             status_code=401,
-            content={"error": {"code": "INVALID_TOKEN", "message": str(exc)}},
+            content={
+                "error": {"code": "INVALID_TOKEN", "message": "invalid bearer token"}
+            },
             headers={"WWW-Authenticate": "Bearer"},
         )
 
