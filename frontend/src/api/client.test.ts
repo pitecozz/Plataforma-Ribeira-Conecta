@@ -24,4 +24,12 @@ describe("Farm360Api", () => {
     await new Farm360Api("https://api.example", "session-token").portfolio("tenant / id");
     expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/portfolio", { headers: { Authorization: "Bearer session-token" } });
   });
+
+  it("uploads GeoJSON bytes through the tenant-scoped review endpoint without a storage path", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "import" }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const file = new File(["synthetic_test_data"], "boundary.geojson", { type: "application/geo+json" });
+    await new Farm360Api("https://api.example", "session-token").uploadBoundaryImport("tenant", "property", file, "synthetic source", "MANUAL_CONFIRMED", "EPSG:4326");
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant/properties/property/boundary-imports", expect.objectContaining({ method: "POST", body: file, headers: expect.objectContaining({ "X-Boundary-Filename": "boundary.geojson", "X-Boundary-CRS": "EPSG:4326" }) }));
+  });
 });

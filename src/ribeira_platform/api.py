@@ -51,11 +51,18 @@ from .iam import (
 )
 from .identity_access import IdentityAccess
 from .logging_config import configure_structured_logging
-from .models import Property, RuleDefinition, new_id, now_utc, to_jsonable
+from .models import (
+    BoundaryImport,
+    Property,
+    RuleDefinition,
+    new_id,
+    now_utc,
+    to_jsonable,
+)
 from .object_storage import ObjectStorageError
 from .postgres import PostgresStore
 from .raster_tiles import InvalidTile, RasterUnavailable, render_ndvi_tile
-from .service import RibeiraApplication
+from .service import BoundaryImportConflict, RibeiraApplication
 from .storage import SQLiteStore
 
 
@@ -123,6 +130,14 @@ class BoundaryUpdateRequest(BaseModel):
     classification: DataClassification
     reason: str = Field(min_length=1, max_length=500)
     expected_checksum: str = Field(min_length=64, max_length=64)
+
+
+class BoundaryImportReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    review_reason: str = Field(min_length=1, max_length=500)
+    expected_property_checksum: str | None = Field(
+        default=None, min_length=64, max_length=64
+    )
 
 
 class SourceRequest(BaseModel):
@@ -463,12 +478,16 @@ def create_app(
             CORSMiddleware,
             allow_origins=list(settings.cors_origins),
             allow_credentials=False,
-            allow_methods=["GET", "POST"],
+            allow_methods=["GET", "POST", "PUT"],
             allow_headers=[
                 "Authorization",
                 "Content-Type",
                 "X-Request-ID",
                 "X-Correlation-ID",
+                "X-Boundary-Filename",
+                "X-Boundary-CRS",
+                "X-Boundary-Source",
+                "X-Boundary-Classification",
             ],
         )
 
@@ -605,6 +624,15 @@ def create_app(
             content={"error": {"code": "INVALID_VALUE", "message": str(exc)}},
         )
 
+    @app.exception_handler(BoundaryImportConflict)
+    async def boundary_import_conflict(_: Request, exc: BoundaryImportConflict):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {"code": "BOUNDARY_IMPORT_CONFLICT", "message": str(exc)}
+            },
+        )
+
     @app.get("/health/live", tags=["health"])
     async def live():
         return {"status": "ok", "service": "ribeira-platform"}
@@ -682,6 +710,58 @@ def create_app(
             "updated_at": item.updated_at,
             "data_status": status or "UNKNOWN",
         }
+
+    def safe_boundary_import(
+        item: BoundaryImport, *, include_geometry: bool = False
+    ) -> dict[str, Any]:
+        """Return import metadata without leaking a physical storage reference."""
+        result: dict[str, Any] = {
+            "id": item.id,
+            "tenant_id": item.tenant_id,
+            "property_id": item.property_id,
+            "original_filename": item.original_filename,
+            "original_format": item.original_format,
+            "file_size_bytes": item.file_size_bytes,
+            "file_sha256": item.file_sha256,
+            "original_crs": item.original_crs,
+            "detected_crs": item.detected_crs,
+            "target_crs": item.target_crs,
+            "geometry_checksum": item.geometry_checksum,
+            "boundary_source": item.boundary_source,
+            "classification": item.classification.value,
+            "warnings": item.warnings,
+            "status": item.status,
+            "created_by": item.created_by,
+            "expected_property_checksum": item.expected_property_checksum,
+            "created_at": item.created_at,
+            "reviewed_by": item.reviewed_by,
+            "review_reason": item.review_reason,
+            "approved_boundary_version": item.approved_boundary_version,
+            "reviewed_at": item.reviewed_at,
+        }
+        if include_geometry:
+            result["geometry_geojson"] = item.geometry_geojson
+        return result
+
+    async def read_boundary_import_body(request: Request) -> bytes:
+        """Bound raw upload buffering to the configured boundary import size."""
+        maximum = min(settings.max_body_bytes, 1_000_000)
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > maximum:
+                raise HTTPException(
+                    status_code=413,
+                    detail={
+                        "code": "BOUNDARY_IMPORT_TOO_LARGE",
+                        "message": "boundary import exceeds configured limit",
+                    },
+                )
+            chunks.append(chunk)
+        if not chunks:
+            raise ValueError("boundary import body is required")
+        return b"".join(chunks)
 
     def safe_scene(item: Any, assets: list[Any] | None = None) -> dict[str, Any]:
         return {
@@ -896,6 +976,138 @@ def create_app(
             ctx.is_platform_admin,
         )
         return safe_property(item)
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/boundary-imports",
+        status_code=201,
+        tags=["boundary-imports"],
+    )
+    async def create_boundary_import(
+        tenant_id: str,
+        property_id: str,
+        request: Request,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "property:write", tenant_id)
+        filename = request.headers.get("X-Boundary-Filename", "")
+        declared_crs = request.headers.get("X-Boundary-CRS")
+        source = request.headers.get("X-Boundary-Source", "")
+        classification_value = request.headers.get("X-Boundary-Classification", "")
+        try:
+            classification = DataClassification(classification_value)
+        except ValueError as exc:
+            raise ValueError(
+                "X-Boundary-Classification must be an explicit classification"
+            ) from exc
+        item = application.create_boundary_import(
+            tenant_id,
+            property_id,
+            original_filename=filename,
+            payload=await read_boundary_import_body(request),
+            declared_crs=declared_crs,
+            boundary_source=source,
+            classification=classification,
+            actor=ctx.subject,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return safe_boundary_import(item, include_geometry=True)
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/boundary-imports",
+        tags=["boundary-imports"],
+    )
+    async def list_boundary_imports(
+        tenant_id: str, property_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "property:read", tenant_id)
+        return {
+            "items": [
+                safe_boundary_import(item)
+                for item in application.list_boundary_imports(
+                    tenant_id, property_id, platform_admin=ctx.is_platform_admin
+                )
+            ]
+        }
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/boundary-imports/{import_id}",
+        tags=["boundary-imports"],
+    )
+    async def get_boundary_import(
+        tenant_id: str, import_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "property:read", tenant_id)
+        return safe_boundary_import(
+            application.get_boundary_import(
+                tenant_id, import_id, platform_admin=ctx.is_platform_admin
+            ),
+            include_geometry=True,
+        )
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/boundary-imports/{import_id}/preview",
+        tags=["boundary-imports"],
+    )
+    async def preview_boundary_import(
+        tenant_id: str, import_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "property:read", tenant_id)
+        preview = application.preview_boundary_import(
+            tenant_id, import_id, platform_admin=ctx.is_platform_admin
+        )
+        return {
+            "import": safe_boundary_import(preview["import"], include_geometry=True),
+            "current_boundary_checksum": preview["current_boundary_checksum"],
+            "current_area_hectares": preview["current_area_hectares"],
+            "imported_area_hectares": preview["imported_area_hectares"],
+            "absolute_area_delta_hectares": preview["absolute_area_delta_hectares"],
+            "percentage_area_delta": preview["percentage_area_delta"],
+            "current_geometry": preview["current_geometry"],
+            "imported_geometry": preview["imported_geometry"],
+        }
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/boundary-imports/{import_id}/approve",
+        tags=["boundary-imports"],
+    )
+    async def approve_boundary_import(
+        tenant_id: str,
+        import_id: str,
+        payload: BoundaryImportReviewRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "tenant:manage", tenant_id)
+        if payload.expected_property_checksum is None:
+            raise ValueError("expected_property_checksum is required for approval")
+        item = application.approve_boundary_import(
+            tenant_id,
+            import_id,
+            reviewer=ctx.subject,
+            reason=payload.review_reason,
+            expected_property_checksum=payload.expected_property_checksum,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return safe_boundary_import(item, include_geometry=True)
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/boundary-imports/{import_id}/reject",
+        tags=["boundary-imports"],
+    )
+    async def reject_boundary_import(
+        tenant_id: str,
+        import_id: str,
+        payload: BoundaryImportReviewRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "tenant:manage", tenant_id)
+        item = application.reject_boundary_import(
+            tenant_id,
+            import_id,
+            reviewer=ctx.subject,
+            reason=payload.review_reason,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return safe_boundary_import(item, include_geometry=True)
 
     @app.get(
         "/v1/tenants/{tenant_id}/properties/{property_id}/geospatial",

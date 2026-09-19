@@ -14,6 +14,7 @@ from .models import (
     Alert,
     Decision,
     Evidence,
+    BoundaryImport,
     Observation,
     Property,
     RuleDefinition,
@@ -254,6 +255,118 @@ class PostgresStore:
             ),
         )
         return version
+
+    def create_boundary_import(self, item: BoundaryImport) -> BoundaryImport:
+        geometry = json.dumps(item.geometry_geojson) if item.geometry_geojson else None
+        self.connection.execute(
+            """INSERT INTO boundary_import(
+                 id,tenant_id,property_id,original_filename,original_format,file_size_bytes,
+                 file_sha256,object_reference,original_crs,detected_crs,target_crs,geometry,
+                 geometry_checksum,boundary_source,data_classification,warnings,status,created_by,
+                 expected_property_checksum,created_at
+               ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                 CASE WHEN %s::text IS NULL THEN NULL ELSE ST_SetSRID(ST_GeomFromGeoJSON(%s::text),4326) END,
+                 %s,%s,%s,%s::jsonb,%s,%s,%s,%s)""",
+            (
+                item.id,
+                item.tenant_id,
+                item.property_id,
+                item.original_filename,
+                item.original_format,
+                item.file_size_bytes,
+                item.file_sha256,
+                item.object_reference,
+                item.original_crs,
+                item.detected_crs,
+                item.target_crs,
+                geometry,
+                geometry,
+                item.geometry_checksum,
+                item.boundary_source,
+                item.classification.value,
+                json.dumps(item.warnings),
+                item.status,
+                item.created_by,
+                item.expected_property_checksum,
+                item.created_at,
+            ),
+        )
+        return item
+
+    def get_boundary_import(
+        self, tenant_id: str, import_id: str, *, lock: bool = False
+    ) -> BoundaryImport | None:
+        suffix = " FOR UPDATE" if lock else ""
+        row = self._one(
+            """SELECT id,tenant_id,property_id,original_filename,original_format,file_size_bytes,
+                      file_sha256,object_reference,original_crs,detected_crs,target_crs,
+                      ST_AsGeoJSON(geometry) AS geometry_geojson,geometry_checksum,boundary_source,
+                      data_classification,warnings,status,created_by,expected_property_checksum,
+                      created_at,reviewed_by,review_reason,approved_boundary_version,reviewed_at
+               FROM boundary_import WHERE tenant_id=%s AND id=%s"""
+            + suffix,
+            (tenant_id, import_id),
+        )
+        return self._boundary_import_from_row(row) if row else None
+
+    def list_boundary_imports(
+        self, tenant_id: str, property_id: str
+    ) -> list[BoundaryImport]:
+        rows = self.connection.execute(
+            """SELECT id,tenant_id,property_id,original_filename,original_format,file_size_bytes,
+                      file_sha256,object_reference,original_crs,detected_crs,target_crs,
+                      ST_AsGeoJSON(geometry) AS geometry_geojson,geometry_checksum,boundary_source,
+                      data_classification,warnings,status,created_by,expected_property_checksum,
+                      created_at,reviewed_by,review_reason,approved_boundary_version,reviewed_at
+               FROM boundary_import WHERE tenant_id=%s AND property_id=%s
+               ORDER BY created_at DESC, id""",
+            (tenant_id, property_id),
+        ).fetchall()
+        return [self._boundary_import_from_row(row) for row in rows]
+
+    def review_boundary_import(
+        self,
+        item: BoundaryImport,
+        *,
+        status: str,
+        reviewer: str,
+        reason: str,
+        approved_version: int | None = None,
+    ) -> None:
+        self.connection.execute(
+            """UPDATE boundary_import SET status=%s,reviewed_by=%s,review_reason=%s,
+                      reviewed_at=now(),approved_boundary_version=%s
+               WHERE tenant_id=%s AND id=%s""",
+            (status, reviewer, reason, approved_version, item.tenant_id, item.id),
+        )
+
+    def _boundary_import_from_row(self, row: dict[str, Any]) -> BoundaryImport:
+        return BoundaryImport(
+            self._id(row["id"]),
+            self._id(row["tenant_id"]),
+            self._id(row["property_id"]),
+            row["original_filename"],
+            row["original_format"],
+            int(row["file_size_bytes"]),
+            row["file_sha256"],
+            row["object_reference"],
+            row["original_crs"],
+            row["detected_crs"],
+            row["target_crs"],
+            json.loads(row["geometry_geojson"]) if row["geometry_geojson"] else None,
+            row["geometry_checksum"],
+            row["boundary_source"],
+            DataClassification(row["data_classification"]),
+            list(row["warnings"]),
+            row["status"],
+            row["created_by"],
+            row["expected_property_checksum"],
+            row["created_at"].isoformat(),
+            row["reviewed_by"],
+            row["review_reason"],
+            row["approved_boundary_version"],
+            row["reviewed_at"].isoformat() if row["reviewed_at"] else None,
+        )
 
     def create_source(self, item: Source) -> Source:
         if not self.tenant_exists(item.tenant_id):

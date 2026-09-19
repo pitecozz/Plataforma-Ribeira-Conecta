@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 import hashlib
 import json
 from typing import Any
@@ -13,6 +14,7 @@ from .epistemology import DataClassification
 from .geospatial_provider import CopernicusStacAdapter, default_copernicus_registry
 from .geospatial_service import GeospatialApplication
 from .models import (
+    BoundaryImport,
     FetchResult,
     Property,
     RuleDefinition,
@@ -21,9 +23,16 @@ from .models import (
     new_id,
     now_utc,
 )
+from .boundary_imports import (
+    MAX_BOUNDARY_IMPORT_BYTES,
+    parse_geojson_import,
+    validate_import_filename,
+)
 from .sources import HttpJsonSourceAdapter, SourceAdapter
 from .object_storage import LocalObjectStorage
+from .iam import AuthorizationError
 from .storage import SQLiteStore
+from .postgres import PostgresStore
 from .time_utils import parse_aware
 
 
@@ -32,6 +41,10 @@ class IngestionOutcome:
     fetch: FetchResult
     observation_ids: list[str]
     evidence_ids: list[str]
+
+
+class BoundaryImportConflict(ValueError):
+    """A reviewed boundary can no longer be applied without a fresh review."""
 
 
 class RibeiraApplication:
@@ -52,8 +65,9 @@ class RibeiraApplication:
         self.geospatial_provider = geospatial_provider or CopernicusStacAdapter(
             registry
         )
+        self.object_storage = object_storage or LocalObjectStorage()
         self.geospatial = GeospatialApplication(
-            self.store, self.geospatial_provider, object_storage or LocalObjectStorage()
+            self.store, self.geospatial_provider, self.object_storage
         )
 
     def create_tenant(self, name: str) -> Tenant:
@@ -172,6 +186,312 @@ class RibeiraApplication:
                 now_utc(),
             )
         return item
+
+    def create_boundary_import(
+        self,
+        tenant_id: str,
+        property_id: str,
+        *,
+        original_filename: str,
+        payload: bytes,
+        declared_crs: str | None,
+        boundary_source: str,
+        classification: DataClassification,
+        actor: str,
+        platform_admin: bool = False,
+    ) -> BoundaryImport:
+        """Persist original GeoJSON evidence without changing the property.
+
+        The API has already streamed the body through its size limiter.  The
+        second guard makes this service safe for non-HTTP callers as well.
+        """
+        if len(payload) > MAX_BOUNDARY_IMPORT_BYTES:
+            raise ValueError("boundary import exceeds the configured size limit")
+        filename = validate_import_filename(original_filename)
+        if not boundary_source.strip():
+            raise ValueError("boundary_source is required")
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            property_item = self.store.get_property(tenant_id, property_id)
+            if property_item is None:
+                raise LookupError("property not found in tenant")
+
+        parsed = parse_geojson_import(payload, declared_crs)
+        import_id = new_id()
+        # The client filename never becomes a filesystem path.  The opaque key
+        # is deliberately segregated from COGs, products and backup archives.
+        object_reference, stored_checksum = self.object_storage.put_bytes(
+            f"boundary-imports/{tenant_id}/{import_id}/original.geojson",
+            payload,
+            "application/geo+json",
+        )
+        if stored_checksum != parsed.file_sha256:
+            raise RuntimeError("stored boundary import checksum does not match input")
+        warnings = list(parsed.warnings)
+        if parsed.failure_code and parsed.failure_code not in warnings:
+            warnings.append(parsed.failure_code)
+        item = BoundaryImport(
+            import_id,
+            tenant_id,
+            property_id,
+            filename,
+            "GEOJSON",
+            len(payload),
+            parsed.file_sha256,
+            object_reference,
+            parsed.original_crs,
+            parsed.detected_crs,
+            parsed.target_crs,
+            parsed.geometry,
+            parsed.geometry_checksum,
+            boundary_source,
+            classification,
+            warnings,
+            parsed.status,
+            actor,
+            property_item.boundary_checksum,
+            now_utc(),
+        )
+        if not isinstance(self.store, PostgresStore):
+            raise RuntimeError("boundary imports require PostgreSQL")
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            # Re-read so an import cannot accidentally receive a stale
+            # expected checksum while its file was being written.
+            current = self.store.get_property(tenant_id, property_id)
+            if current is None:
+                raise LookupError("property not found in tenant")
+            item = BoundaryImport(
+                **{
+                    **item.__dict__,
+                    "expected_property_checksum": current.boundary_checksum,
+                }
+            )
+            self.store.create_boundary_import(item)
+            self.store.audit(
+                tenant_id,
+                actor,
+                "BOUNDARY_IMPORT_CREATED",
+                "boundary_import",
+                item.id,
+                {
+                    "property_id": property_id,
+                    "status": item.status,
+                    "file_sha256": item.file_sha256,
+                    "geometry_checksum": item.geometry_checksum,
+                    "classification": classification.value,
+                },
+                new_id(),
+                now_utc(),
+            )
+        return item
+
+    def list_boundary_imports(
+        self, tenant_id: str, property_id: str, *, platform_admin: bool = False
+    ) -> list[BoundaryImport]:
+        if not isinstance(self.store, PostgresStore):
+            raise RuntimeError("boundary imports require PostgreSQL")
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            if self.store.get_property(tenant_id, property_id) is None:
+                raise LookupError("property not found in tenant")
+            return self.store.list_boundary_imports(tenant_id, property_id)
+
+    def get_boundary_import(
+        self, tenant_id: str, import_id: str, *, platform_admin: bool = False
+    ) -> BoundaryImport:
+        if not isinstance(self.store, PostgresStore):
+            raise RuntimeError("boundary imports require PostgreSQL")
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            item = self.store.get_boundary_import(tenant_id, import_id)
+            if item is None:
+                raise LookupError("boundary import not found in tenant")
+            return item
+
+    def preview_boundary_import(
+        self, tenant_id: str, import_id: str, *, platform_admin: bool = False
+    ) -> dict[str, Any]:
+        if not isinstance(self.store, PostgresStore):
+            raise RuntimeError("boundary imports require PostgreSQL")
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            item = self.store.get_boundary_import(tenant_id, import_id)
+            if item is None:
+                raise LookupError("boundary import not found in tenant")
+            property_item = self.store.get_property(tenant_id, item.property_id)
+            if property_item is None:
+                raise LookupError("property not found in tenant")
+            current_area = (
+                Decimal(
+                    validate_boundary(
+                        property_item.geometry_geojson, property_item.geometry_crs or ""
+                    )[1]
+                )
+                if property_item.geometry_geojson is not None
+                else None
+            )
+            imported_area = (
+                Decimal(
+                    validate_boundary(item.geometry_geojson, item.target_crs or "")[1]
+                )
+                if item.geometry_geojson is not None and item.target_crs
+                else None
+            )
+            absolute_delta = (
+                abs(imported_area - current_area)
+                if current_area is not None and imported_area is not None
+                else None
+            )
+            percentage_delta = (
+                (absolute_delta / current_area * 100)
+                if absolute_delta is not None and current_area and current_area > 0
+                else None
+            )
+            return {
+                "import": item,
+                "current_boundary_checksum": property_item.boundary_checksum,
+                "current_area_hectares": str(current_area)
+                if current_area is not None
+                else None,
+                "imported_area_hectares": str(imported_area)
+                if imported_area is not None
+                else None,
+                "absolute_area_delta_hectares": str(absolute_delta)
+                if absolute_delta is not None
+                else None,
+                "percentage_area_delta": str(percentage_delta)
+                if percentage_delta is not None
+                else None,
+                "current_geometry": property_item.geometry_geojson,
+                "imported_geometry": item.geometry_geojson,
+            }
+
+    def approve_boundary_import(
+        self,
+        tenant_id: str,
+        import_id: str,
+        *,
+        reviewer: str,
+        reason: str,
+        expected_property_checksum: str,
+        platform_admin: bool = False,
+    ) -> BoundaryImport:
+        if not reason.strip():
+            raise ValueError("review_reason is required")
+        if not isinstance(self.store, PostgresStore):
+            raise RuntimeError("boundary imports require PostgreSQL")
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            item = self.store.get_boundary_import(tenant_id, import_id, lock=True)
+            if item is None:
+                raise LookupError("boundary import not found in tenant")
+            if item.status != "NEEDS_REVIEW":
+                raise BoundaryImportConflict("boundary import is not awaiting review")
+            if item.created_by == reviewer:
+                raise AuthorizationError(
+                    "boundary import requires a different reviewer"
+                )
+            if (
+                item.geometry_geojson is None
+                or item.geometry_checksum is None
+                or item.target_crs != "EPSG:4326"
+            ):
+                raise BoundaryImportConflict(
+                    "boundary import has unresolved CRS or geometry"
+                )
+            if item.expected_property_checksum != expected_property_checksum:
+                raise BoundaryImportConflict(
+                    "review request checksum does not match import"
+                )
+            current = self.store.get_property(tenant_id, item.property_id)
+            if current is None:
+                raise LookupError("property not found in tenant")
+            if current.boundary_checksum != item.expected_property_checksum:
+                raise BoundaryImportConflict(
+                    "property boundary changed while import was under review"
+                )
+            # Existing boundary version locking/audit executes inside this same
+            # tenant transaction; nested store transactions do not commit.
+            updated = self.update_property_boundary(
+                tenant_id,
+                item.property_id,
+                item.geometry_geojson,
+                item.target_crs,
+                item.boundary_source,
+                item.classification,
+                reason,
+                reviewer,
+                item.expected_property_checksum,
+                platform_admin,
+            )
+            version = self.store.connection.execute(
+                "SELECT max(version) AS version FROM property_boundary_version "
+                "WHERE tenant_id=%s AND property_id=%s",
+                (tenant_id, item.property_id),
+            ).fetchone()
+            if version is None or version["version"] is None:
+                raise RuntimeError("approved boundary version was not persisted")
+            self.store.review_boundary_import(
+                item,
+                status="APPROVED",
+                reviewer=reviewer,
+                reason=reason,
+                approved_version=int(version["version"]),
+            )
+            self.store.audit(
+                tenant_id,
+                reviewer,
+                "BOUNDARY_IMPORT_APPROVED",
+                "boundary_import",
+                item.id,
+                {
+                    "property_id": item.property_id,
+                    "boundary_version": int(version["version"]),
+                    "checksum": updated.boundary_checksum,
+                },
+                new_id(),
+                now_utc(),
+            )
+            approved = self.store.get_boundary_import(tenant_id, item.id)
+            if approved is None:
+                raise RuntimeError("approved boundary import was not persisted")
+            return approved
+
+    def reject_boundary_import(
+        self,
+        tenant_id: str,
+        import_id: str,
+        *,
+        reviewer: str,
+        reason: str,
+        platform_admin: bool = False,
+    ) -> BoundaryImport:
+        if not reason.strip():
+            raise ValueError("review_reason is required")
+        if not isinstance(self.store, PostgresStore):
+            raise RuntimeError("boundary imports require PostgreSQL")
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            item = self.store.get_boundary_import(tenant_id, import_id, lock=True)
+            if item is None:
+                raise LookupError("boundary import not found in tenant")
+            if item.status != "NEEDS_REVIEW":
+                raise BoundaryImportConflict("boundary import is not awaiting review")
+            if item.created_by == reviewer:
+                raise AuthorizationError(
+                    "boundary import requires a different reviewer"
+                )
+            self.store.review_boundary_import(
+                item, status="REJECTED", reviewer=reviewer, reason=reason
+            )
+            self.store.audit(
+                tenant_id,
+                reviewer,
+                "BOUNDARY_IMPORT_REJECTED",
+                "boundary_import",
+                item.id,
+                {"property_id": item.property_id},
+                new_id(),
+                now_utc(),
+            )
+            rejected = self.store.get_boundary_import(tenant_id, item.id)
+            if rejected is None:
+                raise RuntimeError("rejected boundary import was not persisted")
+            return rejected
 
     def create_rule(self, rule: RuleDefinition) -> RuleDefinition:
         parse_aware(rule.valid_from)

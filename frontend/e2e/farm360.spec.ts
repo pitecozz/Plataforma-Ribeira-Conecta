@@ -75,6 +75,11 @@ test("Farm 360 validates temporal delta, layer gates, provenance, and auth bound
   await page.goto("/", { waitUntil: "networkidle", timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Portfólio de propriedades" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Linha do tempo" })).toBeVisible();
+  // The validation tenant remains read-only during this real-data E2E. The
+  // synthetic approval lifecycle is exercised against isolated tenants in
+  // PostgreSQL integration tests; here we verify the private UI exposes the
+  // audited GeoJSON-only entry point without changing validation evidence.
+  await expect(page.getByRole("heading", { name: "Importar limite" })).toBeVisible();
   await settleNetwork(page, records);
   const portfolioRecord = jsonRecords(records, "/portfolio")[0];
   expect(portfolioRecord?.json).toBeTruthy();

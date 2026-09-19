@@ -41,9 +41,25 @@ class LocalObjectStorage:
     def put_bytes(self, key: str, payload: bytes, media_type: str) -> tuple[str, str]:
         if len(payload) > self.max_object_bytes:
             raise ObjectStorageError("object exceeds configured size limit")
+        # Keep the same atomic-replace property as ``put_file``.  Import
+        # evidence must never expose a partially written original file after a
+        # process interruption.
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(payload)
+        temporary_name: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=path.parent, prefix=f".{path.name}.", delete=False
+            ) as temporary:
+                temporary_name = temporary.name
+                temporary.write(payload)
+                temporary.flush()
+                os.fsync(temporary.fileno())
+            os.replace(temporary_name, path)
+            temporary_name = None
+        finally:
+            if temporary_name is not None:
+                Path(temporary_name).unlink(missing_ok=True)
         checksum = hashlib.sha256(payload).hexdigest()
         return f"local://{key}", checksum
 

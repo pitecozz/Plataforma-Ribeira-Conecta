@@ -45,6 +45,34 @@ class Property:
 
 
 @dataclass(frozen=True)
+class BoundaryImport:
+    id: str
+    tenant_id: str
+    property_id: str
+    original_filename: str
+    original_format: str
+    file_size_bytes: int
+    file_sha256: str
+    object_reference: str
+    original_crs: str | None
+    detected_crs: str | None
+    target_crs: str | None
+    geometry_geojson: dict[str, Any] | None
+    geometry_checksum: str | None
+    boundary_source: str
+    classification: DataClassification
+    warnings: list[str]
+    status: str
+    created_by: str
+    expected_property_checksum: str | None
+    created_at: str
+    reviewed_by: str | None = None
+    review_reason: str | None = None
+    approved_boundary_version: int | None = None
+    reviewed_at: str | None = None
+
+
+@dataclass(frozen=True)
 class Source:
     id: str
     tenant_id: str
