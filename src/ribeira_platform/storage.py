@@ -164,7 +164,8 @@ class SQLiteStore:
             is not None
         )
 
-    def create_property(self, item: Property) -> Property:
+    def create_property(self, item: Property, *, actor: str = "user") -> Property:
+        del actor  # SQLite has no boundary-history table; retain API parity in tests.
         if not self.tenant_exists(item.tenant_id):
             raise TenantBoundaryError("tenant does not exist")
         self._insert(

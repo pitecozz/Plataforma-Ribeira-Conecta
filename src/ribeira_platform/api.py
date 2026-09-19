@@ -115,6 +115,16 @@ class PropertyRequest(BaseModel):
     classification: DataClassification = DataClassification.MANUAL_CONFIRMED
 
 
+class BoundaryUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    geometry_geojson: dict[str, Any]
+    geometry_crs: str = Field(min_length=1, max_length=32)
+    boundary_source: str = Field(min_length=1, max_length=500)
+    classification: DataClassification
+    reason: str = Field(min_length=1, max_length=500)
+    expected_checksum: str = Field(min_length=64, max_length=64)
+
+
 class SourceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=200)
@@ -665,9 +675,11 @@ def create_app(
             "geometry_geojson": item.geometry_geojson,
             "geometry_crs": item.geometry_crs,
             "boundary_source": item.boundary_source,
+            "boundary_checksum": item.boundary_checksum,
             "area_hectares": property_area_hectares(item),
             "classification": item.classification.value,
             "created_at": item.created_at,
+            "updated_at": item.updated_at,
             "data_status": status or "UNKNOWN",
         }
 
@@ -778,6 +790,7 @@ def create_app(
             platform_admin=ctx.is_platform_admin,
             boundary_source=payload.boundary_source,
             classification=payload.classification,
+            actor=ctx.subject,
         )
         return safe_property(item)
 
@@ -787,6 +800,64 @@ def create_app(
         with application.store.tenant_transaction(tenant_id, ctx.is_platform_admin):
             properties = application.store.list_properties(tenant_id)
         return {"items": [safe_property(item) for item in properties]}
+
+    @app.get("/v1/tenants/{tenant_id}/portfolio", tags=["portfolio"])
+    async def tenant_portfolio(tenant_id: str, ctx: AuthContext = Depends(context)):
+        """Tenant-scoped operational summary; absent source values remain null."""
+        authorize(ctx, "property:read", tenant_id)
+        with application.store.tenant_transaction(tenant_id, ctx.is_platform_admin):
+            properties = application.store.list_properties(tenant_id)
+            jobs = application.store.connection.execute(
+                "SELECT property_id,status,COUNT(*) AS count FROM processing_job WHERE tenant_id=%s GROUP BY property_id,status",
+                (tenant_id,),
+            ).fetchall()
+            scenes = application.store.connection.execute(
+                """SELECT DISTINCT ON (property_id) property_id, acquisition_datetime
+                   FROM satellite_scene WHERE tenant_id=%s
+                   ORDER BY property_id, acquisition_datetime DESC""",
+                (tenant_id,),
+            ).fetchall()
+            products = application.store.connection.execute(
+                """SELECT DISTINCT ON (property_id) property_id,id,created_at,output_reference
+                   FROM derived_product
+                   WHERE tenant_id=%s AND product_type='NDVI'
+                   ORDER BY property_id, created_at DESC""",
+                (tenant_id,),
+            ).fetchall()
+        job_status: dict[str, dict[str, int]] = {}
+        for job in jobs:
+            job_status.setdefault(str(job["property_id"]), {})[str(job["status"])] = (
+                int(job["count"])
+            )
+        latest_scene = {str(row["property_id"]): row for row in scenes}
+        latest_product = {str(row["property_id"]): row for row in products}
+        items: list[dict[str, Any]] = []
+        for item in properties:
+            scene = latest_scene.get(item.id)
+            product = latest_product.get(item.id)
+            status = (
+                "READY"
+                if product and product["output_reference"]
+                else ("DADO_INSUFICIENTE" if scene else "UNKNOWN")
+            )
+            record = safe_property(item, status)
+            record.update(
+                {
+                    "latest_scene_at": scene["acquisition_datetime"].isoformat()
+                    if scene
+                    else None,
+                    "latest_ndvi_at": product["created_at"].isoformat()
+                    if product
+                    else None,
+                    "latest_ndvi_id": str(product["id"]) if product else None,
+                    "provenance_available": bool(
+                        product and product["output_reference"]
+                    ),
+                    "jobs": job_status.get(item.id, {}),
+                }
+            )
+            items.append(record)
+        return {"items": items}
 
     @app.get("/v1/tenants/{tenant_id}/properties/{property_id}", tags=["farm-360"])
     async def get_property(
@@ -800,6 +871,30 @@ def create_app(
         products = application.geospatial.list_products(tenant_id, property_id)
         scenes = application.geospatial.list_scenes(tenant_id, property_id)
         return safe_property(item, data_status(products, scenes))
+
+    @app.put(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/boundary", tags=["properties"]
+    )
+    async def update_property_boundary(
+        tenant_id: str,
+        property_id: str,
+        payload: BoundaryUpdateRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "property:write", tenant_id)
+        item = application.update_property_boundary(
+            tenant_id,
+            property_id,
+            payload.geometry_geojson,
+            payload.geometry_crs,
+            payload.boundary_source,
+            payload.classification,
+            payload.reason,
+            ctx.subject,
+            payload.expected_checksum,
+            ctx.is_platform_admin,
+        )
+        return safe_property(item)
 
     @app.get(
         "/v1/tenants/{tenant_id}/properties/{property_id}/geospatial",

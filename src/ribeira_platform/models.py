@@ -40,6 +40,8 @@ class Property:
     classification: DataClassification = DataClassification.MANUAL_CONFIRMED
     created_at: str = field(default_factory=now_utc)
     boundary_source: str | None = None
+    boundary_checksum: str | None = None
+    updated_at: str | None = None
 
 
 @dataclass(frozen=True)

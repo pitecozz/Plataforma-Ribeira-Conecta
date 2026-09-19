@@ -5,6 +5,7 @@ import os
 import unittest
 
 import psycopg
+from psycopg import pq
 
 from ribeira_platform.audit_context import request_context
 from ribeira_platform.business import (
@@ -56,7 +57,18 @@ class PostgresIntegrationTests(unittest.TestCase):
             property = self.application.create_property(
                 tenant.id,
                 "PG property",
-                {"type": "Point", "coordinates": [-47.0, -24.0]},
+                {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [-47.0, -24.0],
+                            [-46.99, -24.0],
+                            [-46.99, -24.01],
+                            [-47.0, -24.01],
+                            [-47.0, -24.0],
+                        ]
+                    ],
+                },
                 "EPSG:4326",
                 boundary_source="MANUAL_CONFIRMED integration boundary",
             )
@@ -104,7 +116,10 @@ class PostgresIntegrationTests(unittest.TestCase):
                 (property.id,),
             ).fetchone()
             self.assertEqual(row["srid"], 4326)
-            self.assertEqual(row["wkt"], "POINT(-47 -24)")
+            self.assertEqual(
+                row["wkt"],
+                "POLYGON((-47 -24,-46.99 -24,-46.99 -24.01,-47 -24.01,-47 -24))",
+            )
             self.assertEqual(
                 self.store.get_property(tenant.id, property.id).boundary_source,
                 "MANUAL_CONFIRMED integration boundary",
@@ -115,6 +130,12 @@ class PostgresIntegrationTests(unittest.TestCase):
             ).fetchone()
             self.assertEqual(audit["request_id"], "req-pg")
             self.assertEqual(audit["correlation_id"], "corr-pg")
+
+    def test_ready_closes_its_read_transaction(self) -> None:
+        self.assertTrue(self.store.ready())
+        self.assertEqual(
+            self.store.connection.info.transaction_status, pq.TransactionStatus.IDLE
+        )
 
     def test_rls_denies_cross_tenant_read_write_and_references(self) -> None:
         tenant_a = self.create_test_tenant("Tenant A PG")

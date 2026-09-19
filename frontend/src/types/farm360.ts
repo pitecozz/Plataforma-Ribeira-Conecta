@@ -9,11 +9,14 @@ export interface PropertyRecord {
   geometry_geojson: Geometry | null;
   geometry_crs: string | null;
   boundary_source: string | null;
+  boundary_checksum?: string | null;
   area_hectares: string | null;
   classification: string;
   created_at: string;
+  updated_at?: string | null;
   data_status: DataStatus;
 }
+export interface PortfolioProperty extends PropertyRecord { latest_scene_at: string | null; latest_ndvi_at: string | null; latest_ndvi_id: string | null; provenance_available: boolean; jobs: Record<string, number>; }
 
 export interface SatelliteAsset { id: string; asset_key: string; title: string | null; checksum: string | null; download_status: string; roles?: string[]; bytes_downloaded?: number | null; }
 export interface Scene { id: string; property_id: string; provider: string; collection: string; scene_id: string; acquisition_datetime: string; cloud_cover: string | null; checksum: string; source_status: string; assets: SatelliteAsset[]; }

@@ -21,7 +21,9 @@ def delete_test_tenants(tenant_ids: list[str]) -> None:
         return
     dsn = os.getenv("RIBEIRA_TEST_MIGRATION_DATABASE_URL")
     if not dsn:
-        raise RuntimeError("RIBEIRA_TEST_MIGRATION_DATABASE_URL is required for cleanup")
+        raise RuntimeError(
+            "RIBEIRA_TEST_MIGRATION_DATABASE_URL is required for cleanup"
+        )
     with psycopg.connect(dsn, row_factory=dict_row) as connection:
         # Job output and derived product deliberately reference each other for
         # durable provenance. Break that cycle only for test-created tenants

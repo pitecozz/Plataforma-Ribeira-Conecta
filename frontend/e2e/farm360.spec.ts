@@ -58,7 +58,9 @@ function jsonRecords(records: JsonRecord[], pathPart: string): JsonRecord[] {
 }
 
 async function moveMap(page: Page): Promise<void> {
-  const canvas = page.locator(".maplibregl-canvas");
+  // The portfolio map and Farm 360 map are both legitimate MapLibre canvases.
+  // Raster assertions belong to the selected property's Farm 360 map.
+  const canvas = page.locator(".farm360 .maplibregl-canvas");
   await canvas.click({ position: { x: 400, y: 300 } });
   await page.mouse.wheel(0, -450);
   await page.waitForTimeout(1000);
@@ -71,8 +73,12 @@ async function saveEvidence(page: Page, testInfo: TestInfo, name: string): Promi
 test("Farm 360 validates temporal delta, layer gates, provenance, and auth boundaries", async ({ page }, testInfo) => {
   const records = await captureNetwork(page);
   await page.goto("/", { waitUntil: "networkidle", timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Portfólio de propriedades" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Linha do tempo" })).toBeVisible();
   await settleNetwork(page, records);
+  const portfolioRecord = jsonRecords(records, "/portfolio")[0];
+  expect(portfolioRecord?.json).toBeTruthy();
+  await expect(page.getByText("TEST_AOI_ONLY permanece dado de validação.", { exact: false })).toBeVisible();
   const webgl = await page.evaluate(() => {
     const canvas = document.createElement("canvas");
     const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");

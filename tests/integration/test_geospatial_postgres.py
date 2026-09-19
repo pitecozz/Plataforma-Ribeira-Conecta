@@ -118,7 +118,9 @@ class GeospatialPostgresTests(unittest.TestCase):
         self.repo = self.application.geospatial.repository
         self._test_tenant_ids: list[str] = []
 
-    def create_test_tenant(self, name: str, application: RibeiraApplication | None = None):
+    def create_test_tenant(
+        self, name: str, application: RibeiraApplication | None = None
+    ):
         tenant = (application or self.application).create_tenant(name)
         self._test_tenant_ids.append(tenant.id)
         return tenant
@@ -412,7 +414,9 @@ class GeospatialPostgresTests(unittest.TestCase):
             application.geospatial = GeospatialApplication(
                 self.store, provider, storage, asset_adapter=adapter
             )
-            tenant_a = self.create_test_tenant("Synthetic geospatial tenant", application)
+            tenant_a = self.create_test_tenant(
+                "Synthetic geospatial tenant", application
+            )
             tenant_b = self.create_test_tenant("Other geospatial tenant", application)
             property_a = application.create_property(
                 tenant_a.id, "Synthetic AOI", polygon, "EPSG:4326"

@@ -7,6 +7,7 @@ from typing import Any
 
 from .engine import DecisionEngine, EvidenceEngine
 from .business_service import BusinessApplication
+from .boundaries import validate_boundary
 from .epistemology import IngestionStatus
 from .epistemology import DataClassification
 from .geospatial_provider import CopernicusStacAdapter, default_copernicus_registry
@@ -70,7 +71,11 @@ class RibeiraApplication:
         platform_admin: bool = False,
         boundary_source: str | None = None,
         classification: DataClassification = DataClassification.MANUAL_CONFIRMED,
+        actor: str = "user",
     ) -> Property:
+        checksum = None
+        if geometry_geojson is not None:
+            _, _, checksum = validate_boundary(geometry_geojson, geometry_crs or "")
         property = Property(
             new_id(),
             tenant_id,
@@ -79,12 +84,13 @@ class RibeiraApplication:
             geometry_crs,
             classification,
             boundary_source=boundary_source,
+            boundary_checksum=checksum,
         )
         with self.store.tenant_transaction(tenant_id, platform_admin):
-            self.store.create_property(property)
+            self.store.create_property(property, actor=actor)
             self.store.audit(
                 tenant_id,
-                "user",
+                actor,
                 "PROPERTY_CREATED",
                 "property",
                 property.id,
@@ -110,6 +116,62 @@ class RibeiraApplication:
         with self.store.tenant_transaction(tenant_id, platform_admin):
             self.store.create_source(source)
         return source
+
+    def update_property_boundary(
+        self,
+        tenant_id: str,
+        property_id: str,
+        geometry: dict[str, Any],
+        crs: str,
+        source: str,
+        classification: DataClassification,
+        reason: str,
+        actor: str,
+        expected_checksum: str | None,
+        platform_admin: bool = False,
+    ) -> Property:
+        _, _, checksum = validate_boundary(geometry, crs)
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            current = self.store.get_property(tenant_id, property_id)
+            if current is None:
+                raise LookupError("property not found in tenant")
+            item = Property(
+                property_id,
+                tenant_id,
+                current.name,
+                geometry,
+                crs,
+                classification,
+                current.created_at,
+                source,
+                checksum,
+                now_utc(),
+            )
+            if not hasattr(self.store, "update_property_boundary"):
+                raise RuntimeError("boundary versioning requires PostgreSQL")
+            self.store.update_property_boundary(
+                item,
+                actor=actor,
+                reason=reason,
+                effective_at=item.updated_at or now_utc(),
+                expected_checksum=expected_checksum,
+            )
+            self.store.audit(
+                tenant_id,
+                actor,
+                "BOUNDARY_CHANGED",
+                "property",
+                property_id,
+                {
+                    "previous_checksum": current.boundary_checksum,
+                    "checksum": checksum,
+                    "reason": reason,
+                    "classification": classification.value,
+                },
+                new_id(),
+                now_utc(),
+            )
+        return item
 
     def create_rule(self, rule: RuleDefinition) -> RuleDefinition:
         parse_aware(rule.valid_from)

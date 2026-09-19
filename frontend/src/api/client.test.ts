@@ -17,4 +17,11 @@ describe("Farm360Api", () => {
     await new Farm360Api("https://api.example", "session-token").createProperty("tenant", payload);
     expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant/properties", { method: "POST", headers: { Authorization: "Bearer session-token", "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   });
+
+  it("loads the portfolio only through the encoded tenant-scoped endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await new Farm360Api("https://api.example", "session-token").portfolio("tenant / id");
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/portfolio", { headers: { Authorization: "Bearer session-token" } });
+  });
 });

@@ -19,6 +19,7 @@ from .models import (
     RuleDefinition,
     Source,
     Tenant,
+    new_id,
 )
 
 
@@ -67,7 +68,11 @@ class PostgresStore:
             yield self
 
     def ready(self) -> bool:
-        row = self.connection.execute("SELECT 1 AS ready").fetchone()
+        # psycopg starts a transaction for SELECT when autocommit is disabled.
+        # Health probes must close it, otherwise a long-lived API connection can
+        # retain relation locks as ``idle in transaction``.
+        with self.transaction():
+            row = self.connection.execute("SELECT 1 AS ready").fetchone()
         return row is not None and row["ready"] == 1
 
     def _one(self, sql: str, params: Iterable[Any] = ()) -> dict[str, Any] | None:
@@ -87,7 +92,7 @@ class PostgresStore:
         )
         return tenant
 
-    def create_property(self, item: Property) -> Property:
+    def create_property(self, item: Property, *, actor: str = "user") -> Property:
         if not self.tenant_exists(item.tenant_id):
             raise PermissionError("tenant does not exist or is outside context")
         if item.geometry_crs and item.geometry_crs.upper() not in {
@@ -103,8 +108,8 @@ class PostgresStore:
             else None
         )
         self.connection.execute(
-            """INSERT INTO property(id,tenant_id,name,geometry,geometry_crs,boundary_source,data_classification,created_at)
-               VALUES (%s,%s,%s,CASE WHEN %s::text IS NULL THEN NULL ELSE ST_SetSRID(ST_GeomFromGeoJSON(%s::text),4326) END,%s,%s,%s,%s)""",
+            """INSERT INTO property(id,tenant_id,name,geometry,geometry_crs,boundary_source,boundary_checksum,data_classification,created_at)
+               VALUES (%s,%s,%s,CASE WHEN %s::text IS NULL THEN NULL ELSE ST_SetSRID(ST_GeomFromGeoJSON(%s::text),4326) END,%s,%s,%s,%s,%s)""",
             (
                 item.id,
                 item.tenant_id,
@@ -113,15 +118,37 @@ class PostgresStore:
                 geometry,
                 item.geometry_crs,
                 item.boundary_source,
+                item.boundary_checksum,
                 item.classification.value,
                 item.created_at,
             ),
         )
+        if (
+            item.geometry_geojson is not None
+            and item.boundary_source
+            and item.boundary_checksum
+        ):
+            self.connection.execute(
+                """INSERT INTO property_boundary_version(id,tenant_id,property_id,version,geometry,geometry_crs,boundary_source,data_classification,checksum,actor,effective_at)
+                   VALUES (%s,%s,%s,1,ST_SetSRID(ST_GeomFromGeoJSON(%s),4326),%s,%s,%s,%s,%s,%s)""",
+                (
+                    new_id(),
+                    item.tenant_id,
+                    item.id,
+                    geometry,
+                    item.geometry_crs,
+                    item.boundary_source,
+                    item.classification.value,
+                    item.boundary_checksum,
+                    actor,
+                    item.created_at,
+                ),
+            )
         return item
 
     def get_property(self, tenant_id: str, property_id: str) -> Property | None:
         row = self._one(
-            "SELECT id,tenant_id,name,ST_AsGeoJSON(geometry) AS geometry_geojson,geometry_crs,data_classification,created_at,boundary_source FROM property WHERE tenant_id=%s AND id=%s",
+            "SELECT id,tenant_id,name,ST_AsGeoJSON(geometry) AS geometry_geojson,geometry_crs,data_classification,created_at,boundary_source,boundary_checksum,updated_at FROM property WHERE tenant_id=%s AND id=%s",
             (tenant_id, property_id),
         )
         if row is None:
@@ -135,18 +162,98 @@ class PostgresStore:
             DataClassification(row["data_classification"]),
             row["created_at"].isoformat(),
             row["boundary_source"],
+            row["boundary_checksum"],
+            row["updated_at"].isoformat() if row["updated_at"] else None,
         )
 
     def list_properties(self, tenant_id: str) -> list[Property]:
         rows = self.connection.execute(
-            "SELECT id FROM property WHERE tenant_id=%s ORDER BY created_at DESC, id",
+            """SELECT id,tenant_id,name,ST_AsGeoJSON(geometry) AS geometry_geojson,
+                      geometry_crs,data_classification,created_at,boundary_source,
+                      boundary_checksum,updated_at
+               FROM property WHERE tenant_id=%s ORDER BY created_at DESC, id""",
             (tenant_id,),
         ).fetchall()
-        return [
-            item
-            for row in rows
-            if (item := self.get_property(tenant_id, self._id(row["id"]))) is not None
-        ]
+        return [self._property_from_row(row) for row in rows]
+
+    def _property_from_row(self, row: dict[str, Any]) -> Property:
+        """Translate a property row without issuing a per-property query."""
+        return Property(
+            self._id(row["id"]),
+            self._id(row["tenant_id"]),
+            row["name"],
+            json.loads(row["geometry_geojson"]) if row["geometry_geojson"] else None,
+            row["geometry_crs"],
+            DataClassification(row["data_classification"]),
+            row["created_at"].isoformat(),
+            row["boundary_source"],
+            row["boundary_checksum"],
+            row["updated_at"].isoformat() if row["updated_at"] else None,
+        )
+
+    def update_property_boundary(
+        self,
+        item: Property,
+        *,
+        actor: str,
+        reason: str,
+        effective_at: str,
+        expected_checksum: str | None,
+    ) -> int:
+        # Lock the current property before allocating a version. This makes
+        # max(version)+1 serial for one property while retaining independent
+        # concurrency across different tenant/property pairs.
+        locked = self.connection.execute(
+            "SELECT id FROM property WHERE tenant_id=%s AND id=%s FOR UPDATE",
+            (item.tenant_id, item.id),
+        ).fetchone()
+        if locked is None:
+            raise LookupError("property not found in tenant")
+        current = self.get_property(item.tenant_id, item.id)
+        if current is None:
+            raise LookupError("property not found in tenant")
+        if current.boundary_checksum != expected_checksum:
+            raise ValueError("boundary checksum no longer matches the current version")
+        version_row = self.connection.execute(
+            "SELECT coalesce(max(version), 0) + 1 AS version FROM property_boundary_version WHERE tenant_id=%s AND property_id=%s",
+            (item.tenant_id, item.id),
+        ).fetchone()
+        if version_row is None:
+            raise RuntimeError("boundary version could not be allocated")
+        version = int(version_row["version"])
+        geometry = json.dumps(item.geometry_geojson)
+        self.connection.execute(
+            """INSERT INTO property_boundary_version(id,tenant_id,property_id,version,geometry,geometry_crs,boundary_source,data_classification,checksum,reason,actor,effective_at)
+               VALUES (%s,%s,%s,%s,ST_SetSRID(ST_GeomFromGeoJSON(%s),4326),%s,%s,%s,%s,%s,%s,%s)""",
+            (
+                new_id(),
+                item.tenant_id,
+                item.id,
+                version,
+                geometry,
+                item.geometry_crs,
+                item.boundary_source,
+                item.classification.value,
+                item.boundary_checksum,
+                reason,
+                actor,
+                effective_at,
+            ),
+        )
+        self.connection.execute(
+            """UPDATE property SET geometry=ST_SetSRID(ST_GeomFromGeoJSON(%s),4326),geometry_crs=%s,boundary_source=%s,boundary_checksum=%s,data_classification=%s,updated_at=%s WHERE tenant_id=%s AND id=%s""",
+            (
+                geometry,
+                item.geometry_crs,
+                item.boundary_source,
+                item.boundary_checksum,
+                item.classification.value,
+                effective_at,
+                item.tenant_id,
+                item.id,
+            ),
+        )
+        return version
 
     def create_source(self, item: Source) -> Source:
         if not self.tenant_exists(item.tenant_id):

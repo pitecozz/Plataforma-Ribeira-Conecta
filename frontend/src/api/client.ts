@@ -1,4 +1,4 @@
-import type { NdviProduct, ProcessingJob, PropertyCreate, PropertyRecord, Provenance, Scene, SearchResult, TemporalComparison, TimelineItem } from "../types/farm360";
+import type { NdviProduct, PortfolioProperty, ProcessingJob, PropertyCreate, PropertyRecord, Provenance, Scene, SearchResult, TemporalComparison, TimelineItem } from "../types/farm360";
 
 export class ApiError extends Error { constructor(public readonly status: number, message: string) { super(message); } }
 
@@ -17,6 +17,7 @@ export class Farm360Api {
   }
 
   properties(tenantId: string) { return this.get<{ items: PropertyRecord[] }>(`/v1/tenants/${encodeURIComponent(tenantId)}/properties`); }
+  portfolio(tenantId: string) { return this.get<{ items: PortfolioProperty[] }>(`/v1/tenants/${encodeURIComponent(tenantId)}/portfolio`); }
   createProperty(tenantId: string, payload: PropertyCreate) { return this.post<PropertyRecord>(`/v1/tenants/${encodeURIComponent(tenantId)}/properties`, payload); }
   property(tenantId: string, propertyId: string) { return this.get<PropertyRecord>(`/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}`); }
   scenes(tenantId: string, propertyId: string) { return this.get<{ items: Scene[] }>(`/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/scenes`); }

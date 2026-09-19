@@ -1,0 +1,17 @@
+.portfolio-map {
+  border-bottom: 0;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.portfolio-map h3 {
+  color: #4b5d51;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.portfolio-map .map-canvas {
+  border: 1px solid #d9e2da;
+  border-radius: 5px;
+  height: 180px;
+}
