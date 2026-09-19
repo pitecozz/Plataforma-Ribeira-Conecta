@@ -133,13 +133,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     ),
     "VIEWER": frozenset(
         {
-            "tenant:read",
             "property:read",
-            "source:read",
-            "decision:read",
-            "commercial:read",
-            "contract:read",
-            "asset:read",
         }
     ),
 }
