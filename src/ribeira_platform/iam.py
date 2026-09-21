@@ -134,6 +134,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "VIEWER": frozenset(
         {
             "property:read",
+            "decision:read",
         }
     ),
 }

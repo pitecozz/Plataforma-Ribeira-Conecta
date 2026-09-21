@@ -1279,6 +1279,27 @@ def create_app(
         )
         return to_jsonable(result)
 
+    @app.get(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/decisions",
+        tags=["decisions"],
+    )
+    async def decision_history(
+        tenant_id: str,
+        property_id: str,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "decision:read", tenant_id)
+        return {
+            "property_id": property_id,
+            "items": to_jsonable(
+                application.decision_history_for_property(
+                    tenant_id,
+                    property_id,
+                    platform_admin=ctx.is_platform_admin,
+                )
+            ),
+        }
+
     @app.post(
         "/v1/tenants/{tenant_id}/actions/{action_id}/outcome",
         tags=["actions"],

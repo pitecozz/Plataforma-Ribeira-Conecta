@@ -214,6 +214,13 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(
             response.json(), {"id": result.action.id, "status": "COMPLETED"}
         )
+        history = self.client.get(
+            f"/v1/tenants/{tenant.id}/properties/{property.id}/decisions",
+            headers={"Authorization": "Bearer platform-secret-dev-only"},
+        )
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(len(history.json()["items"]), 1)
+        self.assertEqual(history.json()["items"][0]["action"]["status"], "COMPLETED")
 
     def test_pilot_feedback_is_authenticated_audited_and_property_scoped(self) -> None:
         tenant = self.application.create_tenant("Pilot feedback API tenant")

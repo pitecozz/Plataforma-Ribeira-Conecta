@@ -628,6 +628,18 @@ class RibeiraApplication:
         with self.store.transaction():
             return self.decisions.evaluate(tenant_id, property, actor)
 
+    def decision_history_for_property(
+        self,
+        tenant_id: str,
+        property_id: str,
+        *,
+        platform_admin: bool = False,
+    ) -> list[dict[str, Any]]:
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            if self.store.get_property(tenant_id, property_id) is None:
+                raise LookupError("property not found in tenant")
+            return self.store.decision_history_for_property(tenant_id, property_id)
+
     def complete_action(
         self,
         tenant_id: str,

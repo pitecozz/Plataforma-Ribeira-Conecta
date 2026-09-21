@@ -4,6 +4,7 @@ import type {
   DigitalTwinAsset,
   NdviProduct,
   PropertyRecord,
+  PropertyDecision,
   Provenance,
   Scene,
   TemporalComparison,
@@ -13,6 +14,7 @@ import { MapCanvas } from "../features/map/MapCanvas";
 import { AssetPanel } from "../features/assets/AssetPanel";
 import { IntelligenceReportPanel } from "../features/report/IntelligenceReportPanel";
 import { PilotFeedbackPanel } from "../features/feedback/PilotFeedbackPanel";
+import { RiskDecisionPanel } from "../features/decisions/RiskDecisionPanel";
 import { canRenderNdvi } from "../features/map/layerState";
 import { PropertyPanel } from "../features/property/PropertyPanel";
 import { SatellitePanel } from "../features/satellite/SatellitePanel";
@@ -51,6 +53,7 @@ export function Farm360Page({
   const [property, setProperty] = useState<PropertyRecord | null>(null);
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [assets, setAssets] = useState<DigitalTwinAsset[]>([]);
+  const [decisions, setDecisions] = useState<PropertyDecision[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(
@@ -73,12 +76,13 @@ export function Farm360Page({
   const refresh = useCallback(async () => {
     setState("loading");
     try {
-      const [propertyResult, scenesResult, timelineResult, assetsResult] =
+      const [propertyResult, scenesResult, timelineResult, assetsResult, decisionsResult] =
         await Promise.all([
           api.property(tenantId, propertyId),
           api.scenes(tenantId, propertyId),
           api.timeline(tenantId, propertyId),
           api.assets(tenantId, propertyId),
+          api.decisions(tenantId, propertyId),
         ]);
       const selected = newestSucceeded(timelineResult.items);
       const provenanceResult = selected
@@ -87,6 +91,7 @@ export function Farm360Page({
       setProperty(propertyResult);
       setScenes(scenesResult.items);
       setAssets(assetsResult.items);
+      setDecisions(decisionsResult.items);
       setSelectedAssetId((current) =>
         current && assetsResult.items.some((asset) => asset.id === current)
           ? current
@@ -255,6 +260,7 @@ export function Farm360Page({
       <aside>
         <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} />
         <PilotFeedbackPanel api={api} tenantId={tenantId} propertyId={propertyId} />
+        <RiskDecisionPanel decisions={decisions} />
         <AssetPanel
           assets={assets}
           selectedAssetId={selectedAssetId}

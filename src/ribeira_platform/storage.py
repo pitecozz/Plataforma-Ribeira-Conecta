@@ -494,6 +494,56 @@ class SQLiteStore:
         )
         return item
 
+    def decision_history_for_property(
+        self, tenant_id: str, property_id: str
+    ) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """SELECT d.*,a.id AS action_id,a.status AS action_status,
+                      a.completed_at,a.completed_by,a.outcome_detail,
+                      a.outcome_classification,a.outcome_evidence_ids_json
+                 FROM decisions d LEFT JOIN actions a ON a.decision_id=d.id
+                WHERE d.tenant_id=? AND d.property_id=?
+                ORDER BY d.created_at DESC""",
+            (tenant_id, property_id),
+        ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "property_id": row["property_id"],
+                "conclusion": row["conclusion"],
+                "classification": row["classification"],
+                "status": row["status"],
+                "evidence_ids": json.loads(row["evidence_ids_json"]),
+                "rule_id": row["rule_id"],
+                "rule_version": row["rule_version"],
+                "limitations": json.loads(row["limitations_json"]),
+                "missing_data": json.loads(row["missing_data_json"]),
+                "conflicts": json.loads(row["conflicts_json"]),
+                "recommended_action": (
+                    json.loads(row["recommended_action_json"])
+                    if row["recommended_action_json"]
+                    else None
+                ),
+                "created_at": row["created_at"],
+                "action": (
+                    {
+                        "id": row["action_id"],
+                        "status": row["action_status"],
+                        "completed_at": row["completed_at"],
+                        "completed_by": row["completed_by"],
+                        "outcome_detail": row["outcome_detail"],
+                        "outcome_classification": row["outcome_classification"],
+                        "outcome_evidence_ids": json.loads(
+                            row["outcome_evidence_ids_json"]
+                        ),
+                    }
+                    if row["action_id"]
+                    else None
+                ),
+            }
+            for row in rows
+        ]
+
     def create_alert(self, item: Alert) -> Alert:
         self._insert(
             "INSERT INTO alerts(id,tenant_id,property_id,alert_type,severity,status,title,decision_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)",

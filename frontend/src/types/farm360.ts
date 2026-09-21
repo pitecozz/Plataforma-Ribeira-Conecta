@@ -51,6 +51,30 @@ export interface PilotFeedback {
   message: string;
   created_at: string;
 }
+export interface PropertyDecision {
+  id: string;
+  property_id: string;
+  conclusion: string;
+  classification: string;
+  status: string;
+  evidence_ids: string[];
+  rule_id: string | null;
+  rule_version: number | null;
+  limitations: string[];
+  missing_data: string[];
+  conflicts: Array<Record<string, unknown>>;
+  recommended_action: Record<string, unknown> | null;
+  created_at: string;
+  action: {
+    id: string;
+    status: string;
+    completed_at: string | null;
+    completed_by: string | null;
+    outcome_detail: string | null;
+    outcome_classification: string | null;
+    outcome_evidence_ids: string[];
+  } | null;
+}
 export interface PortfolioProperty extends PropertyRecord {
   latest_scene_at: string | null;
   latest_ndvi_at: string | null;

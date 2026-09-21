@@ -5,6 +5,7 @@ import type {
   NdviProduct,
   PilotFeedback,
   PilotFeedbackType,
+  PropertyDecision,
   PortfolioProperty,
   ProcessingJob,
   PropertyCreate,
@@ -115,6 +116,11 @@ export class Farm360Api {
     return this.post<PilotFeedback>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/pilot-feedback`,
       payload,
+    );
+  }
+  decisions(tenantId: string, propertyId: string) {
+    return this.get<{ property_id: string; items: PropertyDecision[] }>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/decisions`,
     );
   }
   scenes(tenantId: string, propertyId: string) {

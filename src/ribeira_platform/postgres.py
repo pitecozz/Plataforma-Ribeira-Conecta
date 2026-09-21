@@ -1669,6 +1669,54 @@ class PostgresStore:
         )
         return item
 
+    def decision_history_for_property(
+        self, tenant_id: str, property_id: str
+    ) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """SELECT d.*,a.id AS action_id,a.status AS action_status,
+                      a.completed_at,a.completed_by,a.outcome_detail,
+                      a.outcome_classification,a.outcome_evidence_ids
+                 FROM decision d LEFT JOIN action a ON a.decision_id=d.id
+                WHERE d.tenant_id=%s AND d.property_id=%s
+                ORDER BY d.created_at DESC""",
+            (tenant_id, property_id),
+        ).fetchall()
+        return [
+            {
+                "id": self._id(row["id"]),
+                "property_id": self._id(row["property_id"]),
+                "conclusion": row["conclusion"],
+                "classification": row["data_classification"],
+                "status": row["status"],
+                "evidence_ids": row["evidence_ids"],
+                "rule_id": self._id(row["rule_id"]) if row["rule_id"] else None,
+                "rule_version": row["rule_version"],
+                "limitations": row["limitations"],
+                "missing_data": row["missing_data"],
+                "conflicts": row["conflicts"],
+                "recommended_action": row["recommended_action"],
+                "created_at": row["created_at"].isoformat(),
+                "action": (
+                    {
+                        "id": self._id(row["action_id"]),
+                        "status": row["action_status"],
+                        "completed_at": (
+                            row["completed_at"].isoformat()
+                            if row["completed_at"]
+                            else None
+                        ),
+                        "completed_by": row["completed_by"],
+                        "outcome_detail": row["outcome_detail"],
+                        "outcome_classification": row["outcome_classification"],
+                        "outcome_evidence_ids": row["outcome_evidence_ids"],
+                    }
+                    if row["action_id"]
+                    else None
+                ),
+            }
+            for row in rows
+        ]
+
     def create_alert(self, item: Alert) -> Alert:
         self.connection.execute(
             "INSERT INTO alert(id,tenant_id,property_id,alert_type,severity,status,title,decision_id,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",

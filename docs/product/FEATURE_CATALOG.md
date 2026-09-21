@@ -90,7 +90,7 @@ commercial availability are summarized here and expanded in the linked canon.
 | F-RS-004 | Sentinel-1 flood analysis | `FOUNDATION` | Registro V2 pair/V3 tile and authorized processor. | Catalogue selection is not flood classification. | Deferred environmental input. |
 | F-MON-001 | Monitor/source freshness/events/time series | `COMING_SOON` | Provider/telemetry observations, quality and rules. | Provider health/failure stays explicit. | Monitoring subscription later. |
 | F-RULE-002 | Rule applicability: customer, field, zone, asset and crop | `COMING_SOON` | Shared Digital Twin scope hierarchy/versioning. | Do not silently inherit global rules. | Rules P1 follow-on. |
-| F-TRACE-002 | Customer evidence/action/outcome view | `COMING_SOON` | Existing evidence/decision/action/audit data. | Must expose limitations/conflicts/unknowns. | Pilot P0. |
+| F-TRACE-002 | Customer evidence/action/outcome view | `BETA` | Tenant property decision/action history and linked evidence identifiers. | Shows only persisted outcomes and explicit empty state; no inferred commercial opportunity. | Farm360 pilot panel. |
 | F-AI-002 | Contextual assistance and report explanation | `DEFERRED` | Permissioned corpus, evaluated prompts and citations. | Cannot override evidence/rules/security. | Not pilot. |
 | F-BUS-002 | Evidence-backed cross-sell/upsell | `PARTIAL` | Commercial evidence, need and applicable service. | No arbitrary sales recommendation. | Internal/commercial workflow. |
 | F-REPORT-001 | Intelligence Report framework | `BETA` | Tenant property/assets/context/evidence/decisions. | HTML V0.1 shows loaded records and explicit unavailable decisions; no report history/API yet. | Pilot Report V0.1. |

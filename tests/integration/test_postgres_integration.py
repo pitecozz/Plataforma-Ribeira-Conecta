@@ -311,6 +311,10 @@ class PostgresIntegrationTests(unittest.TestCase):
             actor="pg-field-operator",
             completed_at="2026-09-16T18:00:00+00:00",
         )
+        history = self.application.decision_history_for_property(tenant.id, property.id)
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["status"], "ACTIONABLE")
+        self.assertEqual(history[0]["action"]["status"], "COMPLETED")
         with self.store.tenant_transaction(tenant.id):
             self.assertEqual(self.store.count("observation", tenant.id), 1)
             self.assertEqual(self.store.count("evidence", tenant.id), 1)
