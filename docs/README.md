@@ -36,6 +36,8 @@ input into a fact. `UNKNOWN` and `INCONCLUSIVE` are useful outcomes.
   failure/fallback policy.
 - [Platform flows](architecture/PLATFORM_FLOWS.md): version-controlled system,
   provider, telemetry, flood, soil and prospect diagrams.
+- [Pilot Quick Start](training/PILOT_QUICK_START.md): currently available beta
+  workflow and safe interpretation boundaries.
 
 ## Documentation quality gate
 

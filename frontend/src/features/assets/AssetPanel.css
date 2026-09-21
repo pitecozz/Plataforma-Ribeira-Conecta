@@ -1,0 +1,33 @@
+.asset-list {
+  display: grid;
+  gap: 6px;
+}
+
+.asset-list button {
+  background: #f8fbf8;
+  border: 1px solid #d9e2da;
+  border-radius: 5px;
+  color: #17231f;
+  padding: 8px;
+  text-align: left;
+}
+
+.asset-list button.selected {
+  background: #fef3c7;
+  border-color: #d97706;
+}
+
+.asset-list span {
+  color: #66756c;
+  display: block;
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.asset-detail {
+  margin-top: 10px;
+}
+
+.empty-state {
+  color: #92400e;
+}

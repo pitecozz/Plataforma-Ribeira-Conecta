@@ -52,6 +52,13 @@ scene or raster. A job reports its persisted status (`QUEUED`, `RUNNING`,
 Selection is policy-driven in this phase; a manual override workflow requires
 its own auditable approval policy and is deliberately not implied by the UI.
 
+When persisted property assets are available, Farm360 renders them as a
+separate Digital Twin map layer and lists them for inspection. Selection shows
+only stored type, status, geometry, CRS, source reference, observed timestamp,
+classification and context. An empty inventory remains
+`DADO_INSUFICIENTE`; visualizing an asset never asserts unrecorded equipment,
+calibration, connectivity or condition.
+
 ## Read endpoints
 
 - `GET /v1/tenants/{tenant_id}/properties`

@@ -56,3 +56,43 @@ their API schemas or migrations. It is expanded as future features ship.
 | High | Flood foundation | Operator flood-event/exposure runbook once real provider ingestion is authorized. | Blocked on verified input/operating process. |
 | Medium | Existing API | Consolidated endpoint reference generated from OpenAPI. | `PLANNED`; avoid duplicating API schema now. |
 | Medium | Commercial engine | Service-facing explanation of existing pricing simulation boundaries. | Linked from F-BUS-001; expand after policy validation. |
+
+## Full platform coverage audit — pilot fast track
+
+The following rows complete the architecture-level audit of currently defined
+capabilities. A row marked `COMING_SOON`, `RESEARCH`, `BLOCKED` or `DEFERRED`
+is not an operational customer feature and must be hidden or clearly labelled
+in navigation. Dependencies, data needs, Evidence First/security boundaries and
+commercial availability are summarized here and expanded in the linked canon.
+
+| FEATURE_ID | Module / name | State | Dependencies and data | Evidence/security/business boundary | Commercial availability / docs |
+|---|---|---|---|---|---|
+| F-MAPS-002 | Maps / layers, click inspection and spatial context | `PARTIAL` | Verified boundary/assets/layers with source/date. | Layer is not evidence alone; tenant map reads stay authorized. | Pilot map; [Farm360](../geospatial/FARM_360_V1.md). |
+| F-MAPS-003 | Geometry versioning, GeoJSON import and approval | `BETA` | Property, import bytes, CRS, reviewer/audit. | Drawn/imported geometry is not legal title; approval is segregated. | Onboarding service; [boundary workflow](../geospatial/FARM_360_V1.md). |
+| F-FARM-002 | Farm360 integrated property workspace | `PARTIAL` | F-CORE-001 plus context/evidence/actions. | Displays classification, source/date and missing data. | Pilot P0; [readiness](../PILOT_READINESS.md). |
+| F-ASSET-002 | Asset context, click/detail and infrastructure inventory | `PARTIAL` | Persisted Digital Twin assets/geometry/source/context. | No inferred equipment/condition; `asset:read` and RLS. | Pilot P0; [Farm360](../geospatial/FARM_360_V1.md). |
+| F-PROSPECT-002 | Prospect registration, conversion and qualification | `COMING_SOON` | Permitted prospect/customer/property context and service catalogue. | Evidence -> need -> service -> opportunity; LGPD minimization. | Future commercial workflow. |
+| F-CONNECT-002 | Connectivity context and network-asset planning | `COMING_SOON` | Confirmed POP/tower/road/asset/terrain data. | No radio coverage or availability claim without model/input/assumptions. | Assessment project. |
+| F-ENERGY-001 | Energy assets, telemetry and opportunity context | `COMING_SOON` | Confirmed energy inventory/measurements/outage sources. | No fabricated consumption/power quality. | Assessment/monitoring later. |
+| F-AGRO-006 | Agro field/crop/inspection and vegetation context | `COMING_SOON` | Verified field/crop, remote/weather/inspection evidence. | Remote signal is triage, not crop diagnosis. | Consulting/monitoring later. |
+| F-BANANA-002 | Banana field intelligence and inspection workflow | `COMING_SOON` | F-AGRO-006 and approved agronomic source. | Disease rules are `EXPERT_VALIDATION_REQUIRED`. | Expert-backed service only. |
+| F-SOIL-002 | Soil baseline, remote context and field evidence | `COMING_SOON` | Provider-neutral soil/terrain/weather, sensors/labs. | Remote estimate != field observation != lab measurement. | [Soil](../agro/SOIL_INTELLIGENCE.md). |
+| F-AGRO-007 | Can I Plant Here / preliminary suitability | `COMING_SOON` | Verified property/field/analysis area/crop policy. | Analysis area is not legal demarcation; no unexplained score. | [Suitability](../agro/AGRICULTURAL_SUITABILITY.md). |
+| F-AGRO-008 | Banana suitability | `COMING_SOON` | Suitability + approved banana factors/expert policy. | Never promotes preliminary to validated. | Expert-backed later. |
+| F-AGRO-009 | Georeferenced laboratory integration | `COMING_SOON` | Sample chain, lab/method/unit/raw result. | Lab result applies only to its sample/time/depth. | Lab integration service. |
+| F-IOT-002 | Field telemetry/device health | `COMING_SOON` | Tenant device/asset, MQTT/HTTPS adapter, calibration/units/time. | Authenticated/replay-safe only; no synthetic live data. | [Telemetry](../iot/FIELD_TELEMETRY.md). |
+| F-DRONE-001 | Drone survey | `RESEARCH` | Flight, payload, capture/spatial accuracy/source metadata. | Complements satellite/field evidence; no silent substitution. | Optional field service. |
+| F-AGRO-010 | CRNS soil moisture | `RESEARCH` | Specialized instrument/business or research case. | Area-integrated measurement still needs calibration/provenance. | No pilot offer. |
+| F-FLOOD-002 | Rain, river, discharge, reservoir and source health | `FOUNDATION` | Official/provider-specific time series/event provenance. | H1-H4 stay independent; missing input stays unknown. | [Flood plan](../CODEX_AUTONOMOUS_DELIVERY.md). |
+| F-FLOOD-003 | Municipal/property/asset/agricultural exposure | `FOUNDATION` | Verified hazard geometry plus tenant geometry. | No extent/exposure calculation from unverified/satellite-only signal. | Environmental assessment later. |
+| F-RS-003 | Provider-neutral missions/datasets | `FOUNDATION` | CDSE, future GEE/USGS/NASA/JRC; Sentinel/Landsat/DEM/SMAP. | Explicit provider selection/compatibility; Google Earth visualization excluded. | [Provider policy](../geospatial/PROVIDER_ABSTRACTION.md). |
+| F-RS-004 | Sentinel-1 flood analysis | `FOUNDATION` | Registro V2 pair/V3 tile and authorized processor. | Catalogue selection is not flood classification. | Deferred environmental input. |
+| F-MON-001 | Monitor/source freshness/events/time series | `COMING_SOON` | Provider/telemetry observations, quality and rules. | Provider health/failure stays explicit. | Monitoring subscription later. |
+| F-RULE-002 | Rule applicability: customer, field, zone, asset and crop | `COMING_SOON` | Shared Digital Twin scope hierarchy/versioning. | Do not silently inherit global rules. | Rules P1 follow-on. |
+| F-TRACE-002 | Customer evidence/action/outcome view | `COMING_SOON` | Existing evidence/decision/action/audit data. | Must expose limitations/conflicts/unknowns. | Pilot P0. |
+| F-AI-002 | Contextual assistance and report explanation | `DEFERRED` | Permissioned corpus, evaluated prompts and citations. | Cannot override evidence/rules/security. | Not pilot. |
+| F-BUS-002 | Evidence-backed cross-sell/upsell | `PARTIAL` | Commercial evidence, need and applicable service. | No arbitrary sales recommendation. | Internal/commercial workflow. |
+| F-REPORT-001 | Intelligence Report framework | `COMING_SOON` | Tenant property/assets/context/evidence/decisions. | Shows only available records and explicit gaps. | Pilot Report V0.1. |
+| F-FEEDBACK-001 | Pilot feedback | `COMING_SOON` | Tenant/user/page/property/feature/type/message/audit. | Feedback is tenant-isolated and never customer data leakage. | Pilot P0. |
+| F-UX-001 | Product navigation and feature-state flags | `COMING_SOON` | Canonical feature lifecycle and authorization. | No dead buttons or misleading production state. | Pilot shell. |
+| F-SEC-002 | Pilot identity/onboarding/deployment path | `PARTIAL` | OIDC membership, HTTPS edge/operator decision, runbooks. | No public DB/metrics/dev ports; Cloudflare decision preserved. | `BLOCKED` pending operator access decision. |

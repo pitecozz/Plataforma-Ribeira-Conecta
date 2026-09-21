@@ -25,6 +25,13 @@ describe("Farm360Api", () => {
     expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/portfolio", { headers: { Authorization: "Bearer session-token" } });
   });
 
+  it("loads Digital Twin assets through the tenant-scoped property endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ property_id: "property", items: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await new Farm360Api("https://api.example", "session-token").assets("tenant / id", "property / id");
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/properties/property%20%2F%20id/assets", { headers: { Authorization: "Bearer session-token" } });
+  });
+
   it("uploads GeoJSON bytes through the tenant-scoped review endpoint without a storage path", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "import" }), { status: 201 }));
     vi.stubGlobal("fetch", fetchMock);
