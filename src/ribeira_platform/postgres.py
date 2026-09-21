@@ -76,6 +76,173 @@ class PostgresStore:
             row = self.connection.execute("SELECT 1 AS ready").fetchone()
         return row is not None and row["ready"] == 1
 
+    def upsert_source_health(
+        self,
+        provider: str,
+        status: str,
+        *,
+        last_attempt: str | None = None,
+        last_success: str | None = None,
+        last_observation: str | None = None,
+        latency_seconds: float | None = None,
+        failure_code: str | None = None,
+        failure_detail_sanitized: str | None = None,
+    ) -> None:
+        """Persist global provider health without credentials or response bodies."""
+        self.connection.execute(
+            """INSERT INTO source_health(
+                   provider,status,last_attempt,last_success,last_observation,
+                   latency_seconds,failure_code,failure_detail_sanitized
+                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                 ON CONFLICT (provider) DO UPDATE SET
+                   status=EXCLUDED.status,last_attempt=EXCLUDED.last_attempt,
+                   last_success=COALESCE(EXCLUDED.last_success,source_health.last_success),
+                   last_observation=COALESCE(EXCLUDED.last_observation,source_health.last_observation),
+                   latency_seconds=EXCLUDED.latency_seconds,failure_code=EXCLUDED.failure_code,
+                   failure_detail_sanitized=EXCLUDED.failure_detail_sanitized,updated_at=now()""",
+            (
+                provider,
+                status,
+                last_attempt,
+                last_success,
+                last_observation,
+                latency_seconds,
+                failure_code,
+                failure_detail_sanitized,
+            ),
+        )
+
+    def upsert_reservoir(
+        self,
+        *,
+        provider: str,
+        provider_reservoir_id: str,
+        name: str,
+        river_name: str | None,
+    ) -> str:
+        row = self.connection.execute(
+            """INSERT INTO reservoir(id,provider,provider_reservoir_id,name,river_name)
+                 VALUES (%s,%s,%s,%s,%s)
+                 ON CONFLICT (provider,provider_reservoir_id) DO UPDATE
+                   SET name=EXCLUDED.name,river_name=EXCLUDED.river_name
+                 RETURNING id""",
+            (new_id(), provider, provider_reservoir_id, name, river_name),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("reservoir upsert did not return an identifier")
+        return self._id(row["id"])
+
+    def record_reservoir_operation_event(self, event: Any) -> bool:
+        reservoir_id = self.upsert_reservoir(
+            provider="COPEL",
+            provider_reservoir_id=event.reservoir_provider_id,
+            name=event.reservoir_name,
+            river_name=event.river_name,
+        )
+        row = self.connection.execute(
+            """INSERT INTO reservoir_operation_event(
+                   id,reservoir_id,provider,event_type,published_at,effective_at,
+                   numeric_value,unit,description_sanitized,source_reference,
+                   classification,provenance
+                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
+                 ON CONFLICT (provider,source_reference,event_type) DO NOTHING
+                 RETURNING id""",
+            (
+                new_id(),
+                reservoir_id,
+                "COPEL",
+                event.event_type,
+                event.published_at,
+                event.effective_at,
+                event.numeric_value,
+                event.unit,
+                event.description_sanitized,
+                event.source_reference,
+                event.classification,
+                json.dumps(
+                    {
+                        "parser": "copel_capivari_notice_v1",
+                        "classification": event.classification,
+                    }
+                ),
+            ),
+        ).fetchone()
+        return row is not None
+
+    def record_climate_context(self, context: Any, *, fetched_at: str) -> bool:
+        row = self.connection.execute(
+            """INSERT INTO climate_context(
+                   id,provider,issued_on,valid_window,enso_state,probability,
+                   strength_category,source_reference,classification,source_fetched_at,provenance
+                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
+                 ON CONFLICT (provider,issued_on,enso_state,source_reference) DO NOTHING
+                 RETURNING id""",
+            (
+                new_id(),
+                context.provider,
+                context.issued_on,
+                context.valid_window,
+                context.enso_state,
+                context.probability,
+                context.strength_category,
+                context.source_reference,
+                context.classification,
+                fetched_at,
+                json.dumps(
+                    {
+                        "parser": "noaa_cpc_enso_v1",
+                        "classification": context.classification,
+                    }
+                ),
+            ),
+        ).fetchone()
+        return row is not None
+
+    def vale_do_ribeira_situation(self) -> dict[str, Any]:
+        """Return global facts only; lack of a source remains explicit."""
+        health = self.connection.execute(
+            "SELECT provider,status,last_success,last_observation,failure_code,updated_at FROM source_health ORDER BY provider"
+        ).fetchall()
+        events = self.connection.execute(
+            """SELECT event_type,published_at,effective_at,numeric_value,unit,
+                      description_sanitized,source_reference,classification
+                 FROM reservoir_operation_event
+                 ORDER BY published_at DESC LIMIT 20"""
+        ).fetchall()
+        climate = self.connection.execute(
+            """SELECT provider,issued_on,valid_window,enso_state,probability,
+                      strength_category,source_reference,classification
+                 FROM climate_context ORDER BY issued_on DESC LIMIT 5"""
+        ).fetchall()
+        scope = self.connection.execute(
+            "SELECT geometry_status,source_reference FROM geographic_scope WHERE scope_key='VALE_DO_RIBEIRA'"
+        ).fetchone()
+        return {
+            "source_health": [dict(row) for row in health],
+            "rainfall_summary": {
+                "status": "UNKNOWN",
+                "reason": "NO_REAL_HYDRO_OBSERVATIONS",
+            },
+            "river_summary": {
+                "status": "UNKNOWN",
+                "reason": "ANA_AUTH_REQUIRED_OR_SAISP_AUTOMATION_UNAVAILABLE",
+            },
+            "reservoir_events": [dict(row) for row in events],
+            "climate_context": [dict(row) for row in climate],
+            "active_alerts": [],
+            "unknowns": [
+                "No verified automated SAISP observation contract",
+                "ANA hydrological inventory and telemetry require official OAuth credentials",
+                "Vale do Ribeira geometry is not yet verified",
+            ],
+            "evidence": {
+                "scope_geometry_status": scope["geometry_status"]
+                if scope
+                else "UNKNOWN",
+                "scope_reference": scope["source_reference"] if scope else None,
+            },
+        }
+
     def _one(self, sql: str, params: Iterable[Any] = ()) -> dict[str, Any] | None:
         return self.connection.execute(sql, tuple(params)).fetchone()
 

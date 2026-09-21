@@ -50,6 +50,7 @@ from .iam import (
     AuthorizationPolicy,
 )
 from .identity_access import IdentityAccess
+from .hydrology import ValeDoRibeiraSituationService
 from .logging_config import configure_structured_logging
 from .models import (
     BoundaryImport,
@@ -944,6 +945,17 @@ def create_app(
             )
             items.append(record)
         return {"items": items}
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/vale-do-ribeira/situation",
+        tags=["vale-do-ribeira"],
+    )
+    async def vale_do_ribeira_situation(
+        tenant_id: str, ctx: AuthContext = Depends(context)
+    ):
+        """Tenant-authorized read of shared, non-tenant hydro reference facts."""
+        authorize(ctx, "geospatial:read", tenant_id)
+        return ValeDoRibeiraSituationService(application.store).build()
 
     @app.get("/v1/tenants/{tenant_id}/properties/{property_id}", tags=["farm-360"])
     async def get_property(

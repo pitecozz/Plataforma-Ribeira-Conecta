@@ -128,6 +128,20 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertIsNotNone(body["area_hectares"])
         self.assertEqual(body["data_status"], "UNKNOWN")
 
+    def test_vale_do_ribeira_situation_is_authenticated_and_read_only(self) -> None:
+        tenant = self.application.create_tenant("Hydrology situation tenant")
+        missing = self.client.get(f"/v1/tenants/{tenant.id}/vale-do-ribeira/situation")
+        self.assertEqual(missing.status_code, 401)
+        response = self.client.get(
+            f"/v1/tenants/{tenant.id}/vale-do-ribeira/situation",
+            headers={"Authorization": "Bearer platform-secret-dev-only"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("generated_at", body)
+        self.assertEqual(body["river_summary"]["status"], "UNKNOWN")
+        self.assertEqual(body["active_alerts"], [])
+
     def test_business_customer_and_mrr_operations_are_authorized(self) -> None:
         tenant = self.application.create_tenant("Commercial API tenant")
         headers = {"Authorization": "Bearer platform-secret-dev-only"}
