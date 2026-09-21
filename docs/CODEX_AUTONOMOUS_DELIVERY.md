@@ -26,6 +26,22 @@ satellite product never becomes an observation or diagnosis; decisions preserve
 source, time, transformations, rule/model version, limitations, conflicts, and
 outcomes.
 
+## Cross-cutting documentation, training and commercial discipline
+
+Documentation is a product completion requirement, not a release afterthought.
+`docs/README.md` is the canonical role-based portal; its feature, module,
+service, source/data, integration and rule catalogues are the only indexes of
+their kind. Every major increment updates those references or records bounded
+documentation debt. Ribeira Academy is planned documentation/training content,
+not a separate product at this stage.
+
+Commercial packaging follows an Evidence-First **hybrid** hypothesis:
+onboarding/initial study + recurring platform subscription + optional
+consulting, field services, hardware and third-party costs. It is not a final
+price list. Prices, margins and unit economics remain `TO_VALIDATE` until real
+cost, capacity and customer evidence exist; this cross-cutting work does not
+reorder the current shared-foundation priorities.
+
 ## Requirements resync and supersession record
 
 The blueprint's historical Phase 1 lists broad data integrations and satellite
@@ -275,6 +291,9 @@ not hard-code a one-off municipal conclusion.
 - Provider-neutral remote-sensing adapters for optional Earth Engine,
   USGS/NASA Landsat 8/9 and JRC datasets after official contracts, licensing,
   comparability policy and opt-in smoke tests are available.
+- Customer-facing documentation site, contextual in-product help, training
+  delivery tooling, commercial pricing calculator and accounting/unit-economics
+  dashboards after their authoritative inputs and operating model exist.
 
 ## BLOCKED
 

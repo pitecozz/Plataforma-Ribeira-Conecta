@@ -47,3 +47,7 @@ participate in that chain or explicitly expose its limitation.
 - Before commit: run relevant tests, diff review, formatting, lint/type checks,
   and a secret check when available. Never force-push, rewrite published
   history, or push to `main`.
+- A major capability is not complete until its purpose, business rules,
+  provenance/data sources, security and operational assumptions, limitations,
+  user workflow, and tests are documented or explicitly recorded as
+  documentation debt in the canonical catalogues under `docs/`.
