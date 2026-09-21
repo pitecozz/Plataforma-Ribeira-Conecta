@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, Iterable
 
 import psycopg
@@ -198,6 +199,308 @@ class PostgresStore:
         ).fetchone()
         return row is not None
 
+    @staticmethod
+    def _scope_name(value: str) -> str:
+        import unicodedata
+
+        return " ".join(
+            unicodedata.normalize("NFKD", value)
+            .encode("ascii", "ignore")
+            .decode("ascii")
+            .casefold()
+            .split()
+        )
+
+    def derive_verified_semil_scope(self) -> int:
+        """Persist the official municipality membership and IBGE-derived shape.
+
+        This deliberately touches only the verified administrative SEMIL
+        definition.  The separate hydrological-basin scope remains UNKNOWN.
+        """
+        definition = self.connection.execute(
+            """SELECT id,geographic_scope_id,municipality_criteria
+                 FROM spatial_scope_definition
+                WHERE id=%s AND definition_status='VERIFIED'""",
+            ("00000000-0000-5000-8000-000000000211",),
+        ).fetchone()
+        if definition is None:
+            raise RuntimeError("verified SEMIL scope definition is missing")
+        expected = definition["municipality_criteria"]
+        if not isinstance(expected, list) or not expected:
+            raise RuntimeError("verified SEMIL municipality definition is missing")
+        municipalities = self.connection.execute(
+            """SELECT id,name FROM municipality_reference
+                 WHERE uf='SP' AND source_year=2025"""
+        ).fetchall()
+        by_name = {self._scope_name(str(row["name"])): row["id"] for row in municipalities}
+        missing = [name for name in expected if self._scope_name(str(name)) not in by_name]
+        if missing:
+            raise RuntimeError("official SEMIL municipality definition cannot be joined to IBGE 2025")
+        scope_id = definition["geographic_scope_id"]
+        ids = [by_name[self._scope_name(str(name))] for name in expected]
+        for municipality_id in ids:
+            self.connection.execute(
+                """INSERT INTO spatial_scope_municipality(
+                       geographic_scope_id,municipality_id,definition_id,classification
+                     ) VALUES (%s,%s,%s,'OFFICIAL_SOURCE')
+                     ON CONFLICT DO NOTHING""",
+                (scope_id, municipality_id, definition["id"]),
+            )
+        self.connection.execute(
+            """UPDATE geographic_scope AS scope
+                   SET geometry=derived.geometry,
+                       geometry_status='VERIFIED',
+                       metadata=scope.metadata || jsonb_build_object(
+                         'geometry_source','IBGE_MUNICIPAL_2025',
+                         'geometry_method','union_of_verified_SEMIL_municipalities'
+                       ),
+                       updated_at=now()
+                  FROM (
+                    SELECT ST_Multi(ST_UnaryUnion(ST_Collect(ST_Transform(m.geometry,4326)))) AS geometry
+                      FROM spatial_scope_municipality sm
+                      JOIN municipality_reference m ON m.id=sm.municipality_id
+                     WHERE sm.geographic_scope_id=%s
+                  ) AS derived
+                 WHERE scope.id=%s AND derived.geometry IS NOT NULL""",
+            (scope_id, scope_id),
+        )
+        return len(ids)
+
+    def vale_scope_envelope(self, *, buffer_degrees: float = 0.25) -> tuple[float, float, float, float]:
+        if buffer_degrees < 0 or buffer_degrees > 1:
+            raise ValueError("scope buffer must be between zero and one degree")
+        row = self.connection.execute(
+            """SELECT ST_XMin(envelope) AS xmin,ST_YMin(envelope) AS ymin,
+                      ST_XMax(envelope) AS xmax,ST_YMax(envelope) AS ymax
+                 FROM (
+                   SELECT ST_Envelope(geometry) AS envelope FROM geographic_scope
+                    WHERE scope_key='VALE_DO_RIBEIRA_SP_SEMIL'
+                      AND geometry_status='VERIFIED' AND geometry IS NOT NULL
+                 ) AS bounded"""
+        ).fetchone()
+        if row is None or any(row[key] is None for key in ("xmin", "ymin", "xmax", "ymax")):
+            raise RuntimeError("verified Vale administrative geometry is unavailable")
+        return (
+            float(row["xmin"]) - buffer_degrees,
+            float(row["ymin"]) - buffer_degrees,
+            float(row["xmax"]) + buffer_degrees,
+            float(row["ymax"]) + buffer_degrees,
+        )
+
+    def station_scope_relation(self, *, longitude: float, latitude: float, buffer_meters: float = 25_000) -> str:
+        row = self.connection.execute(
+            """SELECT CASE
+                     WHEN ST_Intersects(
+                       scope.geometry,ST_SetSRID(ST_MakePoint(%s,%s),4326)
+                     ) THEN 'INSIDE_VERIFIED_SCOPE'
+                     WHEN ST_DWithin(
+                       scope.geometry::geography,
+                       ST_SetSRID(ST_MakePoint(%s,%s),4326)::geography,%s
+                     ) THEN 'NEAR_SCOPE_BUFFER'
+                     ELSE 'OUTSIDE_SCOPE'
+                   END AS relation
+                 FROM geographic_scope scope
+                WHERE scope.scope_key='VALE_DO_RIBEIRA_SP_SEMIL'
+                  AND scope.geometry_status='VERIFIED'""",
+            (longitude, latitude, longitude, latitude, buffer_meters),
+        ).fetchone()
+        return str(row["relation"]) if row else "OUTSIDE_SCOPE"
+
+    def upsert_wis2_station(self, item: Any, *, relation: str) -> str:
+        row = self.connection.execute(
+            """INSERT INTO hydrological_station(
+                   id,provider,provider_station_id,name,station_type,latitude,longitude,
+                   active_status,metadata
+                 ) VALUES (%s,'INMET_WIS2',%s,%s,'SYNOP',%s,%s,'ACTIVE',%s::jsonb)
+                 ON CONFLICT (provider,provider_station_id) DO UPDATE
+                   SET name=EXCLUDED.name,latitude=EXCLUDED.latitude,
+                       longitude=EXCLUDED.longitude,
+                       metadata=hydrological_station.metadata || EXCLUDED.metadata,
+                       updated_at=now()
+                 RETURNING id""",
+            (
+                new_id(),
+                item.wigos_station_identifier,
+                item.station_name[:500],
+                item.latitude,
+                item.longitude,
+                json.dumps(
+                    {
+                        "geometry_source": "INMET_WIS2_FEATURE",
+                        "scope_relation": relation,
+                    }
+                ),
+            ),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("WIS2 station upsert did not return an identifier")
+        return self._id(row["id"])
+
+    def record_wis2_rain(self, item: Any, *, station_id: str, fetched_at: datetime) -> bool:
+        row = self.connection.execute(
+            """INSERT INTO hydrological_observation(
+                   id,station_id,provider,variable,observed_at,received_at,value,unit,
+                   quality_flag,classification,raw_reference,source_fetched_at,parser_version,
+                   period_start,period_end,provider_record_id,delivery_channel,raw_unit,
+                   normalized_value,normalized_unit,provenance
+                 ) VALUES (
+                   %s,%s,'INMET_WIS2','RAINFALL',%s,%s,%s,%s,'VALID','OFFICIAL_SOURCE',
+                   %s,%s,'inmet_wis2_http_v1',%s,%s,%s,'HTTP_OGC_API',%s,%s,'mm',%s::jsonb
+                 ) ON CONFLICT (station_id,variable,observed_at,provider) DO UPDATE
+                   SET received_at=EXCLUDED.received_at,raw_reference=EXCLUDED.raw_reference,
+                       source_fetched_at=EXCLUDED.source_fetched_at,
+                       provider_record_id=EXCLUDED.provider_record_id,
+                       period_start=EXCLUDED.period_start,period_end=EXCLUDED.period_end,
+                       raw_unit=EXCLUDED.raw_unit,normalized_value=EXCLUDED.normalized_value,
+                       normalized_unit=EXCLUDED.normalized_unit,provenance=EXCLUDED.provenance
+                 RETURNING (xmax = 0) AS inserted""",
+            (
+                new_id(),
+                station_id,
+                item.period_end,
+                item.report_time,
+                item.raw_value,
+                item.raw_unit,
+                item.source_url,
+                fetched_at,
+                item.period_start,
+                item.period_end,
+                item.provider_record_id,
+                item.raw_unit,
+                item.normalized_mm,
+                json.dumps(
+                    {
+                        "provider_record_id": item.provider_record_id,
+                        "wigos_station_identifier": item.wigos_station_identifier,
+                        "delivery_channel": "HTTP_OGC_API",
+                        "raw_classification": "OFFICIAL_SOURCE",
+                        "normalization": {
+                            "classification": "CALCULATED",
+                            "method": "1 kg m-2 equals 1 mm liquid-water equivalent",
+                        },
+                    }
+                ),
+            ),
+        ).fetchone()
+        return bool(row and row["inserted"])
+
+    def semil_municipality_codes(self) -> list[str]:
+        rows = self.connection.execute(
+            """SELECT m.ibge_code
+                 FROM spatial_scope_municipality sm
+                 JOIN municipality_reference m ON m.id=sm.municipality_id
+                 JOIN geographic_scope s ON s.id=sm.geographic_scope_id
+                WHERE s.scope_key='VALE_DO_RIBEIRA_SP_SEMIL'
+                ORDER BY m.ibge_code"""
+        ).fetchall()
+        return [str(row["ibge_code"]) for row in rows]
+
+    def wis2_ingestion_counts(self) -> tuple[int, int]:
+        stations = self.connection.execute(
+            "SELECT count(*) AS count FROM hydrological_station WHERE provider='INMET_WIS2'"
+        ).fetchone()
+        observations = self.connection.execute(
+            "SELECT count(*) AS count FROM hydrological_observation WHERE provider='INMET_WIS2' AND variable='RAINFALL'"
+        ).fetchone()
+        if stations is None or observations is None:
+            raise RuntimeError("WIS2 count query returned no row")
+        return int(stations["count"]), int(observations["count"])
+
+    def banana_baseline_count(self) -> int:
+        row = self.connection.execute(
+            "SELECT count(*) AS count FROM banana_municipal_baseline WHERE crop='BANANA'"
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("banana baseline count query returned no row")
+        return int(row["count"])
+
+    def wis2_station_rainfall_aggregates(self) -> dict[str, dict[str, Any]]:
+        """Coverage-aware aggregates for the freshest local station series.
+
+        A regional total is intentionally not produced: summing rainfall from
+        different stations would be a misleading spatial estimate.  Values
+        are exposed only when the exact hourly interval coverage is complete.
+        """
+        selected = self.connection.execute(
+            """SELECT station_id,max(period_end) AS latest
+                 FROM hydrological_observation
+                WHERE provider='INMET_WIS2' AND variable='RAINFALL'
+                GROUP BY station_id
+                ORDER BY max(period_end) DESC, count(*) DESC LIMIT 1"""
+        ).fetchone()
+        if selected is None:
+            return {
+                f"{hours}h": {
+                    "status": "INCOMPLETE_COVERAGE", "value": None,
+                    "expected_intervals": hours, "observed_intervals": 0,
+                    "coverage_ratio": 0.0,
+                }
+                for hours in (1, 3, 6, 12, 24)
+            }
+        aggregates: dict[str, dict[str, Any]] = {}
+        for hours in (1, 3, 6, 12, 24):
+            row = self.connection.execute(
+                """SELECT count(DISTINCT period_end) AS observed,
+                          sum(normalized_value) AS value
+                     FROM hydrological_observation
+                    WHERE station_id=%s AND provider='INMET_WIS2'
+                      AND variable='RAINFALL' AND period_end > %s - (%s * interval '1 hour')
+                      AND period_end <= %s
+                      AND period_start = period_end - interval '1 hour'""",
+                (selected["station_id"], selected["latest"], hours, selected["latest"]),
+            ).fetchone()
+            observed = int(row["observed"]) if row else 0
+            complete = observed == hours
+            aggregates[f"{hours}h"] = {
+                "status": "AVAILABLE" if complete else "INCOMPLETE_COVERAGE",
+                "value": float(row["value"]) if complete and row and row["value"] is not None else None,
+                "expected_intervals": hours,
+                "observed_intervals": observed,
+                "coverage_ratio": observed / hours,
+                "classification": "CALCULATED" if complete else "UNKNOWN",
+            }
+        return aggregates
+
+    def upsert_banana_baseline(self, *, municipality_code: str, values: dict[str, Any], metadata: Any, source_reference: str) -> bool:
+        municipality = self.connection.execute(
+            """SELECT id FROM municipality_reference
+                WHERE ibge_code=%s AND source_year=2025""",
+            (municipality_code,),
+        ).fetchone()
+        if municipality is None:
+            raise ValueError("SIDRA municipality is outside the verified 2025 reference")
+        numbers = values["numbers"]
+        row = self.connection.execute(
+            """INSERT INTO banana_municipal_baseline(
+                   id,municipality_id,reference_year,crop,area_planted_or_destined,
+                   area_harvested,production_quantity,average_yield,production_value,
+                   units,source_reference,classification,classification_id,
+                   classification_label,category_id,category_label,raw_values,data_status
+                 ) VALUES (%s,%s,%s,'BANANA',%s,%s,%s,%s,%s,%s::jsonb,%s,
+                   'OFFICIAL_SOURCE',%s,%s,%s,%s,%s::jsonb,%s)
+                 ON CONFLICT (municipality_id,reference_year,crop) DO UPDATE SET
+                   area_planted_or_destined=EXCLUDED.area_planted_or_destined,
+                   area_harvested=EXCLUDED.area_harvested,
+                   production_quantity=EXCLUDED.production_quantity,
+                   average_yield=EXCLUDED.average_yield,production_value=EXCLUDED.production_value,
+                   units=EXCLUDED.units,source_reference=EXCLUDED.source_reference,
+                   classification_id=EXCLUDED.classification_id,
+                   classification_label=EXCLUDED.classification_label,
+                   category_id=EXCLUDED.category_id,category_label=EXCLUDED.category_label,
+                   raw_values=EXCLUDED.raw_values,data_status=EXCLUDED.data_status
+                 RETURNING (xmax = 0) AS inserted""",
+            (
+                new_id(), municipality["id"], int(metadata.period),
+                numbers.get("area_destined"), numbers.get("area_harvested"),
+                numbers.get("production"), numbers.get("yield"), numbers.get("production_value"),
+                json.dumps(values["units"]),
+                source_reference, metadata.classification_id, metadata.classification_label,
+                metadata.category_id, metadata.category_label, json.dumps(values["raw"]),
+                values["status"],
+            ),
+        ).fetchone()
+        return bool(row and row["inserted"])
+
     def vale_do_ribeira_situation(self) -> dict[str, Any]:
         """Return global facts only; lack of a source remains explicit."""
         health = self.connection.execute(
@@ -228,19 +531,30 @@ class PostgresStore:
                FROM banana_municipal_baseline WHERE crop='BANANA'"""
         ).fetchone()
         inmet = self.connection.execute(
-            """SELECT count(*) AS stations FROM hydrological_station WHERE provider='INMET'"""
+            """SELECT count(DISTINCT station_id) AS stations,max(period_end) AS latest_observation,
+                      count(*) AS observations
+                 FROM hydrological_observation
+                WHERE provider='INMET_WIS2' AND variable='RAINFALL'"""
         ).fetchone()
         if banana is None or inmet is None:
             raise RuntimeError("global baseline aggregate query returned no row")
+        rainfall_aggregates = self.wis2_station_rainfall_aggregates()
         return {
             "source_health": [dict(row) for row in health],
             "rainfall_summary": {
-                "status": "UNKNOWN",
-                "reason": "NO_REAL_HYDRO_OBSERVATIONS",
+                "status": "AVAILABLE" if inmet["observations"] else "INSUFFICIENT_LOCAL_DATA",
+                "provider": "INMET_WIS2" if inmet["observations"] else None,
+                "delivery_channel": "HTTP_OGC_API" if inmet["observations"] else None,
+                "latest_observation": inmet["latest_observation"],
+                "observations": int(inmet["observations"]),
             },
-            "rainfall_status": "UNKNOWN",
+            "rainfall_status": "AVAILABLE" if inmet["observations"] else "INSUFFICIENT_LOCAL_DATA",
             "inmet_stations": int(inmet["stations"]),
-            "rainfall_24h": {"status": "INCOMPLETE_COVERAGE", "value": None},
+            "rainfall_1h": rainfall_aggregates["1h"],
+            "rainfall_3h": rainfall_aggregates["3h"],
+            "rainfall_6h": rainfall_aggregates["6h"],
+            "rainfall_12h": rainfall_aggregates["12h"],
+            "rainfall_24h": rainfall_aggregates["24h"],
             "rainfall_72h": {"status": "INCOMPLETE_COVERAGE", "value": None},
             "river_summary": {
                 "status": "UNKNOWN",
@@ -259,7 +573,7 @@ class PostgresStore:
             "unknowns": [
                 "No verified automated SAISP observation contract",
                 "ANA hydrological inventory and telemetry require official OAuth credentials",
-                "Vale do Ribeira geometry is not yet verified",
+                "Ribeira de Iguape hydrological-basin geometry remains unknown",
             ],
             "evidence": {
                 "scope_geometry_status": scope["geometry_status"]
