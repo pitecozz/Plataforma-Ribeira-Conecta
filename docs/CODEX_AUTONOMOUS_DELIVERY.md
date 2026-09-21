@@ -129,9 +129,10 @@ not hard-code a one-off municipal conclusion.
   an action created from a property decision can be completed once with an
   explicit Evidence First classification, supporting evidence references,
   timestamp, responsible actor and audit event. The original decision and its
-  recommendation remain immutable. Customer, field/talhão and asset scope
-  inheritance/precedence is intentionally still pending; this slice does not
-  claim that a tenant rule has those broader scopes.
+  recommendation remain immutable. Rules are now explicitly `TENANT` or
+  `PROPERTY` scoped, with property scope taking precedence and never applying
+  to another property. Customer, field/talhão and asset inheritance/precedence
+  remains pending; this slice does not claim those broader scopes.
 - **Objective:** explicit rule applicability across sector, customer, property,
   field/talhão and asset, with versioning, conflict handling and feedback.
 - **Business value:** safely turns asset/context data into recommendations,

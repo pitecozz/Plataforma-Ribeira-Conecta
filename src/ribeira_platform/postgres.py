@@ -1583,10 +1583,15 @@ class PostgresStore:
             row["created_at"].isoformat(),
         )
 
-    def active_rule(self, tenant_id: str, metric: str) -> RuleDefinition | None:
+    def active_rule(
+        self, tenant_id: str, metric: str, property_id: str | None = None
+    ) -> RuleDefinition | None:
         row = self._one(
-            "SELECT * FROM rule_definition WHERE tenant_id=%s AND metric=%s AND status='ACTIVE' AND valid_from <= now() AND (valid_until IS NULL OR now() < valid_until) ORDER BY version DESC LIMIT 1",
-            (tenant_id, metric),
+            """SELECT * FROM rule_definition WHERE tenant_id=%s AND metric=%s AND status='ACTIVE'
+               AND valid_from <= now() AND (valid_until IS NULL OR now() < valid_until)
+               AND (scope_type='TENANT' OR (scope_type='PROPERTY' AND scope_property_id=%s))
+               ORDER BY CASE scope_type WHEN 'PROPERTY' THEN 0 ELSE 1 END, version DESC LIMIT 1""",
+            (tenant_id, metric, property_id),
         )
         if row is None:
             return None
@@ -1606,11 +1611,13 @@ class PostgresStore:
             row["valid_from"].isoformat(),
             row["valid_until"].isoformat() if row["valid_until"] else None,
             row["created_at"].isoformat(),
+            row["scope_type"],
+            self._id(row["scope_property_id"]) if row["scope_property_id"] else None,
         )
 
     def create_rule(self, item: RuleDefinition) -> RuleDefinition:
         self.connection.execute(
-            "INSERT INTO rule_definition(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "INSERT INTO rule_definition(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (
                 item.id,
                 item.tenant_id,
@@ -1627,6 +1634,8 @@ class PostgresStore:
                 item.valid_from,
                 item.valid_until,
                 item.created_at,
+                item.scope_type,
+                item.scope_property_id,
             ),
         )
         return item

@@ -499,7 +499,17 @@ class RibeiraApplication:
             parse_aware(rule.valid_until)
         if rule.status == "ACTIVE" and not rule.approved_by:
             raise ValueError("active rule requires approved_by")
+        if rule.scope_type not in {"TENANT", "PROPERTY"}:
+            raise ValueError("rule scope_type must be TENANT or PROPERTY")
+        if (rule.scope_type == "TENANT") != (rule.scope_property_id is None):
+            raise ValueError("rule scope_property_id must match scope_type")
         with self.store.tenant_transaction(rule.tenant_id, platform_admin=False):
+            if (
+                rule.scope_property_id is not None
+                and self.store.get_property(rule.tenant_id, rule.scope_property_id)
+                is None
+            ):
+                raise LookupError("rule scope property is unavailable in tenant")
             self.store.create_rule(rule)
             self.store.audit(
                 rule.tenant_id,
@@ -511,6 +521,8 @@ class RibeiraApplication:
                     "version": rule.version,
                     "status": rule.status,
                     "authority": rule.authority.value,
+                    "scope_type": rule.scope_type,
+                    "scope_property_id": rule.scope_property_id,
                 },
                 new_id(),
                 now_utc(),

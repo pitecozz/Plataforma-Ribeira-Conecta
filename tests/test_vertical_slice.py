@@ -218,6 +218,32 @@ class VerticalSliceTests(unittest.TestCase):
         self.assertEqual(self.store.count("observations", self.tenant.id), 1)
         self.assertEqual(self.store.count("evidence", self.tenant.id), 1)
 
+    def test_property_scoped_rule_is_not_applied_to_another_property(self) -> None:
+        other_property = self.app.create_property(self.tenant.id, "Other property")
+        self.app.create_rule(
+            RuleDefinition(
+                id=new_id(),
+                tenant_id=self.tenant.id,
+                version=1,
+                name="Property-only moisture threshold",
+                authority=RuleAuthority.REGRA_AGRONOMICA,
+                metric="soil_moisture",
+                operator="<",
+                threshold=30,
+                unit="%",
+                severity="HIGH",
+                status="ACTIVE",
+                approved_by="agronomist-test",
+                valid_from="2026-09-16T00:00:00+00:00",
+                scope_type="PROPERTY",
+                scope_property_id=self.property.id,
+            )
+        )
+        decision = self.app.evaluate(self.tenant.id, other_property.id).decision
+        self.assertEqual(decision.status, DecisionStatus.INCONCLUSIVE)
+        self.assertIsNone(decision.rule_id)
+        self.assertIn("active_rule:soil_moisture", decision.missing_data)
+
 
 if __name__ == "__main__":
     unittest.main()

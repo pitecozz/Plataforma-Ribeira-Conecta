@@ -80,7 +80,7 @@ class DecisionEngine:
             metrics[observation.metric].append(observation)
 
         metric = "soil_moisture"
-        rule = self.store.active_rule(tenant_id, metric)
+        rule = self.store.active_rule(tenant_id, metric, property.id)
         evidence_ids: list[str] = []
         for observation in metrics.get(metric, []):
             evidence_ids.append(self.evidence.evidence_for_observation(observation).id)

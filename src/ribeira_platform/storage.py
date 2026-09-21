@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS rules (
   name TEXT NOT NULL, authority TEXT NOT NULL, metric TEXT NOT NULL, operator TEXT NOT NULL,
   threshold REAL NOT NULL, unit TEXT NOT NULL, severity TEXT NOT NULL, status TEXT NOT NULL,
   approved_by TEXT, valid_from TEXT NOT NULL, valid_until TEXT, created_at TEXT NOT NULL,
+  scope_type TEXT NOT NULL DEFAULT 'TENANT', scope_property_id TEXT REFERENCES properties(id),
   PRIMARY KEY (id, version)
 );
 CREATE INDEX IF NOT EXISTS idx_rules_active ON rules(tenant_id, metric, status, version);
@@ -379,10 +380,14 @@ class SQLiteStore:
             row["created_at"],
         )
 
-    def active_rule(self, tenant_id: str, metric: str) -> RuleDefinition | None:
+    def active_rule(
+        self, tenant_id: str, metric: str, property_id: str | None = None
+    ) -> RuleDefinition | None:
         rows = self.connection.execute(
-            "SELECT * FROM rules WHERE tenant_id = ? AND metric = ? AND status = 'ACTIVE' ORDER BY version DESC",
-            (tenant_id, metric),
+            """SELECT * FROM rules WHERE tenant_id = ? AND metric = ? AND status = 'ACTIVE'
+               AND (scope_type='TENANT' OR (scope_type='PROPERTY' AND scope_property_id=?))
+               ORDER BY CASE scope_type WHEN 'PROPERTY' THEN 0 ELSE 1 END, version DESC""",
+            (tenant_id, metric, property_id),
         ).fetchall()
         now = datetime.now(timezone.utc)
         row = None
@@ -422,11 +427,13 @@ class SQLiteStore:
             row["valid_from"],
             row["valid_until"],
             row["created_at"],
+            row["scope_type"],
+            row["scope_property_id"],
         )
 
     def create_rule(self, item: RuleDefinition) -> RuleDefinition:
         self._insert(
-            "INSERT INTO rules(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO rules(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 item.id,
                 item.tenant_id,
@@ -443,6 +450,8 @@ class SQLiteStore:
                 item.valid_from,
                 item.valid_until,
                 item.created_at,
+                item.scope_type,
+                item.scope_property_id,
             ),
         )
         return item

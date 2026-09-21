@@ -140,6 +140,8 @@ class RuleDefinition:
     valid_from: str
     valid_until: str | None = None
     created_at: str = field(default_factory=now_utc)
+    scope_type: str = "TENANT"
+    scope_property_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -194,6 +194,8 @@ class RuleRequest(BaseModel):
     approved_by: str | None = None
     valid_from: str = Field(default_factory=now_utc)
     valid_until: str | None = None
+    scope_type: str = Field(default="TENANT", pattern=r"^(TENANT|PROPERTY)$")
+    scope_property_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class ActorRequest(BaseModel):
@@ -1209,6 +1211,8 @@ def create_app(
             approved_by=payload.approved_by,
             valid_from=payload.valid_from,
             valid_until=payload.valid_until,
+            scope_type=payload.scope_type,
+            scope_property_id=payload.scope_property_id,
         )
         return to_jsonable(application.create_rule(rule))
 
