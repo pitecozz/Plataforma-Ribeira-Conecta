@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS contract_version (id TEXT PRIMARY KEY, tenant_id TEXT
 CREATE TABLE IF NOT EXISTS subscription (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, contract_id TEXT NOT NULL, contract_version_id TEXT NOT NULL, service_plan_id TEXT NOT NULL, status TEXT NOT NULL, start_at TEXT NOT NULL, end_at TEXT, monthly_price TEXT, currency TEXT NOT NULL, recurring INTEGER NOT NULL, mrr_eligible INTEGER NOT NULL, revenue_treatment TEXT NOT NULL, data_classification TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS site (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, property_id TEXT NOT NULL, name TEXT NOT NULL, site_type TEXT NOT NULL, geometry_geojson TEXT, geometry_crs TEXT, data_classification TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS installation_project (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, customer_id TEXT NOT NULL, property_id TEXT, name TEXT NOT NULL, status TEXT NOT NULL, technical_provider_type TEXT NOT NULL, customer_total_project_cost TEXT, currency TEXT NOT NULL, ribeira_revenue_treatment TEXT NOT NULL, data_classification TEXT NOT NULL, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS asset (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, asset_type TEXT NOT NULL, name TEXT NOT NULL, serial_number TEXT, status TEXT NOT NULL, property_id TEXT, site_id TEXT, data_classification TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS asset (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, asset_type TEXT NOT NULL, name TEXT NOT NULL, serial_number TEXT, status TEXT NOT NULL, property_id TEXT, site_id TEXT, geometry_geojson TEXT, geometry_crs TEXT, source_reference TEXT, observed_at TEXT, context TEXT NOT NULL DEFAULT '{}', data_classification TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS asset_ownership (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, asset_id TEXT NOT NULL, ownership_kind TEXT NOT NULL, customer_id TEXT, purchased_by TEXT, maintained_by TEXT, replacement_responsibility TEXT, risk_bearer TEXT, valid_from TEXT NOT NULL, valid_until TEXT, acquisition_document TEXT, data_classification TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS installation (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, asset_id TEXT, status TEXT NOT NULL, installed_at TEXT, one_time_revenue TEXT, currency TEXT NOT NULL, ownership_kind TEXT NOT NULL, data_classification TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS capex_item (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, project_id TEXT, asset_id TEXT, description TEXT NOT NULL, amount TEXT, currency TEXT NOT NULL, capex_classification TEXT NOT NULL, ownership_kind TEXT NOT NULL, purchased_by TEXT, source TEXT, data_classification TEXT NOT NULL, created_at TEXT NOT NULL);
@@ -510,6 +510,37 @@ class BusinessRepository:
         }
 
     def create_asset(self, item: Asset) -> Asset:
+        if self.postgres:
+            p = self.placeholder
+            self._execute(
+                f"""INSERT INTO asset(id,tenant_id,asset_type,name,serial_number,status,property_id,site_id,
+                       geometry,geometry_crs,source_reference,observed_at,context,data_classification)
+                     VALUES ({p},{p},{p},{p},{p},{p},{p},{p},
+                       CASE WHEN {p}::text IS NULL THEN NULL ELSE ST_SetSRID(ST_GeomFromGeoJSON({p}::text),4326) END,
+                       {p},{p},{p},{p}::jsonb,{p})""",
+                [
+                    item.id,
+                    item.tenant_id,
+                    item.asset_type,
+                    item.name,
+                    item.serial_number,
+                    item.status,
+                    item.property_id,
+                    item.site_id,
+                    self._json(item.geometry_geojson)
+                    if item.geometry_geojson
+                    else None,
+                    self._json(item.geometry_geojson)
+                    if item.geometry_geojson
+                    else None,
+                    item.geometry_crs,
+                    item.source_reference,
+                    item.observed_at,
+                    self._json(item.context),
+                    item.classification.value,
+                ],
+            )
+            return item
         self._insert(
             "asset",
             [
@@ -521,6 +552,11 @@ class BusinessRepository:
                 "status",
                 "property_id",
                 "site_id",
+                "geometry_geojson",
+                "geometry_crs",
+                "source_reference",
+                "observed_at",
+                "context",
                 "data_classification",
                 "created_at",
             ],
@@ -533,6 +569,11 @@ class BusinessRepository:
                 item.status,
                 item.property_id,
                 item.site_id,
+                self._json(item.geometry_geojson) if item.geometry_geojson else None,
+                item.geometry_crs,
+                item.source_reference,
+                item.observed_at,
+                self._json(item.context),
                 item.classification.value,
                 now_utc(),
             ],

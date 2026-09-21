@@ -278,6 +278,11 @@ class AssetRequest(BaseModel):
     status: str = Field(default="ACTIVE", min_length=1, max_length=40)
     property_id: str | None = None
     site_id: str | None = None
+    geometry: dict[str, Any] | None = None
+    geometry_crs: str | None = Field(default=None, max_length=32)
+    source_reference: str | None = Field(default=None, max_length=2000)
+    observed_at: str | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
     classification: CommercialClassification = CommercialClassification.CONFIRMED
 
 
@@ -1429,6 +1434,11 @@ def create_app(
             payload.property_id,
             payload.site_id,
             payload.classification,
+            payload.geometry,
+            payload.geometry_crs,
+            payload.source_reference,
+            payload.observed_at,
+            payload.context,
         )
         return to_jsonable(
             application.business.register_asset(

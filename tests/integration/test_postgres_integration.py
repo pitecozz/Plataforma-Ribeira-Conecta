@@ -9,6 +9,7 @@ from psycopg import pq
 
 from ribeira_platform.audit_context import request_context
 from ribeira_platform.business import (
+    Asset,
     CommercialClassification,
     ProductStatus,
     RevenueType,
@@ -36,6 +37,36 @@ MIGRATION_DATABASE_URL = os.getenv("RIBEIRA_TEST_MIGRATION_DATABASE_URL")
     "RIBEIRA_TEST_DATABASE_URL is required for PostgreSQL integration tests",
 )
 class PostgresIntegrationTests(unittest.TestCase):
+    def test_spatial_asset_context_is_postgis_persisted_and_tenant_scoped(self) -> None:
+        tenant = self.create_test_tenant("Spatial asset PG tenant")
+        asset = Asset(
+            new_id(),
+            tenant.id,
+            "CCTV_CAMERA",
+            "Loading area camera",
+            None,
+            "ACTIVE",
+            None,
+            None,
+            CommercialClassification.MANUAL_CONFIRMED,
+            {"type": "Point", "coordinates": [-47.0, -24.0]},
+            "EPSG:4326",
+            "operator survey",
+            "2026-09-21T12:00:00+00:00",
+            {"operational_role": "security", "condition": "UNKNOWN"},
+        )
+        self.application.business.register_asset(asset, actor="operator")
+        with self.store.tenant_transaction(tenant.id):
+            row = self.store.connection.execute(
+                "SELECT ST_AsGeoJSON(geometry) AS geometry,geometry_crs,context FROM asset WHERE id=%s",
+                (asset.id,),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertEqual(row["geometry_crs"], "EPSG:4326")
+        self.assertEqual(row["context"]["operational_role"], "security")
+        self.assertEqual(json.loads(row["geometry"])["type"], "Point")
+
     def setUp(self) -> None:
         self.store = PostgresStore(DATABASE_URL)  # type: ignore[arg-type]
         self.application = RibeiraApplication(self.store)

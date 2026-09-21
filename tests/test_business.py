@@ -4,6 +4,7 @@ import unittest
 from decimal import Decimal
 
 from ribeira_platform.business import (
+    Asset,
     CapacityEngine,
     CapacityStatus,
     CapitalBreakdown,
@@ -34,6 +35,50 @@ from ribeira_platform.storage import SQLiteStore
 
 
 class BusinessDomainTests(unittest.TestCase):
+    def test_spatial_asset_context_is_explicit_and_validated(self) -> None:
+        store = SQLiteStore()
+        app = RibeiraApplication(store)
+        tenant = app.create_tenant("Spatial asset tenant")
+        asset = Asset(
+            new_id(),
+            tenant.id,
+            "IRRIGATION_PUMP",
+            "Pump A",
+            None,
+            "ACTIVE",
+            None,
+            None,
+            CommercialClassification.CONFIRMED,
+            {"type": "Point", "coordinates": [-47.1, -24.1]},
+            "EPSG:4326",
+            "manual field survey 2026-09-21",
+            "2026-09-21T12:00:00+00:00",
+            {"operational_role": "irrigation", "condition": "UNKNOWN"},
+        )
+        app.business.register_asset(asset, actor="operator")
+        row = store.connection.execute(
+            "SELECT geometry_geojson,geometry_crs,source_reference,observed_at,context FROM asset WHERE id=?",
+            (asset.id,),
+        ).fetchone()
+        self.assertEqual(row["geometry_crs"], "EPSG:4326")
+        self.assertIn("irrigation", row["context"])
+        self.assertEqual(row["source_reference"], "manual field survey 2026-09-21")
+        with self.assertRaises(ValueError):
+            Asset(
+                new_id(),
+                tenant.id,
+                "PUMP",
+                "Invalid",
+                None,
+                "ACTIVE",
+                None,
+                None,
+                CommercialClassification.CONFIRMED,
+                {"type": "Point", "coordinates": [-47.1, -24.1]},
+                "EPSG:3857",
+            )
+        store.close()
+
     def test_pricing_is_decimal_monotonic_and_transparent(self) -> None:
         policy = PricingPolicyVersion(
             new_id(),

@@ -5,12 +5,16 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from enum import StrEnum
 from typing import Any
 
+from shapely.geometry import shape
+from shapely.validation import explain_validity
+
 from .time_utils import parse_aware
 
 
 class CommercialClassification(StrEnum):
     CONFIRMED = "CONFIRMED"
     OBSERVED = "OBSERVED"
+    MANUAL_CONFIRMED = "MANUAL_CONFIRMED"
     CALCULATED = "CALCULATED"
     ASSUMPTION = "ASSUMPTION"
     SIMULATION = "SIMULATION"
@@ -353,6 +357,37 @@ class Asset:
     property_id: str | None
     site_id: str | None
     classification: CommercialClassification
+    geometry_geojson: dict[str, Any] | None = None
+    geometry_crs: str | None = None
+    source_reference: str | None = None
+    observed_at: str | None = None
+    context: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.geometry_geojson is None:
+            if self.geometry_crs is not None:
+                raise ValueError("asset geometry CRS requires asset geometry")
+        else:
+            if self.geometry_crs is None or self.geometry_crs.upper() not in {
+                "EPSG:4326",
+                "CRS:84",
+            }:
+                raise ValueError("asset geometry requires explicit EPSG:4326 CRS")
+            try:
+                parsed = shape(self.geometry_geojson)
+            except Exception as exc:
+                raise ValueError("asset geometry could not be parsed") from exc
+            if parsed.is_empty or not parsed.is_valid:
+                raise ValueError(
+                    f"asset geometry is invalid: {explain_validity(parsed)}"
+                )
+            min_x, min_y, max_x, max_y = parsed.bounds
+            if min_x < -180 or max_x > 180 or min_y < -90 or max_y > 90:
+                raise ValueError("asset geometry bounds are outside EPSG:4326")
+        if self.observed_at is not None:
+            iso_timestamp(self.observed_at)
+        if not isinstance(self.context, dict):
+            raise ValueError("asset context must be an object")
 
 
 @dataclass(frozen=True)
