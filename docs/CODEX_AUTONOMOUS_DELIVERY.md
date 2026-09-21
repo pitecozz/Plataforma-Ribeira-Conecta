@@ -39,6 +39,18 @@ risk input awaiting a separately authorized processing increment. Shared asset,
 context, scoped rules, and operational outcomes take priority over more SAR
 processing or unrelated municipal tiles.
 
+## Remote-sensing provider strategy
+
+CDSE, optional Google Earth Engine, USGS/NASA, JRC and future services are
+independent providers behind common catalogue, asset-access and processing
+interfaces. Sentinel-1/Sentinel-2 and Landsat 8/9 remain mission/dataset
+identities rather than provider lock-in. Every output preserves provider,
+dataset/collection, item/asset, request, processing and compatibility
+provenance. Provider redundancy is explicit and policy-driven; it never masks a
+failure, mixes unlike products, or falls back to Google Earth visualization
+imagery. Earth Engine integration is `LATER`; see
+`docs/geospatial/PROVIDER_ABSTRACTION.md`.
+
 ## Primary real-world validation case: Vale do Ribeira flood, September 2026
 
 `VALE_RIBEIRA_FLOOD_2026_09_FACTUAL_EVIDENCE_ONLY` is a primary reusable
@@ -213,6 +225,9 @@ not hard-code a one-off municipal conclusion.
 - Ribeira Trace after field, asset and operational-event foundations.
 - Contextual AI/RAG, next-best-action and automation after permissioned,
   evidence-complete context and evaluation controls.
+- Provider-neutral remote-sensing adapters for optional Earth Engine,
+  USGS/NASA Landsat 8/9 and JRC datasets after official contracts, licensing,
+  comparability policy and opt-in smoke tests are available.
 
 ## BLOCKED
 

@@ -26,6 +26,12 @@ raw reference accidentally.
 The internal API exposes domain operations (search, list scenes, create/run
 NDVI job, provenance), not generic STAC CRUD.
 
+CDSE is the current adapter, not a domain dependency. Other independent
+providers can implement the same provider-neutral catalogue/asset/processing
+ports only after their source, licensing, processing semantics and provenance
+are recorded. A provider failure never causes an implicit switch or a fallback
+to Google Earth visualization imagery.
+
 An STAC `s3://` href is only a catalog reference until the provider-specific
 adapter validates its exact bucket and obtains authenticated access. Missing or
 rejected credentials are explicit processing outcomes; they do not trigger a

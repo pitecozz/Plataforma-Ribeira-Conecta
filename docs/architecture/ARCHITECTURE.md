@@ -23,6 +23,14 @@ PostgreSQL/PostGIS  alert/action/audit
 Object Storage + STAC + workers (próximas fases)
 ```
 
+Catálogo, acesso a dados, processamento e imagens de visualização são portas
+distintas. Missões como Sentinel-1, Sentinel-2, Landsat 8 e Landsat 9 não ficam
+acopladas a um único fornecedor; CDSE, Google Earth Engine, USGS/NASA, JRC e
+outros provedores são adapters independentes, com seleção explícita,
+proveniência e regras de compatibilidade. Google Earth de visualização não é
+contrato de fonte nem evidência. Veja
+`docs/geospatial/PROVIDER_ABSTRACTION.md`.
+
 ## Boundaries
 
 - `sources.py`: provider interface e normalização; não conhece regras de negócio.
