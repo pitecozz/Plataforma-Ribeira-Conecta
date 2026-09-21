@@ -245,3 +245,67 @@ def sensitivity_masks(score: np.ndarray, central: float) -> dict[str, np.ndarray
         "CENTRAL": np.isfinite(score) & (score <= central),
         "PERMISSIVE": np.isfinite(score) & (score <= central + 0.25 * spread),
     }
+
+
+def raster_statistics(values: np.ndarray) -> dict[str, float | int]:
+    valid = values[np.isfinite(values)]
+    if valid.size == 0 or float(np.nanmax(valid)) == float(np.nanmin(valid)):
+        raise ValueError("raster distribution is empty or constant")
+    return {
+        "count": int(valid.size),
+        **{
+            key: float(np.percentile(valid, p))
+            for key, p in (
+                ("min", 0),
+                ("p01", 1),
+                ("p05", 5),
+                ("p25", 25),
+                ("median", 50),
+                ("p75", 75),
+                ("p95", 95),
+                ("p99", 99),
+                ("max", 100),
+            )
+        },
+    }
+
+
+def iou(left: np.ndarray, right: np.ndarray) -> float:
+    union = np.count_nonzero(left | right)
+    return float(np.count_nonzero(left & right) / union) if union else 1.0
+
+
+def component_metrics(mask: np.ndarray, pixel_area_m2: float) -> dict[str, float | int]:
+    visited = np.zeros(mask.shape, dtype=bool)
+    component_sizes: list[int] = []
+    height, width = mask.shape
+    for y, x in zip(*np.nonzero(mask), strict=True):
+        if visited[y, x]:
+            continue
+        stack, size = [(int(y), int(x))], 0
+        visited[y, x] = True
+        while stack:
+            row, col = stack.pop()
+            size += 1
+            for ny, nx in (
+                (row - 1, col),
+                (row + 1, col),
+                (row, col - 1),
+                (row, col + 1),
+            ):
+                if (
+                    0 <= ny < height
+                    and 0 <= nx < width
+                    and mask[ny, nx]
+                    and not visited[ny, nx]
+                ):
+                    visited[ny, nx] = True
+                    stack.append((ny, nx))
+        component_sizes.append(size)
+    count = len(component_sizes)
+    areas = np.asarray(component_sizes, dtype="float64") * pixel_area_m2 / 10000.0
+    return {
+        "count": int(count),
+        "largest_ha": float(areas.max()) if areas.size else 0.0,
+        "median_ha": float(np.median(areas)) if areas.size else 0.0,
+    }
