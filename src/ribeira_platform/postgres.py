@@ -886,9 +886,19 @@ class PostgresStore:
         rainfall_aggregates = self.wis2_station_rainfall_aggregates()
         rainfall_quality = self.wis2_operational_quality_summary()
         satellite = self.connection.execute(
-            """SELECT count(*) AS scenes,min(acquired_at) AS pre_event_scene,max(acquired_at) AS event_scene
-                 FROM satellite_event_scene_evidence
+            """SELECT count(*) AS scenes FROM satellite_event_scene_evidence
                 WHERE event_id=(SELECT id FROM operational_event WHERE event_key='VALE_RIBEIRA_FLOOD_2026_09')"""
+        ).fetchone()
+        active_sar_pair = self.connection.execute(
+            """SELECT pre.provider_record_id AS pre_scene,pre.acquired_at AS pre_acquired_at,
+                      event.provider_record_id AS event_scene,event.acquired_at AS event_acquired_at,
+                      pair.common_registro_coverage_percent
+                 FROM event_sar_pair_selection pair
+                 JOIN satellite_event_scene_evidence pre ON pre.id=pair.pre_scene_evidence_id
+                 JOIN satellite_event_scene_evidence event ON event.id=pair.event_scene_evidence_id
+                WHERE pair.aoi_id=(SELECT id FROM event_analysis_aoi WHERE aoi_key='VALE_FLOOD_2026_09_REGISTRO_PILOT')
+                  AND pair.status='SELECTED'
+                ORDER BY pair.rank_order NULLS LAST,pair.updated_at DESC LIMIT 1"""
         ).fetchone()
         return {
             "source_health": [dict(row) for row in health],
@@ -947,13 +957,18 @@ class PostgresStore:
                 },
                 "classification": "FACTUAL_EVIDENCE_ONLY" if event else None,
                 "sentinel1": {
-                    "status": "INCONCLUSIVE",
+                    "status": "PAIR_SELECTED_CATALOGUE_ONLY"
+                    if active_sar_pair
+                    else "INCONCLUSIVE",
                     "scene_count": int(satellite["scenes"]) if satellite else 0,
-                    "pre_event_scene": satellite["pre_event_scene"]
-                    if satellite
+                    "pre_event_scene": active_sar_pair["pre_acquired_at"]
+                    if active_sar_pair
                     else None,
-                    "event_scene": satellite["event_scene"] if satellite else None,
-                    "limitation": "Comparable metadata is available; SAR asset processing and permanent-water masking are pending",
+                    "event_scene": active_sar_pair["event_acquired_at"]
+                    if active_sar_pair
+                    else None,
+                    "active_pair": dict(active_sar_pair) if active_sar_pair else None,
+                    "limitation": "Catalogue pair selection is not flood classification; no new Process API imagery was requested",
                 },
             },
             "scope_definition": [dict(row) for row in scopes],
