@@ -92,6 +92,8 @@ not hard-code a one-off municipal conclusion.
 
 ### 1. Digital Twin asset and context foundation
 
+- **Status:** first persistence/API slice implemented in `8f677ca`; Farm360
+  asset rendering and rule consumption remain follow-on work.
 - **Objective:** add tenant-isolated, spatial physical assets and context links
   for installations, connectivity, energy, security, agricultural and
   operational assets.
