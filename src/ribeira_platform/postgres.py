@@ -1547,6 +1547,42 @@ class PostgresStore:
         )
         return item
 
+    def complete_action(
+        self,
+        tenant_id: str,
+        action_id: str,
+        *,
+        actor: str,
+        detail: str,
+        classification: str,
+        evidence_ids: list[str],
+        completed_at: str,
+    ) -> None:
+        if not detail.strip():
+            raise ValueError("action outcome detail is required")
+        if evidence_ids:
+            row = self.connection.execute(
+                "SELECT count(*) AS count FROM evidence WHERE tenant_id=%s AND id=ANY(%s)",
+                (tenant_id, evidence_ids),
+            ).fetchone()
+            if row is None or int(row["count"]) != len(set(evidence_ids)):
+                raise ValueError("action outcome evidence must belong to tenant")
+        row = self.connection.execute(
+            """UPDATE action SET status='COMPLETED',completed_at=%s,completed_by=%s,outcome_detail=%s,outcome_classification=%s,outcome_evidence_ids=%s::jsonb
+            WHERE id=%s AND tenant_id=%s AND status='OPEN' RETURNING id""",
+            (
+                completed_at,
+                actor,
+                detail,
+                classification,
+                json.dumps(evidence_ids),
+                action_id,
+                tenant_id,
+            ),
+        ).fetchone()
+        if row is None:
+            raise LookupError("open action is unavailable in tenant")
+
     def create_quality_event(
         self,
         tenant_id: str,

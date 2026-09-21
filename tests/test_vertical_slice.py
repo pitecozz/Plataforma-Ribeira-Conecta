@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 
 from ribeira_platform.epistemology import (
@@ -108,6 +109,45 @@ class VerticalSliceTests(unittest.TestCase):
         self.assertIsNone(result.action.responsible_user_id)
         self.assertIsNone(result.action.deadline)
         self.assertEqual(self.store.count("audit_log", self.tenant.id), 4)
+
+        self.app.complete_action(
+            self.tenant.id,
+            result.action.id,
+            outcome_detail="Técnico confirmou a irrigação corretiva no talhão.",
+            outcome_classification=DataClassification.MANUAL_CONFIRMED,
+            evidence_ids=result.decision.evidence_ids,
+            actor="field-technician",
+            completed_at="2026-09-16T18:00:00+00:00",
+        )
+        action = self.store.connection.execute(
+            "SELECT status, completed_at, completed_by, outcome_detail, "
+            "outcome_classification, outcome_evidence_ids_json "
+            "FROM actions WHERE id=?",
+            (result.action.id,),
+        ).fetchone()
+        self.assertEqual(action["status"], "COMPLETED")
+        self.assertEqual(action["completed_at"], "2026-09-16T18:00:00+00:00")
+        self.assertEqual(action["completed_by"], "field-technician")
+        self.assertEqual(
+            action["outcome_detail"],
+            "Técnico confirmou a irrigação corretiva no talhão.",
+        )
+        self.assertEqual(action["outcome_classification"], "MANUAL_CONFIRMED")
+        self.assertEqual(
+            json.loads(action["outcome_evidence_ids_json"]),
+            result.decision.evidence_ids,
+        )
+        self.assertEqual(self.store.count("audit_log", self.tenant.id), 5)
+
+        with self.assertRaises(LookupError):
+            self.app.complete_action(
+                self.tenant.id,
+                result.action.id,
+                outcome_detail="The same action cannot be completed twice.",
+                outcome_classification=DataClassification.MANUAL_CONFIRMED,
+                evidence_ids=result.decision.evidence_ids,
+                actor="field-technician",
+            )
 
     def test_null_does_not_become_zero_or_false(self) -> None:
         self.activate_rule()

@@ -201,6 +201,14 @@ class ActorRequest(BaseModel):
     actor: str | None = Field(default=None, max_length=200)
 
 
+class ActionOutcomeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outcome_detail: str = Field(min_length=1, max_length=4000)
+    outcome_classification: DataClassification
+    evidence_ids: list[str] = Field(default_factory=list, max_length=100)
+    completed_at: str | None = None
+
+
 class CustomerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     display_name: str = Field(min_length=1, max_length=240)
@@ -1234,6 +1242,29 @@ def create_app(
             ctx.is_platform_admin,
         )
         return to_jsonable(result)
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/actions/{action_id}/outcome",
+        tags=["actions"],
+    )
+    async def complete_action(
+        tenant_id: str,
+        action_id: str,
+        payload: ActionOutcomeRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "action:write", tenant_id)
+        application.complete_action(
+            tenant_id,
+            action_id,
+            outcome_detail=payload.outcome_detail,
+            outcome_classification=payload.outcome_classification,
+            evidence_ids=payload.evidence_ids,
+            actor=ctx.subject,
+            completed_at=payload.completed_at,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return {"id": action_id, "status": "COMPLETED"}
 
     @app.post("/v1/tenants/{tenant_id}/customers", status_code=201, tags=["commercial"])
     async def create_customer(

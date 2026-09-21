@@ -614,3 +614,51 @@ class RibeiraApplication:
             raise LookupError("property not found in tenant")
         with self.store.transaction():
             return self.decisions.evaluate(tenant_id, property, actor)
+
+    def complete_action(
+        self,
+        tenant_id: str,
+        action_id: str,
+        *,
+        outcome_detail: str,
+        outcome_classification: DataClassification,
+        evidence_ids: list[str],
+        actor: str,
+        completed_at: str | None = None,
+        platform_admin: bool = False,
+    ) -> None:
+        """Record a human-confirmed result for an actionable, property-scoped rule.
+
+        Actions are created by decisions, and decisions are always scoped to a
+        property.  Completing an action must therefore preserve the original
+        decision and attach explicit outcome provenance instead of replacing a
+        recommendation with an unsupported conclusion.
+        """
+        if not outcome_detail.strip():
+            raise ValueError("action outcome detail is required")
+        effective_completed_at = completed_at or now_utc()
+        parse_aware(effective_completed_at)
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            self.store.complete_action(
+                tenant_id,
+                action_id,
+                actor=actor,
+                detail=outcome_detail,
+                classification=outcome_classification.value,
+                evidence_ids=evidence_ids,
+                completed_at=effective_completed_at,
+            )
+            self.store.audit(
+                tenant_id,
+                actor,
+                "ACTION_OUTCOME_RECORDED",
+                "action",
+                action_id,
+                {
+                    "classification": outcome_classification.value,
+                    "evidence_ids": evidence_ids,
+                    "completed_at": effective_completed_at,
+                },
+                new_id(),
+                now_utc(),
+            )

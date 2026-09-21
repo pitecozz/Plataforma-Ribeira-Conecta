@@ -86,7 +86,9 @@ CREATE TABLE IF NOT EXISTS alerts (
 CREATE TABLE IF NOT EXISTS actions (
   id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id),
   action_type TEXT NOT NULL, status TEXT NOT NULL, responsible_user_id TEXT,
-  deadline TEXT, decision_id TEXT NOT NULL REFERENCES decisions(id), created_at TEXT NOT NULL
+  deadline TEXT, decision_id TEXT NOT NULL REFERENCES decisions(id), created_at TEXT NOT NULL,
+  completed_at TEXT, completed_by TEXT, outcome_detail TEXT, outcome_classification TEXT,
+  outcome_evidence_ids_json TEXT NOT NULL DEFAULT '[]'
 );
 CREATE TABLE IF NOT EXISTS data_quality_events (
   id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), property_id TEXT,
@@ -506,6 +508,46 @@ class SQLiteStore:
             ),
         )
         return item
+
+    def complete_action(
+        self,
+        tenant_id: str,
+        action_id: str,
+        *,
+        actor: str,
+        detail: str,
+        classification: str,
+        evidence_ids: list[str],
+        completed_at: str,
+    ) -> None:
+        if not detail.strip():
+            raise ValueError("action outcome detail is required")
+        action = self.connection.execute(
+            "SELECT id FROM actions WHERE id=? AND tenant_id=? AND status='OPEN'",
+            (action_id, tenant_id),
+        ).fetchone()
+        if action is None:
+            raise LookupError("open action is unavailable in tenant")
+        if evidence_ids:
+            marks = ",".join("?" for _ in evidence_ids)
+            count = self.connection.execute(
+                f"SELECT count(*) FROM evidence WHERE tenant_id=? AND id IN ({marks})",
+                [tenant_id, *evidence_ids],
+            ).fetchone()[0]
+            if count != len(set(evidence_ids)):
+                raise ValueError("action outcome evidence must belong to tenant")
+        self._insert(
+            "UPDATE actions SET status='COMPLETED',completed_at=?,completed_by=?,outcome_detail=?,outcome_classification=?,outcome_evidence_ids_json=? WHERE id=? AND tenant_id=?",
+            (
+                completed_at,
+                actor,
+                detail,
+                classification,
+                json.dumps(evidence_ids),
+                action_id,
+                tenant_id,
+            ),
+        )
 
     def create_quality_event(
         self,

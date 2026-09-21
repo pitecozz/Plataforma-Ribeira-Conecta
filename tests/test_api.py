@@ -5,9 +5,12 @@ import unittest
 from fastapi.testclient import TestClient
 
 from ribeira_platform.api import Settings, create_app
+from ribeira_platform.epistemology import RuleAuthority
 from ribeira_platform.iam import AuthContext, DevelopmentIdentityProvider
+from ribeira_platform.models import RuleDefinition, new_id
 from ribeira_platform.service import RibeiraApplication
 from ribeira_platform.storage import SQLiteStore
+from ribeira_platform.sources import SyntheticFixtureAdapter
 
 
 class ApiSecurityTests(unittest.TestCase):
@@ -159,6 +162,58 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(mrr.status_code, 200)
         self.assertEqual(mrr.json()["classification"], "CALCULATED")
         self.assertEqual(mrr.json()["result"], "0.00")
+
+    def test_action_outcome_requires_action_write_and_preserves_provenance(
+        self,
+    ) -> None:
+        tenant = self.application.create_tenant("Action outcome API tenant")
+        property = self.application.create_property(tenant.id, "Rule property")
+        source = self.application.create_source(tenant.id, "Fixture", "TEST", "fixture")
+        self.application.create_rule(
+            RuleDefinition(
+                new_id(),
+                tenant.id,
+                1,
+                "Moisture threshold",
+                RuleAuthority.REGRA_AGRONOMICA,
+                "soil_moisture",
+                "<",
+                30,
+                "%",
+                "HIGH",
+                "ACTIVE",
+                "reviewer",
+                "2026-09-16T00:00:00+00:00",
+            )
+        )
+        self.application.adapters[source.id] = SyntheticFixtureAdapter(
+            [
+                {
+                    "metric": "soil_moisture",
+                    "value": 27.0,
+                    "unit": "%",
+                    "observation_timestamp": "2026-09-16T13:42:11+00:00",
+                    "quality_flag": "VALID",
+                }
+            ]
+        )
+        self.application.ingest(tenant.id, property.id, source.id)
+        result = self.application.evaluate(tenant.id, property.id)
+        assert result.action is not None
+        response = self.client.post(
+            f"/v1/tenants/{tenant.id}/actions/{result.action.id}/outcome",
+            headers={"Authorization": "Bearer platform-secret-dev-only"},
+            json={
+                "outcome_detail": "Operator confirmed corrective irrigation.",
+                "outcome_classification": "MANUAL_CONFIRMED",
+                "evidence_ids": result.decision.evidence_ids,
+                "completed_at": "2026-09-16T18:00:00+00:00",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(), {"id": result.action.id, "status": "COMPLETED"}
+        )
 
 
 if __name__ == "__main__":

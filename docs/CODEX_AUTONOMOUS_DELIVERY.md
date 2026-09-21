@@ -125,6 +125,13 @@ not hard-code a one-off municipal conclusion.
 
 ### 2. Scoped rule-to-outcome extension
 
+- **Status:** the first property-evaluation-to-human-result slice is implemented:
+  an action created from a property decision can be completed once with an
+  explicit Evidence First classification, supporting evidence references,
+  timestamp, responsible actor and audit event. The original decision and its
+  recommendation remain immutable. Customer, field/talhão and asset scope
+  inheritance/precedence is intentionally still pending; this slice does not
+  claim that a tenant rule has those broader scopes.
 - **Objective:** explicit rule applicability across sector, customer, property,
   field/talhão and asset, with versioning, conflict handling and feedback.
 - **Business value:** safely turns asset/context data into recommendations,

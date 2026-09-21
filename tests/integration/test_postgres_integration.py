@@ -140,6 +140,16 @@ class PostgresIntegrationTests(unittest.TestCase):
         self.assertEqual(ingestion.fetch.status, IngestionStatus.INGESTED)
         self.assertEqual(result.decision.status, DecisionStatus.ACTIONABLE)
         self.assertEqual(result.decision.classification, DataClassification.INFERRED)
+        assert result.action is not None
+        self.application.complete_action(
+            tenant.id,
+            result.action.id,
+            outcome_detail="Field operator confirmed the corrective irrigation.",
+            outcome_classification=DataClassification.MANUAL_CONFIRMED,
+            evidence_ids=result.decision.evidence_ids,
+            actor="pg-field-operator",
+            completed_at="2026-09-16T18:00:00+00:00",
+        )
         with self.store.tenant_transaction(tenant.id):
             self.assertEqual(self.store.count("observation", tenant.id), 1)
             self.assertEqual(self.store.count("evidence", tenant.id), 1)
@@ -155,6 +165,19 @@ class PostgresIntegrationTests(unittest.TestCase):
             self.assertEqual(
                 self.store.get_property(tenant.id, property.id).boundary_source,
                 "MANUAL_CONFIRMED integration boundary",
+            )
+            action = self.store.connection.execute(
+                "SELECT status,completed_by,outcome_classification,"
+                "outcome_evidence_ids FROM action WHERE id=%s",
+                (result.action.id,),
+            ).fetchone()
+            self.assertIsNotNone(action)
+            assert action is not None
+            self.assertEqual(action["status"], "COMPLETED")
+            self.assertEqual(action["completed_by"], "pg-field-operator")
+            self.assertEqual(action["outcome_classification"], "MANUAL_CONFIRMED")
+            self.assertEqual(
+                action["outcome_evidence_ids"], result.decision.evidence_ids
             )
             audit = self.store.connection.execute(
                 "SELECT request_id, correlation_id FROM audit_log WHERE entity_id=%s",
