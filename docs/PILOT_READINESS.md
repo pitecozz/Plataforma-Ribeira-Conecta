@@ -10,8 +10,8 @@ alone does not raise a feature to `READY`.
 
 | Measure | Current estimate | Basis |
 |---|---:|---|
-| `PILOT_READINESS_PERCENT` | 27% | Tenant/RLS, property/boundary, Farm360 map/provenance and persisted asset map/detail work; Home, report, feedback, pilot E2E and HTTPS path do not. |
-| `FULL_PLATFORM_IMPLEMENTATION_PERCENT` | 19% | Shared backend foundations and one additional customer-facing asset workflow are implemented; most modules remain planned, foundation or research rather than customer workflows. |
+| `PILOT_READINESS_PERCENT` | 33% | Tenant/RLS, Home, property/boundary, Farm360 map/provenance and persisted asset map/detail work; report, feedback, pilot E2E and HTTPS path do not. |
+| `FULL_PLATFORM_IMPLEMENTATION_PERCENT` | 20% | Shared backend foundations plus customer-facing Home/Farm360 asset workflow are implemented; most modules remain planned, foundation or research rather than customer workflows. |
 
 These are deliberately conservative approximations, not service-level claims.
 
@@ -20,7 +20,7 @@ These are deliberately conservative approximations, not service-level claims.
 | Capability | Backend | Frontend | Tests | State | Constraint / next gate |
 |---|---|---|---|---|---|
 | Login and tenant authorization | OIDC/RBAC/RLS contracts | OIDC session configuration | unit/integration | `PARTIAL` | Pilot identity-provider configuration and user membership are not yet performed. |
-| Home and property portfolio | portfolio API | portfolio/property selector | frontend unit | `PARTIAL` | Needs a customer-facing Home shell and honest cards. |
+| Home and property portfolio | portfolio API | Home shell, honest cards and property selector | frontend unit | `PARTIAL` | No risk/asset count is shown without an API result. |
 | Property boundary and Farm360 | property/boundary APIs | map/workspace | unit + PostGIS | `PARTIAL` | Core flow exists; the customer workflow is not yet consolidated. |
 | Map | boundary and authenticated tiles | MapLibre property/NDVI/delta layers | frontend/E2E validation | `PARTIAL` | Asset layer/click detail is being added; no fabricated contextual layers. |
 | Assets and Digital Twin | persisted asset inventory/API | asset panel/detail and spatial layer | backend/frontend/PostGIS | `PARTIAL` | Asset registration and pilot asset onboarding remain operational steps. |

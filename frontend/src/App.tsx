@@ -1,7 +1,7 @@
 import { Farm360Api } from "./api/client";
 import { oidcConfigurationFromEnvironment } from "./auth/config";
 import { OidcSession } from "./auth/OidcSession";
-import { PropertyWorkspace } from "./pages/PropertyWorkspace";
+import { PilotShell } from "./pages/PilotShell";
 
 const apiUrl = import.meta.env.VITE_RIBEIRA_API_URL;
 const tenantId = import.meta.env.VITE_RIBEIRA_TENANT_ID;
@@ -10,7 +10,7 @@ const token = import.meta.env.VITE_RIBEIRA_ACCESS_TOKEN;
 const authMode = import.meta.env.VITE_RIBEIRA_AUTH_MODE ?? "development";
 
 function workspace(sessionToken: string) {
-  return <PropertyWorkspace api={new Farm360Api(apiUrl, sessionToken)} apiBaseUrl={apiUrl} tenantId={tenantId} initialPropertyId={propertyId} token={sessionToken} />;
+  return <PilotShell api={new Farm360Api(apiUrl, sessionToken)} apiBaseUrl={apiUrl} tenantId={tenantId} initialPropertyId={propertyId} token={sessionToken} />;
 }
 
 export default function App() {

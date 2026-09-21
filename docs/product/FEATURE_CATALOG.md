@@ -94,5 +94,5 @@ commercial availability are summarized here and expanded in the linked canon.
 | F-BUS-002 | Evidence-backed cross-sell/upsell | `PARTIAL` | Commercial evidence, need and applicable service. | No arbitrary sales recommendation. | Internal/commercial workflow. |
 | F-REPORT-001 | Intelligence Report framework | `COMING_SOON` | Tenant property/assets/context/evidence/decisions. | Shows only available records and explicit gaps. | Pilot Report V0.1. |
 | F-FEEDBACK-001 | Pilot feedback | `COMING_SOON` | Tenant/user/page/property/feature/type/message/audit. | Feedback is tenant-isolated and never customer data leakage. | Pilot P0. |
-| F-UX-001 | Product navigation and feature-state flags | `COMING_SOON` | Canonical feature lifecycle and authorization. | No dead buttons or misleading production state. | Pilot shell. |
+| F-UX-001 | Product navigation and feature-state flags | `BETA` | Canonical feature lifecycle and authorization. | Home/Farm360/Help are interactive; other modules are visible status labels, never dead buttons. | Pilot shell. |
 | F-SEC-002 | Pilot identity/onboarding/deployment path | `PARTIAL` | OIDC membership, HTTPS edge/operator decision, runbooks. | No public DB/metrics/dev ports; Cloudflare decision preserved. | `BLOCKED` pending operator access decision. |

@@ -1,0 +1,44 @@
+.pilot-header {
+  align-items: center;
+  background: #123524;
+  color: #f1f7f2;
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 24px;
+}
+
+.pilot-header p {
+  margin: 0;
+}
+
+.pilot-header nav {
+  display: flex;
+  gap: 8px;
+}
+
+.pilot-header button {
+  background: transparent;
+  border: 1px solid #6d8a77;
+  border-radius: 4px;
+  color: #f1f7f2;
+  padding: 7px 10px;
+}
+
+.pilot-header button.selected {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.module-status {
+  background: #fff;
+  border-bottom: 1px solid #d9e2da;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 7px 24px;
+}
+
+.module-status > span {
+  color: #4b5d51;
+  font-size: 11px;
+}
