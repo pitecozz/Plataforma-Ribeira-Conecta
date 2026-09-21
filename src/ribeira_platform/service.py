@@ -662,3 +662,43 @@ class RibeiraApplication:
                 new_id(),
                 now_utc(),
             )
+
+    def assess_flood_exposure(
+        self,
+        tenant_id: str,
+        *,
+        event_key: str,
+        subject_type: str,
+        subject_id: str,
+        exposure_zone_id: str | None,
+        actor: str,
+        platform_admin: bool = False,
+    ) -> dict[str, Any]:
+        if not isinstance(self.store, PostgresStore):
+            raise RuntimeError("flood exposure assessments require PostgreSQL/PostGIS")
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            assessment = self.store.assess_flood_exposure(
+                tenant_id,
+                event_key=event_key,
+                subject_type=subject_type,
+                subject_id=subject_id,
+                exposure_zone_id=exposure_zone_id,
+                actor=actor,
+            )
+            self.store.audit(
+                tenant_id,
+                actor,
+                "FLOOD_EXPOSURE_ASSESSED",
+                "flood_exposure_assessment",
+                str(assessment["id"]),
+                {
+                    "event_key": event_key,
+                    "subject_type": subject_type,
+                    "subject_id": subject_id,
+                    "status": assessment["status"],
+                    "classification": assessment["classification"],
+                },
+                new_id(),
+                now_utc(),
+            )
+            return assessment

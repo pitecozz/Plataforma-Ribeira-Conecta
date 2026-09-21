@@ -148,6 +148,12 @@ not hard-code a one-off municipal conclusion.
 
 ### 3. Flood-event evidence, exposure and hypothesis foundation
 
+- **Status:** foundation in progress. The persisted September event now has a
+  factual profile and distinct H1–H4 hypotheses; a tenant assessment can only
+  calculate property/asset intersection from a verified `FLOOD_EXTENT` zone.
+  Municipal reports, unverified zones, simulated zones, missing subject
+  geometry and satellite open-water signals all remain `UNKNOWN` for tenant
+  exposure. No real flood zone is seeded by this capability.
 - **Objective:** generalize the September 2026 Vale do Ribeira event into an
   Evidence-First flood-event capability: factual timeline, independent
   hypotheses, municipal/property/asset exposure and action traceability.

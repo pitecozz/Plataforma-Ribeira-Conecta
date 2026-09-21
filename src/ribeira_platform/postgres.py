@@ -828,6 +828,13 @@ class PostgresStore:
         return result
 
     def vale_do_ribeira_situation(self) -> dict[str, Any]:
+        # This shared read may be called from an HTTP endpoint outside a
+        # tenant transaction. Ensure it never leaves the long-lived connection
+        # idle in transaction and holding relation locks.
+        with self.transaction():
+            return self._vale_do_ribeira_situation_in_context()
+
+    def _vale_do_ribeira_situation_in_context(self) -> dict[str, Any]:
         """Return global facts only; lack of a source remains explicit."""
         health = self.connection.execute(
             "SELECT provider,status,last_success,last_observation,failure_code,updated_at FROM source_health ORDER BY provider"
@@ -874,6 +881,21 @@ class PostgresStore:
             """SELECT event_type,count(*) AS count FROM operational_event_timeline_entry
                  WHERE event_id=(SELECT id FROM operational_event WHERE event_key='VALE_RIBEIRA_FLOOD_2026_09')
                 GROUP BY event_type ORDER BY event_type"""
+        ).fetchall()
+        flood_profile = self.connection.execute(
+            """SELECT profile.evidence_status,profile.classification,profile.limitations,
+                      profile.provenance
+                 FROM flood_event_profile profile
+                 JOIN operational_event event ON event.id=profile.event_id
+                WHERE event.event_key='VALE_RIBEIRA_FLOOD_2026_09'"""
+        ).fetchone()
+        flood_hypotheses = self.connection.execute(
+            """SELECT hypothesis.hypothesis_key,hypothesis.title,hypothesis.status,
+                      hypothesis.method,hypothesis.limitations,hypothesis.provenance
+                 FROM flood_event_hypothesis hypothesis
+                 JOIN operational_event event ON event.id=hypothesis.event_id
+                WHERE event.event_key='VALE_RIBEIRA_FLOOD_2026_09'
+                ORDER BY hypothesis_key"""
         ).fetchall()
         inmet = self.connection.execute(
             """SELECT count(DISTINCT station_id) AS stations,max(period_end) AS latest_observation,
@@ -956,6 +978,8 @@ class PostgresStore:
                     str(row["event_type"]): int(row["count"]) for row in event_entries
                 },
                 "classification": "FACTUAL_EVIDENCE_ONLY" if event else None,
+                "flood_profile": dict(flood_profile) if flood_profile else None,
+                "hypotheses": [dict(row) for row in flood_hypotheses],
                 "sentinel1": {
                     "status": "PAIR_SELECTED_CATALOGUE_ONLY"
                     if active_sar_pair
@@ -985,6 +1009,127 @@ class PostgresStore:
                 "scope_reference": scope["source_reference"] if scope else None,
             },
         }
+
+    def assess_flood_exposure(
+        self,
+        tenant_id: str,
+        *,
+        event_key: str,
+        subject_type: str,
+        subject_id: str,
+        exposure_zone_id: str | None,
+        actor: str,
+    ) -> dict[str, Any]:
+        """Persist one reproducible spatial assessment without inferring a hazard.
+
+        A reported municipality impact cannot be substituted for an exposure
+        zone. A missing, unverified, simulated, or non-flood zone is therefore
+        recorded as UNKNOWN rather than converted into an exposure decision.
+        """
+        if subject_type not in {"PROPERTY", "ASSET"}:
+            raise ValueError("flood exposure subject_type must be PROPERTY or ASSET")
+        event = self.connection.execute(
+            "SELECT id FROM operational_event WHERE event_key=%s", (event_key,)
+        ).fetchone()
+        if event is None:
+            raise LookupError("flood event is unavailable")
+        if subject_type == "PROPERTY":
+            subject = self.connection.execute(
+                "SELECT geometry FROM property WHERE tenant_id=%s AND id=%s",
+                (tenant_id, subject_id),
+            ).fetchone()
+        else:
+            subject = self.connection.execute(
+                "SELECT geometry FROM asset WHERE tenant_id=%s AND id=%s",
+                (tenant_id, subject_id),
+            ).fetchone()
+        if subject is None:
+            raise LookupError("exposure subject is unavailable in tenant")
+
+        status = "UNKNOWN"
+        classification = "UNKNOWN"
+        method = "no_verified_flood_exposure_zone"
+        intersection_km2: float | None = None
+        limitations: list[str] = []
+        provenance: dict[str, Any] = {
+            "event_key": event_key,
+            "subject_type": subject_type,
+            "subject_id": subject_id,
+            "requested_exposure_zone_id": exposure_zone_id,
+            "actor": actor,
+        }
+        if subject["geometry"] is None:
+            limitations.append("SUBJECT_GEOMETRY_UNKNOWN")
+        elif exposure_zone_id is None:
+            limitations.append("VERIFIED_FLOOD_EXPOSURE_ZONE_REQUIRED")
+        else:
+            zone = self.connection.execute(
+                """SELECT id,zone_type,geometry,geometry_status,classification,method,
+                          source_reference,limitations,provenance
+                     FROM flood_event_exposure_zone WHERE id=%s AND event_id=%s""",
+                (exposure_zone_id, event["id"]),
+            ).fetchone()
+            if zone is None:
+                raise LookupError("exposure zone is unavailable for flood event")
+            provenance["exposure_zone"] = {
+                "id": str(zone["id"]),
+                "type": zone["zone_type"],
+                "classification": zone["classification"],
+                "method": zone["method"],
+                "source_reference": zone["source_reference"],
+            }
+            if zone["geometry_status"] != "VERIFIED" or zone["geometry"] is None:
+                limitations.append("EXPOSURE_ZONE_GEOMETRY_UNKNOWN")
+            elif zone["classification"] == "SIMULATED":
+                limitations.append("SIMULATED_EXPOSURE_ZONE_NOT_ACTIONABLE")
+            elif zone["zone_type"] != "FLOOD_EXTENT":
+                limitations.append("VERIFIED_FLOOD_EXTENT_REQUIRED")
+            else:
+                metric = self.connection.execute(
+                    """SELECT ST_Intersects(subject.geometry,zone.geometry) AS intersects,
+                              ST_Area(ST_Intersection(subject.geometry,zone.geometry)::geography) / 1000000.0 AS km2
+                         FROM (SELECT geometry FROM flood_event_exposure_zone WHERE id=%s) zone,
+                              (SELECT geometry FROM property WHERE id=%s) subject"""
+                    if subject_type == "PROPERTY"
+                    else """SELECT ST_Intersects(subject.geometry,zone.geometry) AS intersects,
+                              ST_Area(ST_Intersection(subject.geometry,zone.geometry)::geography) / 1000000.0 AS km2
+                         FROM (SELECT geometry FROM flood_event_exposure_zone WHERE id=%s) zone,
+                              (SELECT geometry FROM asset WHERE id=%s) subject""",
+                    (exposure_zone_id, subject_id),
+                ).fetchone()
+                if metric is None:
+                    raise RuntimeError("flood exposure geometry calculation failed")
+                intersection_km2 = float(metric["km2"] or 0)
+                status = "EXPOSED" if metric["intersects"] else "NOT_EXPOSED"
+                classification = "CALCULATED"
+                method = "postgis_geographic_intersection_v1"
+                limitations.extend(zone["limitations"] or [])
+
+        row = self.connection.execute(
+            """INSERT INTO tenant_flood_exposure_assessment(
+                   id,tenant_id,event_id,exposure_zone_id,subject_type,property_id,asset_id,
+                   status,classification,method,intersection_km2,limitations,provenance,assessed_at
+                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,now())
+                 RETURNING id,status,classification,method,intersection_km2,limitations,provenance,assessed_at""",
+            (
+                new_id(),
+                tenant_id,
+                event["id"],
+                exposure_zone_id,
+                subject_type,
+                subject_id if subject_type == "PROPERTY" else None,
+                subject_id if subject_type == "ASSET" else None,
+                status,
+                classification,
+                method,
+                intersection_km2,
+                json.dumps(limitations),
+                json.dumps(provenance),
+            ),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("flood exposure assessment was not persisted")
+        return dict(row)
 
     def _one(self, sql: str, params: Iterable[Any] = ()) -> dict[str, Any] | None:
         return self.connection.execute(sql, tuple(params)).fetchone()

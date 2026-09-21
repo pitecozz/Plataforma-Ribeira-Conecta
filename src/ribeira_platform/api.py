@@ -209,6 +209,14 @@ class ActionOutcomeRequest(BaseModel):
     completed_at: str | None = None
 
 
+class FloodExposureAssessmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event_key: str = Field(min_length=1, max_length=200)
+    subject_type: str = Field(pattern=r"^(PROPERTY|ASSET)$")
+    subject_id: str = Field(min_length=1, max_length=200)
+    exposure_zone_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+
 class CustomerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     display_name: str = Field(min_length=1, max_length=240)
@@ -1265,6 +1273,29 @@ def create_app(
             platform_admin=ctx.is_platform_admin,
         )
         return {"id": action_id, "status": "COMPLETED"}
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/flood-exposure-assessments",
+        status_code=201,
+        tags=["flood-events"],
+    )
+    async def assess_flood_exposure(
+        tenant_id: str,
+        payload: FloodExposureAssessmentRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "action:write", tenant_id)
+        return to_jsonable(
+            application.assess_flood_exposure(
+                tenant_id,
+                event_key=payload.event_key,
+                subject_type=payload.subject_type,
+                subject_id=payload.subject_id,
+                exposure_zone_id=payload.exposure_zone_id,
+                actor=ctx.subject,
+                platform_admin=ctx.is_platform_admin,
+            )
+        )
 
     @app.post("/v1/tenants/{tenant_id}/customers", status_code=201, tags=["commercial"])
     async def create_customer(

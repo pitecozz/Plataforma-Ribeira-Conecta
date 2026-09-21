@@ -37,6 +37,115 @@ MIGRATION_DATABASE_URL = os.getenv("RIBEIRA_TEST_MIGRATION_DATABASE_URL")
     "RIBEIRA_TEST_DATABASE_URL is required for PostgreSQL integration tests",
 )
 class PostgresIntegrationTests(unittest.TestCase):
+    def test_flood_exposure_requires_a_verified_zone_and_preserves_hypotheses(
+        self,
+    ) -> None:
+        tenant = self.create_test_tenant("Flood exposure PG tenant")
+        property = self.application.create_property(
+            tenant.id,
+            "Flood exposure property",
+            {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-47.0, -24.0],
+                        [-46.99, -24.0],
+                        [-46.99, -24.01],
+                        [-47.0, -24.01],
+                        [-47.0, -24.0],
+                    ]
+                ],
+            },
+            "EPSG:4326",
+        )
+        unknown = self.application.assess_flood_exposure(
+            tenant.id,
+            event_key="VALE_RIBEIRA_FLOOD_2026_09",
+            subject_type="PROPERTY",
+            subject_id=property.id,
+            exposure_zone_id=None,
+            actor="operator",
+        )
+        self.assertEqual(unknown["status"], "UNKNOWN")
+        self.assertEqual(unknown["classification"], "UNKNOWN")
+        self.assertIn("VERIFIED_FLOOD_EXPOSURE_ZONE_REQUIRED", unknown["limitations"])
+
+        other_tenant = self.create_test_tenant("Other flood exposure tenant")
+        with self.store.tenant_transaction(None, platform_admin=True):
+            event = self.store.connection.execute(
+                "SELECT id FROM operational_event WHERE event_key=%s",
+                ("VALE_RIBEIRA_FLOOD_2026_09",),
+            ).fetchone()
+        self.assertIsNotNone(event)
+        assert event is not None
+        with self.store.tenant_transaction(other_tenant.id):
+            with self.assertRaises(psycopg.Error):
+                self.store.connection.execute(
+                    """INSERT INTO tenant_flood_exposure_assessment(
+                           id,tenant_id,event_id,subject_type,property_id,status,
+                           classification,method,limitations,provenance,assessed_at
+                         ) VALUES (%s,%s,%s,'PROPERTY',%s,'UNKNOWN','UNKNOWN',
+                           'cross_tenant_test','[]'::jsonb,'{}'::jsonb,now())""",
+                    (new_id(), other_tenant.id, event["id"], property.id),
+                )
+
+        zone_id = new_id()
+        with self.store.tenant_transaction(None, platform_admin=True):
+            self.store.connection.execute(
+                """INSERT INTO flood_event_exposure_zone(
+                       id,event_id,zone_type,geometry,geometry_status,classification,
+                       method,source_reference,limitations,provenance
+                     ) VALUES (%s,%s,'FLOOD_EXTENT',ST_GeomFromText(%s,4326),
+                       'VERIFIED','OFFICIAL_SOURCE','synthetic_postgis_test',%s,'[]'::jsonb,
+                       '{"fixture":true}'::jsonb)""",
+                (
+                    zone_id,
+                    event["id"],
+                    "POLYGON((-47.005 -24.005,-46.995 -24.005,-46.995 -23.995,-47.005 -23.995,-47.005 -24.005))",
+                    "https://example.invalid/flood-zone-fixture",
+                ),
+            )
+            hypotheses = self.store.connection.execute(
+                "SELECT hypothesis_key,status FROM flood_event_hypothesis "
+                "WHERE event_id=%s ORDER BY hypothesis_key",
+                (event["id"],),
+            ).fetchall()
+        self.assertEqual(
+            [(item["hypothesis_key"], item["status"]) for item in hypotheses],
+            [
+                ("H1_LOCAL_RAINFALL", "INCONCLUSIVE"),
+                ("H2_UPSTREAM_RAINFALL", "UNKNOWN"),
+                ("H3_RESERVOIR_OPERATION", "INCONCLUSIVE"),
+                ("H4_ENSO_CONTEXT", "INCONCLUSIVE"),
+            ],
+        )
+        situation = self.store.vale_do_ribeira_situation()
+        self.assertEqual(
+            situation["event"]["flood_profile"]["classification"],
+            "FACTUAL_EVIDENCE_ONLY",
+        )
+        self.assertEqual(len(situation["event"]["hypotheses"]), 4)
+        exposed = self.application.assess_flood_exposure(
+            tenant.id,
+            event_key="VALE_RIBEIRA_FLOOD_2026_09",
+            subject_type="PROPERTY",
+            subject_id=property.id,
+            exposure_zone_id=zone_id,
+            actor="operator",
+        )
+        self.assertEqual(exposed["status"], "EXPOSED")
+        self.assertEqual(exposed["classification"], "CALCULATED")
+        self.assertGreater(float(exposed["intersection_km2"]), 0)
+        with self.store.tenant_transaction(tenant.id):
+            self.store.connection.execute(
+                "DELETE FROM tenant_flood_exposure_assessment WHERE id=%s",
+                (exposed["id"],),
+            )
+        with self.store.tenant_transaction(None, platform_admin=True):
+            self.store.connection.execute(
+                "DELETE FROM flood_event_exposure_zone WHERE id=%s", (zone_id,)
+            )
+
     def test_spatial_asset_context_is_postgis_persisted_and_tenant_scoped(self) -> None:
         tenant = self.create_test_tenant("Spatial asset PG tenant")
         asset = Asset(
