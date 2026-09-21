@@ -108,10 +108,17 @@ class InmetWis2HttpProvider:
                     raw = response.read(self.max_response_bytes + 1)
                 break
             except HTTPError as exc:
-                if exc.code not in {429, 500, 502, 503, 504} or attempt >= self.max_retries:
+                if (
+                    exc.code not in {429, 500, 502, 503, 504}
+                    or attempt >= self.max_retries
+                ):
                     raise
                 retry_after = exc.headers.get("Retry-After")
-                delay = min(float(retry_after), 30.0) if retry_after and retry_after.isdigit() else min(2**attempt, 8)
+                delay = (
+                    min(float(retry_after), 30.0)
+                    if retry_after and retry_after.isdigit()
+                    else min(2**attempt, 8)
+                )
                 time.sleep(delay)
             except URLError:
                 if attempt >= self.max_retries:
@@ -129,9 +136,7 @@ class InmetWis2HttpProvider:
         return payload
 
     def collection(self) -> dict[str, Any]:
-        return self._get_json(
-            f"https://{WIS2_HOST}/oapi/collections/{WIS2_COLLECTION}"
-        )
+        return self._get_json(f"https://{WIS2_HOST}/oapi/collections/{WIS2_COLLECTION}")
 
     def queryables(self) -> dict[str, Any]:
         return self._get_json(
@@ -154,15 +159,27 @@ class InmetWis2HttpProvider:
             raise ValueError("unexpected WIS2 precipitation unit")
         record_id = properties.get("id") or feature.get("id")
         wigos = properties.get("wigos_station_identifier")
-        if not isinstance(record_id, str) or not record_id or not isinstance(wigos, str) or not wigos:
+        if (
+            not isinstance(record_id, str)
+            or not record_id
+            or not isinstance(wigos, str)
+            or not wigos
+        ):
             raise ValueError("WIS2 precipitation feature lacks official identity")
-        if geometry.get("type") != "Point" or not isinstance(geometry.get("coordinates"), list):
+        if geometry.get("type") != "Point" or not isinstance(
+            geometry.get("coordinates"), list
+        ):
             raise ValueError("WIS2 station geometry must be a Point")
         coordinates = geometry["coordinates"]
         if len(coordinates) < 2:
             raise ValueError("WIS2 point geometry is incomplete")
         longitude, latitude = float(coordinates[0]), float(coordinates[1])
-        if not (math.isfinite(longitude) and math.isfinite(latitude) and -180 <= longitude <= 180 and -90 <= latitude <= 90):
+        if not (
+            math.isfinite(longitude)
+            and math.isfinite(latitude)
+            and -180 <= longitude <= 180
+            and -90 <= latitude <= 90
+        ):
             raise ValueError("WIS2 station coordinates are invalid")
         value = properties.get("value")
         if value is not None:
@@ -284,7 +301,9 @@ def parse_sidra_metadata(payload: object, periods: object) -> SidraBananaMetadat
     classifications = payload.get("classificacoes")
     variables = payload.get("variaveis")
     if not isinstance(classifications, list) or len(classifications) != 1:
-        raise ValueError("SIDRA table 1613 must have exactly one product classification")
+        raise ValueError(
+            "SIDRA table 1613 must have exactly one product classification"
+        )
     classification = classifications[0]
     if not isinstance(classification, dict):
         raise ValueError("SIDRA classification is malformed")
@@ -356,7 +375,9 @@ def parse_sidra_value(raw_value: object) -> SidraValue:
     if raw.casefold() == "x":
         return SidraValue(None, "SUPPRESSED", raw)
     try:
-        value = float(raw.replace(".", "").replace(",", ".")) if "," in raw else float(raw)
+        value = (
+            float(raw.replace(".", "").replace(",", ".")) if "," in raw else float(raw)
+        )
     except ValueError as exc:
         raise ValueError("unknown SIDRA value marker") from exc
     if not math.isfinite(value):
@@ -377,7 +398,13 @@ class SidraPamProvider:
             "apisidra.ibge.gov.br",
         }:
             raise ValueError("SIDRA URL is outside approved official hosts")
-        request = Request(url, headers={"Accept": "application/json", "User-Agent": "RibeiraConecta/1.0 official-public-data"})
+        request = Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "RibeiraConecta/1.0 official-public-data",
+            },
+        )
         with urlopen(request, timeout=self.timeout_seconds) as response:  # noqa: S310 -- approved HTTPS host above
             raw = response.read(2_000_001)
         if len(raw) > 2_000_000:
@@ -391,7 +418,9 @@ class SidraPamProvider:
             self._get_json(SIDRA_METADATA_URL), self._get_json(SIDRA_PERIODS_URL)
         )
 
-    def values(self, municipality_codes: Iterable[str], metadata: SidraBananaMetadata) -> list[dict[str, Any]]:
+    def values(
+        self, municipality_codes: Iterable[str], metadata: SidraBananaMetadata
+    ) -> list[dict[str, Any]]:
         municipalities = ",".join(str(code) for code in municipality_codes)
         if not municipalities:
             return []
@@ -401,7 +430,9 @@ class SidraPamProvider:
             f"/p/{metadata.period}/c{metadata.classification_id}/{metadata.category_id}"
         )
         payload = self._get_json(url)
-        if not isinstance(payload, list) or not all(isinstance(row, dict) for row in payload):
+        if not isinstance(payload, list) or not all(
+            isinstance(row, dict) for row in payload
+        ):
             raise ValueError("SIDRA values response is malformed")
         return list(payload)
 
@@ -417,9 +448,16 @@ def parse_sidra_baselines(
         if row.get("NC") == "Nível Territorial (Código)":
             continue
         if str(row.get("NC")) != "6" or str(row.get("D3C")) != metadata.period:
-            raise ValueError("SIDRA response has an unexpected territorial level or period")
-        if str(row.get("D4C")) != metadata.category_id or str(row.get("D4N")) != metadata.category_label:
-            raise ValueError("SIDRA response does not match the resolved banana category")
+            raise ValueError(
+                "SIDRA response has an unexpected territorial level or period"
+            )
+        if (
+            str(row.get("D4C")) != metadata.category_id
+            or str(row.get("D4N")) != metadata.category_label
+        ):
+            raise ValueError(
+                "SIDRA response does not match the resolved banana category"
+            )
         municipality = str(row.get("D1C", ""))
         variable_key = expected_ids.get(str(row.get("D2C")))
         if not municipality or variable_key is None:
@@ -446,6 +484,8 @@ def parse_sidra_baselines(
         missing = set(metadata.variables) - set(record["raw"])
         if missing:
             record["status"] = "PARTIAL"
-        elif any(state not in {"NUMERIC", "ZERO"} for state in record["states"].values()):
+        elif any(
+            state not in {"NUMERIC", "ZERO"} for state in record["states"].values()
+        ):
             record["status"] = "MISSING"
     return results
