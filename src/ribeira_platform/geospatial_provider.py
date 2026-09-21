@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 import socket
 import time
@@ -146,6 +147,16 @@ class CopernicusStacAdapter(GeospatialProviderPort):
                         "RESPONSE_TOO_LARGE",
                         "CDSE response exceeds the configured limit",
                     )
+                if (
+                    response.headers.get("Content-Encoding", "").lower() == "gzip"
+                    or raw[:2] == b"\x1f\x8b"
+                ):
+                    raw = gzip.decompress(raw)
+                if len(raw) > 10 * 1024 * 1024:
+                    raise StacProviderError(
+                        "RESPONSE_TOO_LARGE",
+                        "CDSE decompressed response exceeds the configured limit",
+                    )
         except urllib.error.HTTPError as exc:
             if exc.code == 429:
                 code = "RATE_LIMITED"
@@ -245,7 +256,26 @@ class CopernicusStacAdapter(GeospatialProviderPort):
                     or len(items) >= request.selection_policy.max_candidates
                 ):
                     break
-                payload = self._request_json(next_method, next_url, next_payload)
+                try:
+                    payload = self._request_json(next_method, next_url, next_payload)
+                except StacProviderError as exc:
+                    # CDSE documents a GET /search variant for bbox, datetime,
+                    # collections and limit.  Some network paths reject POST
+                    # bodies at the edge; use only this narrower documented
+                    # fallback, never a broad catalogue scan.
+                    if next_method != "POST" or exc.code != "INVALID_PAYLOAD":
+                        raise
+                    bbox = _geojson_bbox(aoi_geojson)
+                    query = urllib.parse.urlencode(
+                        {
+                            "collections": request.collection_id,
+                            "bbox": ",".join(str(value) for value in bbox),
+                            "datetime": f"{request.datetime_start}/{request.datetime_end}",
+                            "limit": min(request.selection_policy.max_candidates, 100),
+                        }
+                    )
+                    next_url = self._url("search") + "?" + query
+                    payload = self._request_json("GET", next_url)
                 raw_pages.append(payload)
                 features = payload.get("features")
                 if not isinstance(features, list):
@@ -295,3 +325,31 @@ class CopernicusStacAdapter(GeospatialProviderPort):
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
         raise StacProviderError("REDIRECT_BLOCKED", "provider redirects are disabled")
+
+
+def _geojson_bbox(value: dict[str, Any]) -> tuple[float, float, float, float]:
+    """Return a validated envelope without accepting arbitrary GeoJSON shapes."""
+    coordinates = value.get("coordinates")
+    if not isinstance(coordinates, list):
+        raise StacProviderError("INVALID_AOI", "AOI coordinates are required")
+    pairs: list[tuple[float, float]] = []
+
+    def visit(node: Any) -> None:
+        if (
+            isinstance(node, list)
+            and len(node) >= 2
+            and all(isinstance(item, (int, float)) for item in node[:2])
+        ):
+            longitude, latitude = float(node[0]), float(node[1])
+            if not -180 <= longitude <= 180 or not -90 <= latitude <= 90:
+                raise StacProviderError("INVALID_AOI", "AOI coordinate outside WGS84")
+            pairs.append((longitude, latitude))
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+
+    visit(coordinates)
+    if not pairs:
+        raise StacProviderError("INVALID_AOI", "AOI has no coordinate pairs")
+    longitudes, latitudes = zip(*pairs, strict=True)
+    return min(longitudes), min(latitudes), max(longitudes), max(latitudes)

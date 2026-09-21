@@ -22,7 +22,11 @@ def sidra_metadata() -> dict[str, object]:
             {"id": 1, "nome": "Área destinada à colheita", "unidade": "Hectares"},
             {"id": 2, "nome": "Área colhida", "unidade": "Hectares"},
             {"id": 3, "nome": "Quantidade produzida", "unidade": "Toneladas"},
-            {"id": 4, "nome": "Rendimento médio da produção", "unidade": "Quilogramas por Hectare"},
+            {
+                "id": 4,
+                "nome": "Rendimento médio da produção",
+                "unidade": "Quilogramas por Hectare",
+            },
             {"id": 5, "nome": "Valor da produção", "unidade": "Mil Reais"},
         ],
         "classificacoes": [
@@ -35,7 +39,9 @@ def sidra_metadata() -> dict[str, object]:
     }
 
 
-def wis2_feature(*, value: object = 0.0, name: str = WIS2_PRECIPITATION_NAME) -> dict[str, object]:
+def wis2_feature(
+    *, value: object = 0.0, name: str = WIS2_PRECIPITATION_NAME
+) -> dict[str, object]:
     return {
         "id": "record-1",
         "geometry": {"type": "Point", "coordinates": [-47.0, -24.0]},
@@ -83,7 +89,8 @@ class Wis2AndSidraTests(unittest.TestCase):
         self.assertIsNone(record.raw_value)
         with self.assertRaises(ValueError):
             InmetWis2HttpProvider.parse_feature(
-                wis2_feature(value=-1), source_url="https://wis2bra.inmet.gov.br/example"
+                wis2_feature(value=-1),
+                source_url="https://wis2bra.inmet.gov.br/example",
             )
 
     def test_pagination_follows_only_provider_next_link_and_stays_bounded(self) -> None:
@@ -97,7 +104,9 @@ class Wis2AndSidraTests(unittest.TestCase):
                 if len(self.urls) == 1:
                     return {
                         "features": [wis2_feature(value=1.0)],
-                        "links": [{"rel": "next", "href": "https://wis2bra.inmet.gov.br/next"}],
+                        "links": [
+                            {"rel": "next", "href": "https://wis2bra.inmet.gov.br/next"}
+                        ],
                     }
                 return {"features": [wis2_feature(value=2.0)], "links": []}
 
@@ -118,9 +127,15 @@ class Wis2AndSidraTests(unittest.TestCase):
             {"NC": "Nível Territorial (Código)"},
             *[
                 {
-                    "NC": "6", "D1C": "123", "D2C": variable.identifier,
-                    "D2N": variable.label, "D3C": "2025", "D4C": metadata.category_id,
-                    "D4N": metadata.category_label, "MN": variable.unit, "V": "0",
+                    "NC": "6",
+                    "D1C": "123",
+                    "D2C": variable.identifier,
+                    "D2N": variable.label,
+                    "D3C": "2025",
+                    "D4C": metadata.category_id,
+                    "D4N": metadata.category_label,
+                    "MN": variable.unit,
+                    "V": "0",
                 }
                 for variable in metadata.variables.values()
             ],

@@ -232,10 +232,16 @@ class PostgresStore:
             """SELECT id,name FROM municipality_reference
                  WHERE uf='SP' AND source_year=2025"""
         ).fetchall()
-        by_name = {self._scope_name(str(row["name"])): row["id"] for row in municipalities}
-        missing = [name for name in expected if self._scope_name(str(name)) not in by_name]
+        by_name = {
+            self._scope_name(str(row["name"])): row["id"] for row in municipalities
+        }
+        missing = [
+            name for name in expected if self._scope_name(str(name)) not in by_name
+        ]
         if missing:
-            raise RuntimeError("official SEMIL municipality definition cannot be joined to IBGE 2025")
+            raise RuntimeError(
+                "official SEMIL municipality definition cannot be joined to IBGE 2025"
+            )
         scope_id = definition["geographic_scope_id"]
         ids = [by_name[self._scope_name(str(name))] for name in expected]
         for municipality_id in ids:
@@ -266,7 +272,9 @@ class PostgresStore:
         )
         return len(ids)
 
-    def vale_scope_envelope(self, *, buffer_degrees: float = 0.25) -> tuple[float, float, float, float]:
+    def vale_scope_envelope(
+        self, *, buffer_degrees: float = 0.25
+    ) -> tuple[float, float, float, float]:
         if buffer_degrees < 0 or buffer_degrees > 1:
             raise ValueError("scope buffer must be between zero and one degree")
         row = self.connection.execute(
@@ -278,7 +286,9 @@ class PostgresStore:
                       AND geometry_status='VERIFIED' AND geometry IS NOT NULL
                  ) AS bounded"""
         ).fetchone()
-        if row is None or any(row[key] is None for key in ("xmin", "ymin", "xmax", "ymax")):
+        if row is None or any(
+            row[key] is None for key in ("xmin", "ymin", "xmax", "ymax")
+        ):
             raise RuntimeError("verified Vale administrative geometry is unavailable")
         return (
             float(row["xmin"]) - buffer_degrees,
@@ -287,7 +297,9 @@ class PostgresStore:
             float(row["ymax"]) + buffer_degrees,
         )
 
-    def station_scope_relation(self, *, longitude: float, latitude: float, buffer_meters: float = 25_000) -> str:
+    def station_scope_relation(
+        self, *, longitude: float, latitude: float, buffer_meters: float = 25_000
+    ) -> str:
         row = self.connection.execute(
             """SELECT CASE
                      WHEN ST_Intersects(
@@ -336,7 +348,9 @@ class PostgresStore:
             raise RuntimeError("WIS2 station upsert did not return an identifier")
         return self._id(row["id"])
 
-    def record_wis2_rain(self, item: Any, *, station_id: str, fetched_at: datetime) -> bool:
+    def record_wis2_rain(
+        self, item: Any, *, station_id: str, fetched_at: datetime
+    ) -> bool:
         existing = self.connection.execute(
             """SELECT 1 FROM hydrological_observation
                  WHERE provider='INMET_WIS2' AND provider_record_id=%s""",
@@ -445,8 +459,10 @@ class PostgresStore:
         if selected is None:
             return {
                 f"{hours}h": {
-                    "status": "INCOMPLETE_COVERAGE", "value": None,
-                    "expected_intervals": hours, "observed_intervals": 0,
+                    "status": "INCOMPLETE_COVERAGE",
+                    "value": None,
+                    "expected_intervals": hours,
+                    "observed_intervals": 0,
                     "coverage_ratio": 0.0,
                 }
                 for hours in (1, 3, 6, 12, 24, 48, 72)
@@ -467,7 +483,9 @@ class PostgresStore:
             complete = observed == hours
             aggregates[f"{hours}h"] = {
                 "status": "AVAILABLE" if complete else "INCOMPLETE_COVERAGE",
-                "value": float(row["value"]) if complete and row and row["value"] is not None else None,
+                "value": float(row["value"])
+                if complete and row and row["value"] is not None
+                else None,
                 "expected_intervals": hours,
                 "observed_intervals": observed,
                 "coverage_ratio": observed / hours,
@@ -475,14 +493,49 @@ class PostgresStore:
             }
         return aggregates
 
-    def upsert_banana_baseline(self, *, municipality_code: str, values: dict[str, Any], metadata: Any, source_reference: str) -> bool:
+    def wis2_operational_quality_summary(self) -> dict[str, Any]:
+        """Keep intentional filtering distinct from source-data rejection."""
+        row = self.connection.execute(
+            """SELECT COALESCE(sum(observations_received),0) AS received,
+                      COALESCE(sum(observations_received-observations_ignored),0) AS target_candidates,
+                      COALESCE(sum(observations_inserted),0) AS inserted,
+                      COALESCE(sum(duplicates_ignored),0) AS duplicates,
+                      COALESCE(sum(observations_ignored),0) AS ignored,
+                      COALESCE(sum(invalid_observations),0) AS invalid
+                 FROM hydro_ingestion_run WHERE provider='INMET_WIS2'"""
+        ).fetchone()
+        reasons = self.connection.execute(
+            """SELECT key,sum(value::integer) AS count
+                 FROM hydro_ingestion_run CROSS JOIN LATERAL jsonb_each_text(quality_reason_counts)
+                WHERE provider='INMET_WIS2' GROUP BY key ORDER BY key"""
+        ).fetchall()
+        if row is None:
+            raise RuntimeError("WIS2 quality summary query returned no row")
+        return {
+            **{key: int(row[key]) for key in row},
+            "invalid_reason_counts": {
+                str(item["key"]): int(item["count"]) for item in reasons
+            },
+            "coverage_semantics": "phenomenonTime hourly intervals; not reportTime wall-clock assumptions",
+        }
+
+    def upsert_banana_baseline(
+        self,
+        *,
+        municipality_code: str,
+        values: dict[str, Any],
+        metadata: Any,
+        source_reference: str,
+    ) -> bool:
         municipality = self.connection.execute(
             """SELECT id FROM municipality_reference
                 WHERE ibge_code=%s AND source_year=2025""",
             (municipality_code,),
         ).fetchone()
         if municipality is None:
-            raise ValueError("SIDRA municipality is outside the verified 2025 reference")
+            raise ValueError(
+                "SIDRA municipality is outside the verified 2025 reference"
+            )
         numbers = values["numbers"]
         row = self.connection.execute(
             """INSERT INTO banana_municipal_baseline(
@@ -504,29 +557,67 @@ class PostgresStore:
                    raw_values=EXCLUDED.raw_values,data_status=EXCLUDED.data_status
                  RETURNING (xmax = 0) AS inserted""",
             (
-                new_id(), municipality["id"], int(metadata.period),
-                numbers.get("area_destined"), numbers.get("area_harvested"),
-                numbers.get("production"), numbers.get("yield"), numbers.get("production_value"),
+                new_id(),
+                municipality["id"],
+                int(metadata.period),
+                numbers.get("area_destined"),
+                numbers.get("area_harvested"),
+                numbers.get("production"),
+                numbers.get("yield"),
+                numbers.get("production_value"),
                 json.dumps(values["units"]),
-                source_reference, metadata.classification_id, metadata.classification_label,
-                metadata.category_id, metadata.category_label,
+                source_reference,
+                metadata.classification_id,
+                metadata.classification_label,
+                metadata.category_id,
+                metadata.category_label,
                 json.dumps({"raw": values["raw"], "states": values["states"]}),
                 values["status"],
             ),
         ).fetchone()
         return bool(row and row["inserted"])
 
-    def record_hydro_ingestion_run(self, *, context: str, started_at: datetime, finished_at: datetime, status: str, received: int, inserted: int, duplicates: int, invalid: int, errors: int, max_report_lag_seconds: float | None, detail: str | None = None) -> None:
+    def record_hydro_ingestion_run(
+        self,
+        *,
+        context: str,
+        started_at: datetime,
+        finished_at: datetime,
+        status: str,
+        received: int,
+        target_candidates: int,
+        inserted: int,
+        duplicates: int,
+        ignored: int,
+        invalid: int,
+        errors: int,
+        max_report_lag_seconds: float | None,
+        detail: str | None = None,
+        quality_reason_counts: dict[str, int] | None = None,
+    ) -> None:
         self.connection.execute(
             """INSERT INTO hydro_ingestion_run(
                    id,provider,delivery_channel,ingestion_context,started_at,finished_at,status,
-                   observations_received,observations_inserted,duplicates_ignored,
-                   invalid_observations,provider_errors,duration_seconds,max_report_lag_seconds,detail_sanitized
-                 ) VALUES (%s,'INMET_WIS2','HTTP_OGC_API',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                   observations_received,target_candidates,observations_inserted,duplicates_ignored,
+                   observations_ignored,invalid_observations,provider_errors,duration_seconds,max_report_lag_seconds,detail_sanitized,quality_reason_counts
+                 ) VALUES (%s,'INMET_WIS2','HTTP_OGC_API',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
-                new_id(), context, started_at, finished_at, status, received, inserted,
-                duplicates, invalid, errors, (finished_at - started_at).total_seconds(),
-                max_report_lag_seconds, detail,
+                new_id(),
+                context,
+                started_at,
+                finished_at,
+                status,
+                received,
+                target_candidates,
+                inserted,
+                duplicates,
+                ignored,
+                invalid,
+                errors,
+                (finished_at - started_at).total_seconds(),
+                max_report_lag_seconds,
+                detail,
+                json.dumps(quality_reason_counts or {}),
             ),
         )
 
@@ -538,11 +629,67 @@ class PostgresStore:
                    '2026-09-01T00:00:00Z',%s,'HISTORICAL','OFFICIAL_SOURCE',%s::jsonb)
                  ON CONFLICT (event_key) DO UPDATE SET end_at=EXCLUDED.end_at,updated_at=now()
                  RETURNING id""",
-            (new_id(), end_at, json.dumps({"method": "evidence_first_factual_timeline_v1"})),
+            (
+                new_id(),
+                end_at,
+                json.dumps({"method": "evidence_first_factual_timeline_v1"}),
+            ),
         ).fetchone()
         if row is None:
             raise RuntimeError("event upsert did not return an identifier")
         return self._id(row["id"])
+
+    def record_satellite_event_scene(
+        self,
+        *,
+        event_key: str,
+        provider: str,
+        collection_id: str,
+        provider_record_id: str,
+        acquired_at: datetime,
+        geometry: dict[str, Any],
+        metadata: dict[str, Any],
+        source_reference: str,
+    ) -> bool:
+        event = self.connection.execute(
+            "SELECT id FROM operational_event WHERE event_key=%s", (event_key,)
+        ).fetchone()
+        if event is None:
+            raise ValueError("operational event must exist before scene evidence")
+        row = self.connection.execute(
+            """INSERT INTO satellite_event_scene_evidence(
+                   id,event_id,provider,collection_id,provider_record_id,acquired_at,
+                   geometry,metadata,source_reference,classification
+                 ) VALUES (%s,%s,%s,%s,%s,%s,ST_SetSRID(ST_GeomFromGeoJSON(%s),4326),%s::jsonb,%s,'OFFICIAL_SOURCE')
+                 ON CONFLICT (event_id,provider,collection_id,provider_record_id) DO NOTHING
+                 RETURNING id""",
+            (
+                new_id(),
+                event["id"],
+                provider,
+                collection_id,
+                provider_record_id,
+                acquired_at,
+                json.dumps(geometry),
+                json.dumps(metadata),
+                source_reference,
+            ),
+        ).fetchone()
+        if row is not None:
+            self.connection.execute(
+                """INSERT INTO operational_event_timeline_entry(
+                       id,event_id,event_type,occurred_at,classification,source_table,source_record_id,detail
+                     ) VALUES (%s,%s,'SATELLITE_ACQUISITION',%s,'OFFICIAL_SOURCE','satellite_event_scene_evidence',%s,%s::jsonb)
+                     ON CONFLICT DO NOTHING""",
+                (
+                    new_id(),
+                    event["id"],
+                    acquired_at,
+                    row["id"],
+                    json.dumps({"provider": provider, "collection": collection_id}),
+                ),
+            )
+        return row is not None
 
     def rebuild_september_event_timeline(self, *, end_at: datetime) -> dict[str, int]:
         """Link only existing factual records; never infer flood causality."""
@@ -567,7 +714,13 @@ class PostgresStore:
                        id,event_id,event_type,occurred_at,classification,source_table,source_record_id,detail
                      ) VALUES (%s,%s,'RAINFALL_OBSERVATION',%s,'OFFICIAL_SOURCE','hydrological_observation',%s,%s::jsonb)
                      ON CONFLICT DO NOTHING""",
-                (new_id(), event_id, item["period_end"], item["id"], json.dumps({"classification": "OBSERVED"})),
+                (
+                    new_id(),
+                    event_id,
+                    item["period_end"],
+                    item["id"],
+                    json.dumps({"classification": "OBSERVED"}),
+                ),
             )
         copel = self.connection.execute(
             """SELECT id,published_at FROM reservoir_operation_event
@@ -599,7 +752,14 @@ class PostgresStore:
             self.connection.execute(
                 """INSERT INTO operational_event_timeline_entry(id,event_id,event_type,occurred_at,classification,source_table,source_record_id)
                      VALUES (%s,%s,'CLIMATE_CONTEXT',%s,'OFFICIAL_SOURCE','climate_context',%s) ON CONFLICT DO NOTHING""",
-                (new_id(), event_id, datetime.combine(item["issued_on"], datetime.min.time(), tzinfo=timezone.utc), item["id"]),
+                (
+                    new_id(),
+                    event_id,
+                    datetime.combine(
+                        item["issued_on"], datetime.min.time(), tzinfo=timezone.utc
+                    ),
+                    item["id"],
+                ),
             )
         peaks = self._rainfall_peaks(observations)
         for hours, peak in peaks.items():
@@ -608,9 +768,27 @@ class PostgresStore:
                        id,event_id,event_type,occurred_at,classification,source_table,source_record_id,detail
                      ) VALUES (%s,%s,'RAINFALL_ACCUMULATION_PEAK',%s,'CALCULATED','hydrological_observation',%s,%s::jsonb)
                      ON CONFLICT DO NOTHING""",
-                (new_id(), event_id, peak["at"], peak["source_id"], json.dumps({"window_hours": hours, "value_mm": peak["value"], "method": "complete_hourly_rolling_sum"})),
+                (
+                    new_id(),
+                    event_id,
+                    peak["at"],
+                    peak["source_id"],
+                    json.dumps(
+                        {
+                            "window_hours": hours,
+                            "value_mm": peak["value"],
+                            "method": "complete_hourly_rolling_sum",
+                        }
+                    ),
+                ),
             )
-        return {"event": 1, "rainfall": len(observations), "copel": len(copel), "climate": len(climate), "peaks": len(peaks)}
+        return {
+            "event": 1,
+            "rainfall": len(observations),
+            "copel": len(copel),
+            "climate": len(climate),
+            "peaks": len(peaks),
+        }
 
     @staticmethod
     def _rainfall_peaks(rows: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
@@ -624,14 +802,25 @@ class PostgresStore:
                 for end_index in range(hours - 1, len(samples)):
                     window = samples[end_index - hours + 1 : end_index + 1]
                     if any(
-                        window[index]["period_end"] - window[index - 1]["period_end"] != timedelta(hours=1)
+                        window[index]["period_end"] - window[index - 1]["period_end"]
+                        != timedelta(hours=1)
                         for index in range(1, len(window))
                     ):
                         continue
-                    value = sum(float(item["normalized_value"]) for item in window if item["normalized_value"] is not None)
-                    if len(window) != hours or any(item["normalized_value"] is None for item in window):
+                    value = sum(
+                        float(item["normalized_value"])
+                        for item in window
+                        if item["normalized_value"] is not None
+                    )
+                    if len(window) != hours or any(
+                        item["normalized_value"] is None for item in window
+                    ):
                         continue
-                    candidate = {"value": value, "at": window[-1]["period_end"], "source_id": window[-1]["id"]}
+                    candidate = {
+                        "value": value,
+                        "at": window[-1]["period_end"],
+                        "source_id": window[-1]["id"],
+                    }
                     if best is None or candidate["value"] > best["value"]:
                         best = candidate
             if best is not None:
@@ -695,16 +884,27 @@ class PostgresStore:
         if banana is None or inmet is None:
             raise RuntimeError("global baseline aggregate query returned no row")
         rainfall_aggregates = self.wis2_station_rainfall_aggregates()
+        rainfall_quality = self.wis2_operational_quality_summary()
+        satellite = self.connection.execute(
+            """SELECT count(*) AS scenes,min(acquired_at) AS pre_event_scene,max(acquired_at) AS event_scene
+                 FROM satellite_event_scene_evidence
+                WHERE event_id=(SELECT id FROM operational_event WHERE event_key='VALE_RIBEIRA_FLOOD_2026_09')"""
+        ).fetchone()
         return {
             "source_health": [dict(row) for row in health],
             "rainfall_summary": {
-                "status": "AVAILABLE" if inmet["observations"] else "INSUFFICIENT_LOCAL_DATA",
+                "status": "AVAILABLE"
+                if inmet["observations"]
+                else "INSUFFICIENT_LOCAL_DATA",
                 "provider": "INMET_WIS2" if inmet["observations"] else None,
                 "delivery_channel": "HTTP_OGC_API" if inmet["observations"] else None,
                 "latest_observation": inmet["latest_observation"],
                 "observations": int(inmet["observations"]),
+                "quality": rainfall_quality,
             },
-            "rainfall_status": "AVAILABLE" if inmet["observations"] else "INSUFFICIENT_LOCAL_DATA",
+            "rainfall_status": "AVAILABLE"
+            if inmet["observations"]
+            else "INSUFFICIENT_LOCAL_DATA",
             "inmet_stations": int(inmet["stations"]),
             "rainfall_1h": rainfall_aggregates["1h"],
             "rainfall_3h": rainfall_aggregates["3h"],
@@ -726,20 +926,35 @@ class PostgresStore:
                 "municipalities": int(banana["municipalities"]),
                 "municipalities_with_data": int(banana["municipalities_with_data"]),
                 "coverage_ratio": (
-                    int(banana["municipalities_with_data"]) / int(banana["municipalities"])
-                    if banana["municipalities"] else 0.0
+                    int(banana["municipalities_with_data"])
+                    / int(banana["municipalities"])
+                    if banana["municipalities"]
+                    else 0.0
                 ),
                 "area_harvested": banana["area_harvested"],
                 "production": banana["production"],
                 "production_value": banana["production_value"],
-                "missing_reason_counts": {str(row["reason"]): int(row["count"]) for row in banana_missing},
+                "missing_reason_counts": {
+                    str(row["reason"]): int(row["count"]) for row in banana_missing
+                },
                 "limitation": "Municipal productive structure; not property or pixel crop area",
             },
             "event": {
                 "status": "AVAILABLE" if event else "UNKNOWN",
                 "event_key": event["event_key"] if event else None,
-                "timeline_counts": {str(row["event_type"]): int(row["count"]) for row in event_entries},
+                "timeline_counts": {
+                    str(row["event_type"]): int(row["count"]) for row in event_entries
+                },
                 "classification": "FACTUAL_EVIDENCE_ONLY" if event else None,
+                "sentinel1": {
+                    "status": "INCONCLUSIVE",
+                    "scene_count": int(satellite["scenes"]) if satellite else 0,
+                    "pre_event_scene": satellite["pre_event_scene"]
+                    if satellite
+                    else None,
+                    "event_scene": satellite["event_scene"] if satellite else None,
+                    "limitation": "Comparable metadata is available; SAR asset processing and permanent-water masking are pending",
+                },
             },
             "scope_definition": [dict(row) for row in scopes],
             "active_alerts": [],
