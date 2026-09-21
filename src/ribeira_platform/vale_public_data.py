@@ -10,11 +10,13 @@ from __future__ import annotations
 import gzip
 import json
 import math
+import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable
 from urllib.parse import urlencode, urlparse
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
@@ -78,10 +80,15 @@ class InmetWis2HttpProvider:
     parser_version = "inmet_wis2_http_v1"
 
     def __init__(
-        self, *, timeout_seconds: float = 20.0, max_response_bytes: int = 2_000_000
+        self,
+        *,
+        timeout_seconds: float = 20.0,
+        max_response_bytes: int = 2_000_000,
+        max_retries: int = 2,
     ) -> None:
         self.timeout_seconds = timeout_seconds
         self.max_response_bytes = max_response_bytes
+        self.max_retries = max_retries
 
     def _get_json(self, url: str) -> dict[str, Any]:
         parsed = urlparse(url)
@@ -94,8 +101,24 @@ class InmetWis2HttpProvider:
                 "User-Agent": "RibeiraConecta/1.0 official-public-data",
             },
         )
-        with urlopen(request, timeout=self.timeout_seconds) as response:  # noqa: S310 -- fixed official host above
-            raw = response.read(self.max_response_bytes + 1)
+        raw: bytes | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                with urlopen(request, timeout=self.timeout_seconds) as response:  # noqa: S310 -- fixed official host above
+                    raw = response.read(self.max_response_bytes + 1)
+                break
+            except HTTPError as exc:
+                if exc.code not in {429, 500, 502, 503, 504} or attempt >= self.max_retries:
+                    raise
+                retry_after = exc.headers.get("Retry-After")
+                delay = min(float(retry_after), 30.0) if retry_after and retry_after.isdigit() else min(2**attempt, 8)
+                time.sleep(delay)
+            except URLError:
+                if attempt >= self.max_retries:
+                    raise
+                time.sleep(min(2**attempt, 8))
+        if raw is None:
+            raise RuntimeError("WIS2 request did not return a response")
         if len(raw) > self.max_response_bytes:
             raise ValueError("WIS2 response exceeds bounded size")
         if raw[:2] == b"\x1f\x8b":
@@ -167,6 +190,8 @@ class InmetWis2HttpProvider:
         self,
         *,
         bbox: tuple[float, float, float, float] | None,
+        datetime_range: str | None = None,
+        station_identifier: str | None = None,
         max_pages: int = 10,
         max_records: int = 2000,
         page_size: int = 100,
@@ -186,6 +211,10 @@ class InmetWis2HttpProvider:
         }
         if bbox is not None:
             params["bbox"] = ",".join(f"{value:.6f}" for value in bbox)
+        if datetime_range is not None:
+            params["datetime"] = datetime_range
+        if station_identifier is not None:
+            params["wigos_station_identifier"] = station_identifier
         query = urlencode(params)
         url = f"{WIS2_ITEMS_URL}?{query}"
         records: list[Wis2RainRecord] = []

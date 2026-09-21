@@ -1,0 +1,18 @@
+[Unit]
+Description=Ribeira bounded INMET WIS2 HTTP reconciliation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/ribeira/Plataforma-Ribeira-Conecta
+EnvironmentFile=/home/ribeira/.config/ribeira/runtime.env
+Environment=PYTHONPATH=/home/ribeira/Plataforma-Ribeira-Conecta/src
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/flock -n %t/ribeira-wis2-reconcile.lock /home/ribeira/Plataforma-Ribeira-Conecta/.venv/bin/python -m ribeira_platform.hydrology_operational --lookback-hours 3
+TimeoutStartSec=10min
+UMask=0077
+NoNewPrivileges=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ribeira-wis2-reconcile

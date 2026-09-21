@@ -56,3 +56,26 @@ authorized at:
 
 It requires the existing `geospatial:read` permission. This preserves normal
 OIDC membership/RBAC enforcement while exposing shared global reference facts.
+
+## Operational WIS2 reconciliation and September 2026 evidence window
+
+Phase 1P.4 adds a private `systemd --user` timer,
+`ribeira-wis2-reconcile.timer`. It runs the bounded WIS2 HTTP reconciler every
+30 minutes with a randomized delay and a three-hour overlap. The one-shot
+service uses a runtime lock, has no listener, follows only the official HTTPS
+OGC API, retries only bounded transient failures, and relies on provider-record
+and observation uniqueness for idempotency.
+
+`hydrology_operational --historical-backfill` uses the same normalizer but
+queries only already verified WIGOS stations for the September 2026 evidence
+window. Each run records sanitized received/inserted/duplicate/invalid/error,
+duration and report-lag metrics in `hydro_ingestion_run`. Failed runs degrade
+source health but retain prior observations.
+
+`VALE_RIBEIRA_FLOOD_2026_09` is a factual evidence window, not a causal
+assertion. Its timeline links real rainfall observations, calculated complete-
+coverage rainfall peaks, existing Copel operation evidence, and NOAA climate
+context in separate lanes. It does not state that rain, reservoir operations,
+or ENSO caused flooding. ANA remains `AUTH_REQUIRED_PENDING_PROVIDER`; the
+private `~/.config/ribeira/ana-hidroweb.env` is not created until official
+credentials arrive.

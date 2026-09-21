@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 import psycopg
@@ -337,6 +337,11 @@ class PostgresStore:
         return self._id(row["id"])
 
     def record_wis2_rain(self, item: Any, *, station_id: str, fetched_at: datetime) -> bool:
+        existing = self.connection.execute(
+            """SELECT 1 FROM hydrological_observation
+                 WHERE provider='INMET_WIS2' AND provider_record_id=%s""",
+            (item.provider_record_id,),
+        ).fetchone()
         row = self.connection.execute(
             """INSERT INTO hydrological_observation(
                    id,station_id,provider,variable,observed_at,received_at,value,unit,
@@ -382,7 +387,9 @@ class PostgresStore:
                 ),
             ),
         ).fetchone()
-        return bool(row and row["inserted"])
+        if row is None:
+            raise RuntimeError("WIS2 observation upsert did not return a row")
+        return existing is None
 
     def semil_municipality_codes(self) -> list[str]:
         rows = self.connection.execute(
@@ -405,6 +412,13 @@ class PostgresStore:
         if stations is None or observations is None:
             raise RuntimeError("WIS2 count query returned no row")
         return int(stations["count"]), int(observations["count"])
+
+    def wis2_station_identifiers(self) -> list[str]:
+        rows = self.connection.execute(
+            """SELECT provider_station_id FROM hydrological_station
+                 WHERE provider='INMET_WIS2' ORDER BY provider_station_id"""
+        ).fetchall()
+        return [str(row["provider_station_id"]) for row in rows]
 
     def banana_baseline_count(self) -> int:
         row = self.connection.execute(
@@ -435,10 +449,10 @@ class PostgresStore:
                     "expected_intervals": hours, "observed_intervals": 0,
                     "coverage_ratio": 0.0,
                 }
-                for hours in (1, 3, 6, 12, 24)
+                for hours in (1, 3, 6, 12, 24, 48, 72)
             }
         aggregates: dict[str, dict[str, Any]] = {}
-        for hours in (1, 3, 6, 12, 24):
+        for hours in (1, 3, 6, 12, 24, 48, 72):
             row = self.connection.execute(
                 """SELECT count(DISTINCT period_end) AS observed,
                           sum(normalized_value) AS value
@@ -495,11 +509,134 @@ class PostgresStore:
                 numbers.get("production"), numbers.get("yield"), numbers.get("production_value"),
                 json.dumps(values["units"]),
                 source_reference, metadata.classification_id, metadata.classification_label,
-                metadata.category_id, metadata.category_label, json.dumps(values["raw"]),
+                metadata.category_id, metadata.category_label,
+                json.dumps({"raw": values["raw"], "states": values["states"]}),
                 values["status"],
             ),
         ).fetchone()
         return bool(row and row["inserted"])
+
+    def record_hydro_ingestion_run(self, *, context: str, started_at: datetime, finished_at: datetime, status: str, received: int, inserted: int, duplicates: int, invalid: int, errors: int, max_report_lag_seconds: float | None, detail: str | None = None) -> None:
+        self.connection.execute(
+            """INSERT INTO hydro_ingestion_run(
+                   id,provider,delivery_channel,ingestion_context,started_at,finished_at,status,
+                   observations_received,observations_inserted,duplicates_ignored,
+                   invalid_observations,provider_errors,duration_seconds,max_report_lag_seconds,detail_sanitized
+                 ) VALUES (%s,'INMET_WIS2','HTTP_OGC_API',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (
+                new_id(), context, started_at, finished_at, status, received, inserted,
+                duplicates, invalid, errors, (finished_at - started_at).total_seconds(),
+                max_report_lag_seconds, detail,
+            ),
+        )
+
+    def ensure_september_flood_event(self, *, end_at: datetime) -> str:
+        row = self.connection.execute(
+            """INSERT INTO operational_event(
+                   id,event_key,title,start_at,end_at,status,classification,provenance
+                 ) VALUES (%s,'VALE_RIBEIRA_FLOOD_2026_09','Vale do Ribeira September 2026 factual evidence window',
+                   '2026-09-01T00:00:00Z',%s,'HISTORICAL','OFFICIAL_SOURCE',%s::jsonb)
+                 ON CONFLICT (event_key) DO UPDATE SET end_at=EXCLUDED.end_at,updated_at=now()
+                 RETURNING id""",
+            (new_id(), end_at, json.dumps({"method": "evidence_first_factual_timeline_v1"})),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("event upsert did not return an identifier")
+        return self._id(row["id"])
+
+    def rebuild_september_event_timeline(self, *, end_at: datetime) -> dict[str, int]:
+        """Link only existing factual records; never infer flood causality."""
+        event_id = self.ensure_september_flood_event(end_at=end_at)
+        observations = self.connection.execute(
+            """SELECT id,station_id,period_start,period_end,normalized_value
+                 FROM hydrological_observation
+                WHERE provider='INMET_WIS2' AND variable='RAINFALL'
+                  AND period_start >= '2026-09-01T00:00:00Z' AND period_end <= %s
+                ORDER BY station_id,period_end""",
+            (end_at,),
+        ).fetchall()
+        for item in observations:
+            self.connection.execute(
+                """INSERT INTO operational_event_evidence(event_id,source_table,source_record_id,evidence_type,classification)
+                     VALUES (%s,'hydrological_observation',%s,'RAINFALL_OBSERVATION','OFFICIAL_SOURCE')
+                     ON CONFLICT DO NOTHING""",
+                (event_id, item["id"]),
+            )
+            self.connection.execute(
+                """INSERT INTO operational_event_timeline_entry(
+                       id,event_id,event_type,occurred_at,classification,source_table,source_record_id,detail
+                     ) VALUES (%s,%s,'RAINFALL_OBSERVATION',%s,'OFFICIAL_SOURCE','hydrological_observation',%s,%s::jsonb)
+                     ON CONFLICT DO NOTHING""",
+                (new_id(), event_id, item["period_end"], item["id"], json.dumps({"classification": "OBSERVED"})),
+            )
+        copel = self.connection.execute(
+            """SELECT id,published_at FROM reservoir_operation_event
+                 WHERE published_at >= '2026-09-01T00:00:00Z' AND published_at <= %s""",
+            (end_at,),
+        ).fetchall()
+        for item in copel:
+            self.connection.execute(
+                """INSERT INTO operational_event_evidence(event_id,source_table,source_record_id,evidence_type,classification)
+                     VALUES (%s,'reservoir_operation_event',%s,'RESERVOIR_OPERATION','OFFICIAL_SOURCE') ON CONFLICT DO NOTHING""",
+                (event_id, item["id"]),
+            )
+            self.connection.execute(
+                """INSERT INTO operational_event_timeline_entry(id,event_id,event_type,occurred_at,classification,source_table,source_record_id)
+                     VALUES (%s,%s,'RESERVOIR_OPERATION',%s,'OFFICIAL_SOURCE','reservoir_operation_event',%s) ON CONFLICT DO NOTHING""",
+                (new_id(), event_id, item["published_at"], item["id"]),
+            )
+        climate = self.connection.execute(
+            """SELECT id,issued_on FROM climate_context
+                 WHERE issued_on >= date '2026-09-01' AND issued_on <= %s::date""",
+            (end_at,),
+        ).fetchall()
+        for item in climate:
+            self.connection.execute(
+                """INSERT INTO operational_event_evidence(event_id,source_table,source_record_id,evidence_type,classification)
+                     VALUES (%s,'climate_context',%s,'CLIMATE_CONTEXT','OFFICIAL_SOURCE') ON CONFLICT DO NOTHING""",
+                (event_id, item["id"]),
+            )
+            self.connection.execute(
+                """INSERT INTO operational_event_timeline_entry(id,event_id,event_type,occurred_at,classification,source_table,source_record_id)
+                     VALUES (%s,%s,'CLIMATE_CONTEXT',%s,'OFFICIAL_SOURCE','climate_context',%s) ON CONFLICT DO NOTHING""",
+                (new_id(), event_id, datetime.combine(item["issued_on"], datetime.min.time(), tzinfo=timezone.utc), item["id"]),
+            )
+        peaks = self._rainfall_peaks(observations)
+        for hours, peak in peaks.items():
+            self.connection.execute(
+                """INSERT INTO operational_event_timeline_entry(
+                       id,event_id,event_type,occurred_at,classification,source_table,source_record_id,detail
+                     ) VALUES (%s,%s,'RAINFALL_ACCUMULATION_PEAK',%s,'CALCULATED','hydrological_observation',%s,%s::jsonb)
+                     ON CONFLICT DO NOTHING""",
+                (new_id(), event_id, peak["at"], peak["source_id"], json.dumps({"window_hours": hours, "value_mm": peak["value"], "method": "complete_hourly_rolling_sum"})),
+            )
+        return {"event": 1, "rainfall": len(observations), "copel": len(copel), "climate": len(climate), "peaks": len(peaks)}
+
+    @staticmethod
+    def _rainfall_peaks(rows: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+        by_station: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            by_station.setdefault(str(row["station_id"]), []).append(row)
+        result: dict[int, dict[str, Any]] = {}
+        for hours in (24, 48, 72):
+            best: dict[str, Any] | None = None
+            for samples in by_station.values():
+                for end_index in range(hours - 1, len(samples)):
+                    window = samples[end_index - hours + 1 : end_index + 1]
+                    if any(
+                        window[index]["period_end"] - window[index - 1]["period_end"] != timedelta(hours=1)
+                        for index in range(1, len(window))
+                    ):
+                        continue
+                    value = sum(float(item["normalized_value"]) for item in window if item["normalized_value"] is not None)
+                    if len(window) != hours or any(item["normalized_value"] is None for item in window):
+                        continue
+                    candidate = {"value": value, "at": window[-1]["period_end"], "source_id": window[-1]["id"]}
+                    if best is None or candidate["value"] > best["value"]:
+                        best = candidate
+            if best is not None:
+                result[hours] = best
+        return result
 
     def vale_do_ribeira_situation(self) -> dict[str, Any]:
         """Return global facts only; lack of a source remains explicit."""
@@ -527,9 +664,28 @@ class PostgresStore:
                ORDER BY scope_key"""
         ).fetchall()
         banana = self.connection.execute(
-            """SELECT max(reference_year) AS reference_year, count(*) AS municipalities_with_data
+            """SELECT max(reference_year) AS reference_year, count(*) AS municipalities,
+                      count(*) FILTER (WHERE data_status='WITH_DATA') AS municipalities_with_data,
+                      sum(area_harvested) AS area_harvested,
+                      sum(production_quantity) AS production,
+                      sum(production_value) AS production_value
                FROM banana_municipal_baseline WHERE crop='BANANA'"""
         ).fetchone()
+        banana_missing = self.connection.execute(
+            """SELECT COALESCE(raw_values->'states'->>'production',data_status) AS reason,count(*) AS count
+                 FROM banana_municipal_baseline
+                WHERE crop='BANANA' AND data_status <> 'WITH_DATA'
+                GROUP BY 1 ORDER BY 1"""
+        ).fetchall()
+        event = self.connection.execute(
+            """SELECT id,event_key,status,start_at,end_at FROM operational_event
+                 WHERE event_key='VALE_RIBEIRA_FLOOD_2026_09'"""
+        ).fetchone()
+        event_entries = self.connection.execute(
+            """SELECT event_type,count(*) AS count FROM operational_event_timeline_entry
+                 WHERE event_id=(SELECT id FROM operational_event WHERE event_key='VALE_RIBEIRA_FLOOD_2026_09')
+                GROUP BY event_type ORDER BY event_type"""
+        ).fetchall()
         inmet = self.connection.execute(
             """SELECT count(DISTINCT station_id) AS stations,max(period_end) AS latest_observation,
                       count(*) AS observations
@@ -555,18 +711,35 @@ class PostgresStore:
             "rainfall_6h": rainfall_aggregates["6h"],
             "rainfall_12h": rainfall_aggregates["12h"],
             "rainfall_24h": rainfall_aggregates["24h"],
-            "rainfall_72h": {"status": "INCOMPLETE_COVERAGE", "value": None},
+            "rainfall_48h": rainfall_aggregates["48h"],
+            "rainfall_72h": rainfall_aggregates["72h"],
             "river_summary": {
-                "status": "UNKNOWN",
-                "reason": "ANA_AUTH_REQUIRED_OR_SAISP_AUTOMATION_UNAVAILABLE",
+                "status": "AUTH_REQUIRED",
+                "provider": "ANA_HIDROWEB",
+                "reason": "AUTH_REQUIRED_PENDING_PROVIDER",
             },
             "reservoir_events": [dict(row) for row in events],
             "climate_context": [dict(row) for row in climate],
             "banana_baseline_summary": {
                 "status": "UNKNOWN" if not banana["reference_year"] else "AVAILABLE",
                 "reference_year": banana["reference_year"],
+                "municipalities": int(banana["municipalities"]),
                 "municipalities_with_data": int(banana["municipalities_with_data"]),
+                "coverage_ratio": (
+                    int(banana["municipalities_with_data"]) / int(banana["municipalities"])
+                    if banana["municipalities"] else 0.0
+                ),
+                "area_harvested": banana["area_harvested"],
+                "production": banana["production"],
+                "production_value": banana["production_value"],
+                "missing_reason_counts": {str(row["reason"]): int(row["count"]) for row in banana_missing},
                 "limitation": "Municipal productive structure; not property or pixel crop area",
+            },
+            "event": {
+                "status": "AVAILABLE" if event else "UNKNOWN",
+                "event_key": event["event_key"] if event else None,
+                "timeline_counts": {str(row["event_type"]): int(row["count"]) for row in event_entries},
+                "classification": "FACTUAL_EVIDENCE_ONLY" if event else None,
             },
             "scope_definition": [dict(row) for row in scopes],
             "active_alerts": [],
