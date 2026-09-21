@@ -11,6 +11,7 @@ import type {
 } from "../types/farm360";
 import { MapCanvas } from "../features/map/MapCanvas";
 import { AssetPanel } from "../features/assets/AssetPanel";
+import { IntelligenceReportPanel } from "../features/report/IntelligenceReportPanel";
 import { canRenderNdvi } from "../features/map/layerState";
 import { PropertyPanel } from "../features/property/PropertyPanel";
 import { SatellitePanel } from "../features/satellite/SatellitePanel";
@@ -251,6 +252,7 @@ export function Farm360Page({
         </div>
       </div>
       <aside>
+        <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} />
         <AssetPanel
           assets={assets}
           selectedAssetId={selectedAssetId}

@@ -1,0 +1,26 @@
+.report-panel > button, .intelligence-report > button {
+  background: #166534;
+  border: 1px solid #14532d;
+  border-radius: 4px;
+  color: #fff;
+  padding: 7px 10px;
+}
+
+.intelligence-report {
+  background: #fff;
+  border: 1px solid #d9e2da;
+  margin-top: 12px;
+  padding: 16px;
+}
+
+.intelligence-report h1 {
+  font-size: 20px;
+}
+
+@media print {
+  .pilot-header, .module-status, .workspace > header, .property-nav, .map-column,
+  .farm360 > aside > section:not(.report-panel), .report-panel > p,
+  .report-panel > button, .intelligence-report > button { display: none !important; }
+  .farm360 { display: block; }
+  .intelligence-report { border: 0; margin: 0; }
+}

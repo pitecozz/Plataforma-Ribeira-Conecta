@@ -10,8 +10,8 @@ alone does not raise a feature to `READY`.
 
 | Measure | Current estimate | Basis |
 |---|---:|---|
-| `PILOT_READINESS_PERCENT` | 33% | Tenant/RLS, Home, property/boundary, Farm360 map/provenance and persisted asset map/detail work; report, feedback, pilot E2E and HTTPS path do not. |
-| `FULL_PLATFORM_IMPLEMENTATION_PERCENT` | 20% | Shared backend foundations plus customer-facing Home/Farm360 asset workflow are implemented; most modules remain planned, foundation or research rather than customer workflows. |
+| `PILOT_READINESS_PERCENT` | 39% | Tenant/RLS, Home, property/boundary, Farm360 map/provenance/assets and HTML Report V0.1 work; feedback, pilot E2E and HTTPS path do not. |
+| `FULL_PLATFORM_IMPLEMENTATION_PERCENT` | 21% | Shared backend foundations plus customer-facing Home/Farm360/report workflow are implemented; most modules remain planned, foundation or research rather than customer workflows. |
 
 These are deliberately conservative approximations, not service-level claims.
 
@@ -26,7 +26,7 @@ These are deliberately conservative approximations, not service-level claims.
 | Assets and Digital Twin | persisted asset inventory/API | asset panel/detail and spatial layer | backend/frontend/PostGIS | `PARTIAL` | Asset registration and pilot asset onboarding remain operational steps. |
 | Context/evidence | scenes/products/provenance | provenance panel | backend/frontend | `PARTIAL` | Needs a simplified customer evidence view. |
 | Risks/opportunities/actions | scoped rules/outcomes backend | none | unit/PostGIS | `MISSING` | Must expose only persisted applicable decisions; no demo risk. |
-| Intelligence Report V0.1 | none | none | none | `MISSING` | HTML report must assemble real available records and explicit gaps. |
+| Intelligence Report V0.1 | loaded tenant records | printable HTML report | frontend unit | `PARTIAL` | It exposes available property/assets/provenance and explicit unknown decisions; report API/history is later. |
 | Feedback | none | none | none | `MISSING` | Tenant/user/property/page/feature/type/message/audit required. |
 | Pilot E2E | validation E2E only | validation workspace only | Playwright | `MISSING` | Requires isolated pilot fixture and full customer path. |
 | Secure external access | loopback services/health endpoints | static build | local checks | `BLOCKED` | `PILOT_ACCESS_DECISION_REQUIRED`; Cloudflare remains `DEFERRED_BY_OPERATOR`. |

@@ -92,7 +92,7 @@ commercial availability are summarized here and expanded in the linked canon.
 | F-TRACE-002 | Customer evidence/action/outcome view | `COMING_SOON` | Existing evidence/decision/action/audit data. | Must expose limitations/conflicts/unknowns. | Pilot P0. |
 | F-AI-002 | Contextual assistance and report explanation | `DEFERRED` | Permissioned corpus, evaluated prompts and citations. | Cannot override evidence/rules/security. | Not pilot. |
 | F-BUS-002 | Evidence-backed cross-sell/upsell | `PARTIAL` | Commercial evidence, need and applicable service. | No arbitrary sales recommendation. | Internal/commercial workflow. |
-| F-REPORT-001 | Intelligence Report framework | `COMING_SOON` | Tenant property/assets/context/evidence/decisions. | Shows only available records and explicit gaps. | Pilot Report V0.1. |
+| F-REPORT-001 | Intelligence Report framework | `BETA` | Tenant property/assets/context/evidence/decisions. | HTML V0.1 shows loaded records and explicit unavailable decisions; no report history/API yet. | Pilot Report V0.1. |
 | F-FEEDBACK-001 | Pilot feedback | `COMING_SOON` | Tenant/user/page/property/feature/type/message/audit. | Feedback is tenant-isolated and never customer data leakage. | Pilot P0. |
 | F-UX-001 | Product navigation and feature-state flags | `BETA` | Canonical feature lifecycle and authorization. | Home/Farm360/Help are interactive; other modules are visible status labels, never dead buttons. | Pilot shell. |
 | F-SEC-002 | Pilot identity/onboarding/deployment path | `PARTIAL` | OIDC membership, HTTPS edge/operator decision, runbooks. | No public DB/metrics/dev ports; Cloudflare decision preserved. | `BLOCKED` pending operator access decision. |
