@@ -3,6 +3,8 @@ import type {
   BoundaryImportPreview,
   DigitalTwinAsset,
   NdviProduct,
+  PilotFeedback,
+  PilotFeedbackType,
   PortfolioProperty,
   ProcessingJob,
   PropertyCreate,
@@ -98,6 +100,21 @@ export class Farm360Api {
   assets(tenantId: string, propertyId: string) {
     return this.get<{ property_id: string; items: DigitalTwinAsset[] }>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/assets`,
+    );
+  }
+  submitPilotFeedback(
+    tenantId: string,
+    payload: {
+      feedback_type: PilotFeedbackType;
+      page: string;
+      feature_id: string;
+      message: string;
+      property_id?: string;
+    },
+  ) {
+    return this.post<PilotFeedback>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/pilot-feedback`,
+      payload,
     );
   }
   scenes(tenantId: string, propertyId: string) {

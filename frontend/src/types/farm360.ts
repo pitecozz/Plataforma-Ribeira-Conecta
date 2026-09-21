@@ -33,6 +33,24 @@ export interface DigitalTwinAsset {
   observed_at: string | null;
   context: Record<string, unknown>;
 }
+export type PilotFeedbackType =
+  | "BUG"
+  | "CONFUSING"
+  | "INCORRECT_DATA"
+  | "MISSING_FEATURE"
+  | "SUGGESTION"
+  | "USEFUL";
+export interface PilotFeedback {
+  id: string;
+  tenant_id: string;
+  property_id: string | null;
+  submitted_by: string;
+  feedback_type: PilotFeedbackType;
+  page: string;
+  feature_id: string;
+  message: string;
+  created_at: string;
+}
 export interface PortfolioProperty extends PropertyRecord {
   latest_scene_at: string | null;
   latest_ndvi_at: string | null;

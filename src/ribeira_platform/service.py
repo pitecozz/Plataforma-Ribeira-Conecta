@@ -17,6 +17,7 @@ from .models import (
     BoundaryImport,
     FetchResult,
     Property,
+    PilotFeedback,
     RuleDefinition,
     Source,
     Tenant,
@@ -674,6 +675,50 @@ class RibeiraApplication:
                 new_id(),
                 now_utc(),
             )
+
+    def create_pilot_feedback(
+        self,
+        tenant_id: str,
+        *,
+        feedback_type: str,
+        page: str,
+        feature_id: str,
+        message: str,
+        submitted_by: str,
+        property_id: str | None = None,
+        platform_admin: bool = False,
+    ) -> PilotFeedback:
+        """Persist product feedback without fabricating an operational conclusion."""
+        item = PilotFeedback(
+            new_id(),
+            tenant_id,
+            submitted_by,
+            feedback_type,
+            page,
+            feature_id,
+            message,
+            property_id,
+        )
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            if property_id and self.store.get_property(tenant_id, property_id) is None:
+                raise LookupError("feedback property is unavailable in tenant")
+            self.store.create_pilot_feedback(item)
+            self.store.audit(
+                tenant_id,
+                submitted_by,
+                "PILOT_FEEDBACK_SUBMITTED",
+                "pilot_feedback",
+                item.id,
+                {
+                    "feedback_type": feedback_type,
+                    "page": page,
+                    "feature_id": feature_id,
+                    "property_id": property_id,
+                },
+                new_id(),
+                now_utc(),
+            )
+        return item
 
     def assess_flood_exposure(
         self,

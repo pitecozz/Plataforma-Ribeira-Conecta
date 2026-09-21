@@ -10,8 +10,8 @@ alone does not raise a feature to `READY`.
 
 | Measure | Current estimate | Basis |
 |---|---:|---|
-| `PILOT_READINESS_PERCENT` | 39% | Tenant/RLS, Home, property/boundary, Farm360 map/provenance/assets and HTML Report V0.1 work; feedback, pilot E2E and HTTPS path do not. |
-| `FULL_PLATFORM_IMPLEMENTATION_PERCENT` | 21% | Shared backend foundations plus customer-facing Home/Farm360/report workflow are implemented; most modules remain planned, foundation or research rather than customer workflows. |
+| `PILOT_READINESS_PERCENT` | 46% | Tenant/RLS, Home, property/boundary, Farm360 map/provenance/assets, HTML Report V0.1 and audited feedback work; risks/outcomes UI, pilot E2E and HTTPS path do not. |
+| `FULL_PLATFORM_IMPLEMENTATION_PERCENT` | 22% | Shared backend foundations plus customer-facing Home/Farm360/report/feedback workflow are implemented; most modules remain planned, foundation or research rather than customer workflows. |
 
 These are deliberately conservative approximations, not service-level claims.
 
@@ -27,7 +27,7 @@ These are deliberately conservative approximations, not service-level claims.
 | Context/evidence | scenes/products/provenance | provenance panel | backend/frontend | `PARTIAL` | Needs a simplified customer evidence view. |
 | Risks/opportunities/actions | scoped rules/outcomes backend | none | unit/PostGIS | `MISSING` | Must expose only persisted applicable decisions; no demo risk. |
 | Intelligence Report V0.1 | loaded tenant records | printable HTML report | frontend unit | `PARTIAL` | It exposes available property/assets/provenance and explicit unknown decisions; report API/history is later. |
-| Feedback | none | none | none | `MISSING` | Tenant/user/property/page/feature/type/message/audit required. |
+| Feedback | tenant-isolated feedback API and audit | Farm360 form with explicit submission/error state | backend/frontend/PostGIS | `PARTIAL` | Creates no operational conclusion; triage/listing workflow is later. |
 | Pilot E2E | validation E2E only | validation workspace only | Playwright | `MISSING` | Requires isolated pilot fixture and full customer path. |
 | Secure external access | loopback services/health endpoints | static build | local checks | `BLOCKED` | `PILOT_ACCESS_DECISION_REQUIRED`; Cloudflare remains `DEFERRED_BY_OPERATOR`. |
 
@@ -44,7 +44,7 @@ These are deliberately conservative approximations, not service-level claims.
 
 The isolated local PostGIS service is healthy on loopback. On the assessment
 date the full integration suite executed with configured test database URLs:
-**30 passed, 2 controlled external skips**. Controlled external provider tests
+**33 passed, 2 controlled external skips**. Controlled external provider tests
 may remain skipped; pilot-critical database tests may not be silently skipped.
 
 ## Explicit non-goals for the pilot week

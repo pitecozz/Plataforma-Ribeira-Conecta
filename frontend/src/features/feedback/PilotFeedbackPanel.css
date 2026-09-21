@@ -1,0 +1,30 @@
+.pilot-feedback form {
+  display: grid;
+  gap: 8px;
+}
+
+.pilot-feedback label {
+  display: grid;
+  font-size: 13px;
+  gap: 3px;
+}
+
+.pilot-feedback select, .pilot-feedback textarea {
+  border: 1px solid #aac0af;
+  border-radius: 4px;
+  font: inherit;
+  padding: 6px;
+}
+
+.pilot-feedback textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.pilot-feedback button {
+  background: #166534;
+  border: 1px solid #14532d;
+  border-radius: 4px;
+  color: #fff;
+  padding: 7px 10px;
+}

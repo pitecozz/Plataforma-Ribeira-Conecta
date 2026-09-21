@@ -15,6 +15,7 @@ from .models import (
     Decision,
     Evidence,
     Observation,
+    PilotFeedback,
     Property,
     RuleDefinition,
     Source,
@@ -91,6 +92,14 @@ CREATE TABLE IF NOT EXISTS actions (
   completed_at TEXT, completed_by TEXT, outcome_detail TEXT, outcome_classification TEXT,
   outcome_evidence_ids_json TEXT NOT NULL DEFAULT '[]'
 );
+CREATE TABLE IF NOT EXISTS pilot_feedback (
+  id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  property_id TEXT REFERENCES properties(id), submitted_by TEXT NOT NULL,
+  feedback_type TEXT NOT NULL, page TEXT NOT NULL, feature_id TEXT NOT NULL,
+  message TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pilot_feedback_tenant_created
+  ON pilot_feedback(tenant_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS data_quality_events (
   id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), property_id TEXT,
   source_id TEXT, event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TEXT NOT NULL
@@ -557,6 +566,30 @@ class SQLiteStore:
                 tenant_id,
             ),
         )
+
+    def create_pilot_feedback(self, item: PilotFeedback) -> PilotFeedback:
+        if (
+            item.property_id
+            and self.get_property(item.tenant_id, item.property_id) is None
+        ):
+            raise LookupError("feedback property is unavailable in tenant")
+        self._insert(
+            """INSERT INTO pilot_feedback(
+                   id,tenant_id,property_id,submitted_by,feedback_type,page,feature_id,message,created_at
+                 ) VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                item.id,
+                item.tenant_id,
+                item.property_id,
+                item.submitted_by,
+                item.feedback_type,
+                item.page,
+                item.feature_id,
+                item.message,
+                item.created_at,
+            ),
+        )
+        return item
 
     def create_quality_event(
         self,

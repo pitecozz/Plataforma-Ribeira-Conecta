@@ -43,6 +43,7 @@ their API schemas or migrations. It is expanded as future features ship.
 |---|---|---|---|
 | Digital Twin spatial assets | `business_service.py`, `business_repository.py`, property-assets route in `api.py` | migration 028 | `test_business.py`, `test_farm360_api.py`, [Farm360](../geospatial/FARM_360_V1.md) |
 | Scoped rule/action/outcome | `service.py`, rule payload and outcome route in `api.py` | migrations 029 and 031 | `test_vertical_slice.py`, [rule catalogue](../rules/BUSINESS_RULE_CATALOG.md) |
+| Pilot feedback | `POST /v1/tenants/{tenant_id}/pilot-feedback`, Farm360 feedback panel | migration 032 | `test_api.py`, `test_postgres_integration.py`, `PilotFeedbackPanel.test.tsx`, [pilot quick start](../training/PILOT_QUICK_START.md) |
 | Flood exposure foundation | `flood_pilot.py`, `POST /v1/tenants/{tenant_id}/flood-exposure-assessments` | migration 030 | `test_flood_sar.py`, [delivery plan](../CODEX_AUTONOMOUS_DELIVERY.md) |
 | Satellite catalogue | `geospatial_service.py`, satellite search routes in `api.py` | geospatial scene/asset migrations | `test_sentinel1_discovery.py`, [provider](../geospatial/COPERNICUS_PROVIDER.md) |
 | Commercial engine | `business.py`, `business_service.py`, commercial routes in `api.py` | migration 006 | `test_business.py`, [business rules](../business/RIBEIRA_BUSINESS_RULES.md) |
@@ -93,6 +94,6 @@ commercial availability are summarized here and expanded in the linked canon.
 | F-AI-002 | Contextual assistance and report explanation | `DEFERRED` | Permissioned corpus, evaluated prompts and citations. | Cannot override evidence/rules/security. | Not pilot. |
 | F-BUS-002 | Evidence-backed cross-sell/upsell | `PARTIAL` | Commercial evidence, need and applicable service. | No arbitrary sales recommendation. | Internal/commercial workflow. |
 | F-REPORT-001 | Intelligence Report framework | `BETA` | Tenant property/assets/context/evidence/decisions. | HTML V0.1 shows loaded records and explicit unavailable decisions; no report history/API yet. | Pilot Report V0.1. |
-| F-FEEDBACK-001 | Pilot feedback | `COMING_SOON` | Tenant/user/page/property/feature/type/message/audit. | Feedback is tenant-isolated and never customer data leakage. | Pilot P0. |
+| F-FEEDBACK-001 | Pilot feedback | `BETA` | Authenticated tenant/user/page/property/feature/type/message/audit. | Feedback is a product input, not environmental/commercial evidence; RLS and same-tenant property validation apply. | Farm360 pilot form; triage/listing is later. |
 | F-UX-001 | Product navigation and feature-state flags | `BETA` | Canonical feature lifecycle and authorization. | Home/Farm360/Help are interactive; other modules are visible status labels, never dead buttons. | Pilot shell. |
 | F-SEC-002 | Pilot identity/onboarding/deployment path | `PARTIAL` | OIDC membership, HTTPS edge/operator decision, runbooks. | No public DB/metrics/dev ports; Cloudflare decision preserved. | `BLOCKED` pending operator access decision. |

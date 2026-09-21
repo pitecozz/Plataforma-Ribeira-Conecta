@@ -18,15 +18,17 @@ current beta without implying that planned modules are available.
 6. Use the provenance panel to inspect available scene/product evidence. A
    satellite-derived layer is not a field observation, laboratory result,
    diagnosis or flood-loss conclusion.
-7. Report a possible issue through the pilot feedback workflow when it becomes
-   available. Until then, use the approved support channel and retain the
-   property/page, time and source reference.
+7. Use **Feedback do piloto** in Farm360 to report an error, confusing
+   experience, incorrect data, missing feature, suggestion or useful result.
+   The submitted comment is associated with the authenticated user, current
+   property, page and feature for safe pilot triage. A feedback submission does
+   not itself change a property fact, risk, recommendation or commercial need.
 
 ## Current beta boundaries
 
 Farm360 property maps, available scene/product context, evidence/provenance and
-confirmed Digital Twin assets are the current pilot surfaces. Intelligence
-Report V0.1, in-product feedback, rules/risk customer views, suitability,
+confirmed Digital Twin assets, Intelligence Report V0.1 and in-product feedback
+are the current pilot surfaces. Rules/risk customer views, suitability,
 telemetry and advanced module workflows are not yet available unless their
 feature status explicitly changes. A user-drawn analysis area is never a legal
 property boundary.

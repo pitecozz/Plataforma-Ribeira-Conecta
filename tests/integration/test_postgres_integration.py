@@ -182,6 +182,52 @@ class PostgresIntegrationTests(unittest.TestCase):
         self.assertEqual([item.id for item in listed], [asset.id])
         self.assertEqual(listed[0].geometry_geojson, asset.geometry_geojson)
 
+    def test_pilot_feedback_is_rls_scoped_and_rejects_cross_tenant_property(
+        self,
+    ) -> None:
+        tenant_a = self.create_test_tenant("Pilot feedback tenant A")
+        tenant_b = self.create_test_tenant("Pilot feedback tenant B")
+        property_a = self.application.create_property(
+            tenant_a.id, "Feedback property A"
+        )
+        property_b = self.application.create_property(
+            tenant_b.id, "Feedback property B"
+        )
+        item = self.application.create_pilot_feedback(
+            tenant_a.id,
+            feedback_type="USEFUL",
+            page="farm360",
+            feature_id="F-ASSET-001",
+            message="Asset context is useful for the pilot workspace.",
+            property_id=property_a.id,
+            submitted_by="pilot-user-a",
+        )
+        with self.store.tenant_transaction(tenant_a.id):
+            row = self.store.connection.execute(
+                "SELECT submitted_by,feedback_type,property_id FROM pilot_feedback WHERE id=%s",
+                (item.id,),
+            ).fetchone()
+            self.assertIsNotNone(row)
+            assert row is not None
+            self.assertEqual(row["submitted_by"], "pilot-user-a")
+            self.assertEqual(str(row["property_id"]), property_a.id)
+        with self.store.tenant_transaction(tenant_b.id):
+            self.assertIsNone(
+                self.store.connection.execute(
+                    "SELECT id FROM pilot_feedback WHERE id=%s", (item.id,)
+                ).fetchone()
+            )
+        with self.assertRaises(LookupError):
+            self.application.create_pilot_feedback(
+                tenant_a.id,
+                feedback_type="BUG",
+                page="farm360",
+                feature_id="F-ASSET-001",
+                message="Cross-tenant property link must be rejected.",
+                property_id=property_b.id,
+                submitted_by="pilot-user-a",
+            )
+
     def setUp(self) -> None:
         self.store = PostgresStore(DATABASE_URL)  # type: ignore[arg-type]
         self.application = RibeiraApplication(self.store)

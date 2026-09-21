@@ -157,6 +157,26 @@ class Action:
 
 
 @dataclass(frozen=True)
+class PilotFeedback:
+    """A tenant-isolated pilot observation about the product experience.
+
+    Feedback is not evidence about a property or its environment.  It is an
+    auditable customer/operator input which may later be triaged into a product
+    decision without silently changing any scientific or commercial conclusion.
+    """
+
+    id: str
+    tenant_id: str
+    submitted_by: str
+    feedback_type: str
+    page: str
+    feature_id: str
+    message: str
+    property_id: str | None = None
+    created_at: str = field(default_factory=now_utc)
+
+
+@dataclass(frozen=True)
 class Alert:
     id: str
     tenant_id: str

@@ -138,6 +138,11 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     ),
 }
 
+# Pilot feedback is a low-risk, authenticated product input.  It does not grant
+# access to another tenant's records and is still constrained by database RLS.
+for _role in ROLE_PERMISSIONS:
+    ROLE_PERMISSIONS[_role] = ROLE_PERMISSIONS[_role] | frozenset({"feedback:write"})
+
 # Geospatial access is explicit and remains subject to the same tenant policy.
 _GEOSPATIAL_READ = "geospatial:read"
 _GEOSPATIAL_SEARCH = "geospatial:search"

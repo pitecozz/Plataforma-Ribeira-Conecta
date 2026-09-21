@@ -17,6 +17,7 @@ from .models import (
     Evidence,
     BoundaryImport,
     Observation,
+    PilotFeedback,
     Property,
     RuleDefinition,
     Source,
@@ -1736,6 +1737,27 @@ class PostgresStore:
         ).fetchone()
         if row is None:
             raise LookupError("open action is unavailable in tenant")
+
+    def create_pilot_feedback(self, item: PilotFeedback) -> PilotFeedback:
+        row = self.connection.execute(
+            """INSERT INTO pilot_feedback(
+                   id,tenant_id,property_id,submitted_by,feedback_type,page,feature_id,message,created_at
+                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+            (
+                item.id,
+                item.tenant_id,
+                item.property_id,
+                item.submitted_by,
+                item.feedback_type,
+                item.page,
+                item.feature_id,
+                item.message,
+                item.created_at,
+            ),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("pilot feedback insert did not return an identifier")
+        return item
 
     def create_quality_event(
         self,

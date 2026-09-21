@@ -211,6 +211,17 @@ class ActionOutcomeRequest(BaseModel):
     completed_at: str | None = None
 
 
+class PilotFeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    feedback_type: str = Field(
+        pattern=r"^(BUG|CONFUSING|INCORRECT_DATA|MISSING_FEATURE|SUGGESTION|USEFUL)$"
+    )
+    page: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_./:-]+$")
+    feature_id: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+    message: str = Field(min_length=1, max_length=4000)
+    property_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+
 class FloodExposureAssessmentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     event_key: str = Field(min_length=1, max_length=200)
@@ -1290,6 +1301,27 @@ def create_app(
             platform_admin=ctx.is_platform_admin,
         )
         return {"id": action_id, "status": "COMPLETED"}
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/pilot-feedback", status_code=201, tags=["feedback"]
+    )
+    async def create_pilot_feedback(
+        tenant_id: str,
+        payload: PilotFeedbackRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "feedback:write", tenant_id)
+        item = application.create_pilot_feedback(
+            tenant_id,
+            feedback_type=payload.feedback_type,
+            page=payload.page,
+            feature_id=payload.feature_id,
+            message=payload.message,
+            property_id=payload.property_id,
+            submitted_by=ctx.subject,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return to_jsonable(item)
 
     @app.post(
         "/v1/tenants/{tenant_id}/flood-exposure-assessments",

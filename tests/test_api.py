@@ -215,6 +215,66 @@ class ApiSecurityTests(unittest.TestCase):
             response.json(), {"id": result.action.id, "status": "COMPLETED"}
         )
 
+    def test_pilot_feedback_is_authenticated_audited_and_property_scoped(self) -> None:
+        tenant = self.application.create_tenant("Pilot feedback API tenant")
+        property = self.application.create_property(tenant.id, "Pilot property")
+        headers = {
+            "Authorization": "Bearer platform-secret-dev-only",
+            "X-Request-ID": "req-feedback",
+            "X-Correlation-ID": "corr-feedback",
+        }
+        response = self.client.post(
+            f"/v1/tenants/{tenant.id}/pilot-feedback",
+            headers=headers,
+            json={
+                "feedback_type": "CONFUSING",
+                "page": "farm360",
+                "feature_id": "F-REPORT-001",
+                "property_id": property.id,
+                "message": "The available-data limitation needs clearer wording.",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["tenant_id"], tenant.id)
+        self.assertEqual(response.json()["submitted_by"], "platform")
+        self.assertEqual(response.json()["property_id"], property.id)
+        row = self.store.connection.execute(
+            "SELECT event_type,request_id,correlation_id FROM audit_log "
+            "WHERE entity_type='pilot_feedback'"
+        ).fetchone()
+        self.assertEqual(row["event_type"], "PILOT_FEEDBACK_SUBMITTED")
+        self.assertEqual(row["request_id"], "req-feedback")
+        self.assertEqual(row["correlation_id"], "corr-feedback")
+
+        invalid = self.client.post(
+            f"/v1/tenants/{tenant.id}/pilot-feedback",
+            headers=headers,
+            json={
+                "feedback_type": "PRAISE",
+                "page": "farm360",
+                "feature_id": "F-REPORT-001",
+                "message": "Unsupported type",
+            },
+        )
+        self.assertEqual(invalid.status_code, 422)
+
+        other_tenant = self.application.create_tenant("Other feedback tenant")
+        other_property = self.application.create_property(
+            other_tenant.id, "Other pilot property"
+        )
+        cross_tenant = self.client.post(
+            f"/v1/tenants/{tenant.id}/pilot-feedback",
+            headers=headers,
+            json={
+                "feedback_type": "BUG",
+                "page": "farm360",
+                "feature_id": "F-ASSET-001",
+                "property_id": other_property.id,
+                "message": "This property must not be attachable across tenants.",
+            },
+        )
+        self.assertEqual(cross_tenant.status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()
