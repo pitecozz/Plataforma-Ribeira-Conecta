@@ -217,18 +217,44 @@ class PostgresStore:
         scope = self.connection.execute(
             "SELECT geometry_status,source_reference FROM geographic_scope WHERE scope_key='VALE_DO_RIBEIRA'"
         ).fetchone()
+        scopes = self.connection.execute(
+            """SELECT scope_key,name,scope_type,geometry_status,source,source_version,classification
+               FROM geographic_scope
+               WHERE scope_key IN ('VALE_DO_RIBEIRA_SP_SEMIL','VALE_DO_RIBEIRA_INTERSTATE_IPARDES','RIBEIRA_DE_IGUAPE_BASIN')
+               ORDER BY scope_key"""
+        ).fetchall()
+        banana = self.connection.execute(
+            """SELECT max(reference_year) AS reference_year, count(*) AS municipalities_with_data
+               FROM banana_municipal_baseline WHERE crop='BANANA'"""
+        ).fetchone()
+        inmet = self.connection.execute(
+            """SELECT count(*) AS stations FROM hydrological_station WHERE provider='INMET'"""
+        ).fetchone()
+        if banana is None or inmet is None:
+            raise RuntimeError("global baseline aggregate query returned no row")
         return {
             "source_health": [dict(row) for row in health],
             "rainfall_summary": {
                 "status": "UNKNOWN",
                 "reason": "NO_REAL_HYDRO_OBSERVATIONS",
             },
+            "rainfall_status": "UNKNOWN",
+            "inmet_stations": int(inmet["stations"]),
+            "rainfall_24h": {"status": "INCOMPLETE_COVERAGE", "value": None},
+            "rainfall_72h": {"status": "INCOMPLETE_COVERAGE", "value": None},
             "river_summary": {
                 "status": "UNKNOWN",
                 "reason": "ANA_AUTH_REQUIRED_OR_SAISP_AUTOMATION_UNAVAILABLE",
             },
             "reservoir_events": [dict(row) for row in events],
             "climate_context": [dict(row) for row in climate],
+            "banana_baseline_summary": {
+                "status": "UNKNOWN" if not banana["reference_year"] else "AVAILABLE",
+                "reference_year": banana["reference_year"],
+                "municipalities_with_data": int(banana["municipalities_with_data"]),
+                "limitation": "Municipal productive structure; not property or pixel crop area",
+            },
+            "scope_definition": [dict(row) for row in scopes],
             "active_alerts": [],
             "unknowns": [
                 "No verified automated SAISP observation contract",
