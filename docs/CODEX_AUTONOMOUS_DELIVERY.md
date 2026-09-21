@@ -99,6 +99,7 @@ not hard-code a one-off municipal conclusion.
 | Trace | Audit/evidence implemented | batch/harvest/packing/transport chain | LATER |
 | AI | Deliberately absent | governed contextual corpus, permissions and evaluation | LATER |
 | Environmental risk | Rainfall timeline and validated Registro S1 pair | authorized processing and customer/property linkage | DEFERRED |
+| Soil Intelligence / Agro | Municipal baseline, terrain/remote-provider architecture and flood context | fields, analysis areas, lab/sample chain, management zones and approved agronomic policy | NEXT |
 
 ## NOW
 
@@ -214,6 +215,38 @@ not hard-code a one-off municipal conclusion.
   provider behavior.
 - **Completion criteria:** a test-safe measurement drives a non-automated
   alert/action/result through the rule chain.
+
+### 5A. Smart field sensing contract
+
+- **Objective:** tenant-bound, provider-neutral device/measurement contracts
+  for soil and weather sensing before live MQTT/LoRaWAN activation.
+- **Business value:** enables strategic rather than blanket sensor deployment
+  and eventually calibrates spatial Soil Intelligence.
+- **Required data:** confirmed sensor asset, property/field relation, depth,
+  measurement/unit, calibration, quality, time and communication provenance.
+- **Dependencies:** Digital Twin asset links, telemetry ingress and approved
+  device/provider contract.
+- **Evidence First/security gates:** simulated fixtures remain `SIMULATED`; no
+  public unauthenticated ingestion; model estimates never become observations.
+- **Tests/completion:** replay, unit, RLS, sensor-to-asset, calibration and
+  source-health tests; one safe measurement reaches the shared rule chain.
+
+### 5B. Soil Intelligence, suitability and sampling foundation
+
+- **Objective:** add analysis areas, field/talhão context, management zones,
+  sample/lab traceability and preliminary-vs-validated suitability.
+- **Business value:** supports Banana Suitability, smart sampling, targeted
+  sensors and evidence-backed consulting services.
+- **Required data:** verified property/field, explicit non-legal analysis area,
+  provider provenance, approved crop policy and later lab/field evidence.
+- **Dependencies:** Digital Twin, property-scoped rules, telemetry contracts,
+  provider-neutral terrain/soil/remote adapters and shared flood exposure.
+- **Evidence First/security gates:** no legal-boundary claim from drawn zones;
+  satellite/modelled context cannot become lab/observed data; agronomic disease
+  and automated irrigation remain `EXPERT_VALIDATION_REQUIRED`.
+- **Tests/completion:** zone version/geometry, sample chain, lab provenance,
+  missing uncertainty, RLS and suitability decision/action traceability; a
+  `PRELIMINARY_*` result never silently promotes to validated.
 
 ### 6. Banana operational-risk and inspection workflow
 

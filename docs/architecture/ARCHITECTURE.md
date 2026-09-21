@@ -64,6 +64,17 @@ ativos/contexto; Connect, Agro, IoT, Energy, Security, Prospect e Farm360 devem
 compor essa fundação em vez de criar silos. A priorização atual, gates de
 evidência e dependências estão em `docs/CODEX_AUTONOMOUS_DELIVERY.md`.
 
+## Agro, solo e telemetria de campo
+
+Soil Intelligence reutiliza ativos/contexto do Digital Twin, PostGIS/RLS,
+proveniência de provedores e o motor de regras; não cria uma base paralela de
+fazendas, sensores ou eventos de inundação. Áreas desenhadas para análise e
+zonas de manejo são geometrias derivadas e versionadas, não limites legais.
+Dados remotos/modelados, sensores observados e laudos laboratoriais permanecem
+classes de evidência distintas. A futura entrada MQTT/HTTPS fica atrás de
+adapters autenticados e tenant-bound, e qualquer estimativa virtual preserva
+modelo, incerteza e calibração. Veja `docs/agro/` e `docs/iot/FIELD_TELEMETRY.md`.
+
 ## Business boundaries
 
 O catálogo não assume que todo produto está ativo. `customer_contract` registra

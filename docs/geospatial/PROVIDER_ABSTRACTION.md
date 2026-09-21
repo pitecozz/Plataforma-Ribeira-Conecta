@@ -69,3 +69,8 @@ promote a visual layer to evidence.
    record the decision, limitations and comparability analysis.
 
 Earth Engine, Landsat and JRC remain roadmap work until those gates are met.
+
+The same contract applies to Soil Intelligence inputs: SoilGrids,
+PronaSolos/Embrapa, terrain/DEM, SMAP regional context and future official soil
+providers are baselines or modelled/derived context as their source warrants.
+They must not be represented as field laboratory or in-situ observations.
