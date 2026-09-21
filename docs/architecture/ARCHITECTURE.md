@@ -46,6 +46,16 @@ RLS `USING`/`WITH CHECK` com `FORCE ROW LEVEL SECURITY`. COG/STAC/object storage
 e workers raster permanecem como próxima vertical slice. SQLite não é
 apresentado como substituto espacial.
 
+## Direção operacional
+
+O mapa e o dashboard são consumidores do domínio, não o próprio produto. A
+evolução segue `ativo -> dado -> contexto -> regra -> decisão -> ação ->
+resultado`, com proveniência e resultado/fechamento persistidos em cada salto.
+A fundação compartilhada é o Digital Twin espacial e multi-tenant de
+ativos/contexto; Connect, Agro, IoT, Energy, Security, Prospect e Farm360 devem
+compor essa fundação em vez de criar silos. A priorização atual, gates de
+evidência e dependências estão em `docs/CODEX_AUTONOMOUS_DELIVERY.md`.
+
 ## Business boundaries
 
 O catálogo não assume que todo produto está ativo. `customer_contract` registra

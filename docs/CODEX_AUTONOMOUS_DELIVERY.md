@@ -1,0 +1,237 @@
+# Autonomous delivery plan — requirements resync
+
+**Updated:** 2026-09-21
+**Authority order:** explicit current Product Owner requirements, documented
+Ribeira business rules, product blueprint, customer configuration, official
+provider contracts, collected data, deterministic calculation, model, then
+assumption.
+
+## Product direction
+
+Ribeira Conecta is an operational decision platform, not a collection of
+dashboards. Each module must contribute to:
+
+```text
+asset -> data -> context -> rule -> decision -> action -> result
+```
+
+The platform must support prospect discovery, a real understanding of the
+customer environment, installations and physical assets, connectivity, energy,
+environmental/operational risks, banana-producer consulting, monitoring,
+alerts, recommendations, automation, and responsible cross-sell/upsell. Scope
+must be configurable by sector, customer, property, field/talhão, and asset.
+
+Evidence First is non-negotiable: unknown input remains unknown; a model or
+satellite product never becomes an observation or diagnosis; decisions preserve
+source, time, transformations, rule/model version, limitations, conflicts, and
+outcomes.
+
+## Requirements resync and supersession record
+
+The blueprint's historical Phase 1 lists broad data integrations and satellite
+work. Recent delivery concentrated on Vale/Ribeira hydrology and a Registro SAR
+pilot, which is valid enabling work but cannot define the whole roadmap.
+
+The current explicit priority supersedes an **imagery-first sequencing
+interpretation**, not the historical work itself. The Registro Sentinel-1 V2
+catalogue selection remains preserved and valid, but is now an environmental
+risk input awaiting a separately authorized processing increment. Shared asset,
+context, scoped rules, and operational outcomes take priority over more SAR
+processing or unrelated municipal tiles.
+
+## Primary real-world validation case: Vale do Ribeira flood, September 2026
+
+`VALE_RIBEIRA_FLOOD_2026_09_FACTUAL_EVIDENCE_ONLY` is a primary reusable
+validation case for flood intelligence, not a Sentinel-1 experiment. The
+persisted operational event is retained as factual evidence only; it must be
+able to connect municipality/property/asset exposure, rainfall, river and
+reservoir context, satellite evidence, rules, recommended actions and later
+results through the core chain.
+
+Known inputs are maintained independently: September rainfall and accumulation
+windows; municipal flood evidence (including Registro and, where persisted and
+verified, Eldorado, Sete Barras and Iguape); official IBGE municipal geometries;
+Copel timing; river conditions where official evidence exists; Sentinel-1/S2
+investigation; and municipal banana/agricultural context. A missing river level,
+property exposure, asset exposure, upstream measurement or satellite-derived
+extent remains explicitly unknown.
+
+No causal conclusion is encoded. The required hypotheses are separate records
+with the only permitted states `SUPPORTED`, `PARTIALLY_SUPPORTED`,
+`INCONCLUSIVE`, `CONTRADICTED`, and `UNKNOWN`:
+
+| Hypothesis | Current treatment |
+|---|---|
+| H1 — local rainfall contribution | `INCONCLUSIVE`; evaluate against time/location-specific rainfall and exposure evidence. |
+| H2 — upstream rainfall contribution | `UNKNOWN` until verified upstream rainfall/river sequence is available. |
+| H3 — reservoir/Capivari operation contribution | `INCONCLUSIVE`; preserve Copel timing without asserting contribution. |
+| H4 — ENSO/El Niño broader climate context | `INCONCLUSIVE`; context only, never `EL_NINO_CAUSED_FLOOD=true`. |
+
+Flood capability must answer what/where/when, municipality/property/asset
+exposure, rainfall accumulation, river trajectory, upstream sequence, reservoir
+timing, satellite evidence, unknowns, at-risk customers/prospects and the
+evidence for each recommended action. It is reusable for future events and must
+not hard-code a one-off municipal conclusion.
+
+## Architecture coverage review
+
+| Module | Current state | Main gap/dependency | Priority |
+|---|---|---|---|
+| Maps / Farm360 | Property GIS, scene catalogue, derived-product map, provenance | unified physical-asset/digital-twin layers | NOW |
+| Business / Prospect | Customer, contract, opportunity evidence, score foundation | public-data prospect intake and environment profile | NOW/NEXT |
+| Rules / Monitor | Versioned rule and alert/action chain | sector/customer/property/field/asset inheritance and feedback | NOW |
+| Connect | Asset/contract primitives | POP/tower inventory, LoS/Fresnel, feasibility evidence | NEXT |
+| Agro / Banana | Rainfall, municipal baseline and imagery foundations | fields, verified agronomic observations, inspection workflow | NEXT |
+| IoT | Architecture only | device, telemetry, MQTT/LoRaWAN, replay-safe pipeline | NEXT |
+| Energy / Security | Commercial asset primitives | spatial inventory, condition data and operational rules | NEXT |
+| Trace | Audit/evidence implemented | batch/harvest/packing/transport chain | LATER |
+| AI | Deliberately absent | governed contextual corpus, permissions and evaluation | LATER |
+| Environmental risk | Rainfall timeline and validated Registro S1 pair | authorized processing and customer/property linkage | DEFERRED |
+
+## NOW
+
+### 1. Digital Twin asset and context foundation
+
+- **Objective:** add tenant-isolated, spatial physical assets and context links
+  for installations, connectivity, energy, security, agricultural and
+  operational assets.
+- **Business value:** gives Farm360, Prospect, Connect, Energy, Security, IoT
+  and Agro one factual customer-environment representation.
+- **Required data:** manually confirmed asset type, geometry/CRS, ownership,
+  operational status, source and timestamps; absent attributes remain unknown.
+- **Dependencies:** existing customer/property/asset ownership and PostGIS/RLS.
+- **Evidence First gate:** no inferred equipment, network, energy availability
+  or agronomic state; classify manual field records explicitly.
+- **Security gate:** tenant RLS/FKs, role-gated writes, audit every mutation;
+  document references must be opaque and allowlisted.
+- **Tests:** geometry/CRS, tenant isolation, ownership temporal integrity,
+  audit, unknown values and API authorization.
+- **Completion criteria:** an asset links to a property, appears in Farm360,
+  supplies evidence to a scoped rule, and retains an action/result trail.
+
+### 2. Scoped rule-to-outcome extension
+
+- **Objective:** explicit rule applicability across sector, customer, property,
+  field/talhão and asset, with versioning, conflict handling and feedback.
+- **Business value:** safely turns asset/context data into recommendations,
+  alerts and opportunities rather than a disconnected inventory.
+- **Required data:** scope, evidence references, action owner/status and result
+  or closure evidence.
+- **Dependencies:** Digital Twin asset/context foundation.
+- **Evidence First gate:** incomplete scoped evidence remains inconclusive.
+- **Security gate:** approval segregation and tenant authorization for rule
+  publication, assignment and outcome closure.
+- **Tests:** inheritance precedence, RLS, conflicts, version snapshots, audit.
+- **Completion criteria:** one factual, non-automated rule completes the core
+  chain including a recorded result.
+
+### 3. Flood-event evidence, exposure and hypothesis foundation
+
+- **Objective:** generalize the September 2026 Vale do Ribeira event into an
+  Evidence-First flood-event capability: factual timeline, independent
+  hypotheses, municipal/property/asset exposure and action traceability.
+- **Business value:** makes environmental/operational risk actionable for
+  customers, prospects, infrastructure and banana context without claiming a
+  cause or unsupported flood extent.
+- **Required data:** official event references, municipality geometries,
+  timestamped rainfall/river/reservoir observations, scene metadata, asset and
+  property geometry, and explicit exposure method/version.
+- **Dependencies:** Digital Twin context; existing operational-event/rainfall
+  persistence; provider contracts for river stage/discharge.
+- **Evidence First gate:** distinguish observed event facts, calculated
+  exposure, derived satellite signals and causal hypotheses; incomplete data
+  stays unknown/inconclusive.
+- **Security gate:** global/public event evidence must not disclose tenant
+  property/customer geometry, identities or commercial risk to another tenant.
+- **Tests:** municipality/property/asset spatial exposure, time-window
+  integrity, hypothesis-state transitions, RLS, no-causality regression, source
+  provenance and action-result traceability.
+- **Completion criteria:** a factual event can produce a tenant-isolated,
+  evidence-backed exposure assessment and non-automated recommendation; no
+  causal conclusion or flood-loss claim is emitted without support.
+
+## NEXT
+
+### 4. Evidence-backed environment profile and Prospect intake
+
+- **Objective:** build permitted public-territorial and manually confirmed
+  prospect/property context.
+- **Business value:** lower visit cost and enable explainable prioritization and
+  cross-sell without declaring absent data a need.
+- **Required data:** legal-basis review, source terms, geometry, freshness,
+  references and configurable score model.
+- **Dependencies:** Digital Twin, scoped rules, provider registry.
+- **Evidence First gate:** missing score inputs yield `UNKNOWN`/incomplete;
+  prioritization is not confirmed customer need.
+- **Security gate:** LGPD minimization; no abusive personal enrichment.
+- **Tests:** provider boundaries, score unknown policy, evidence-required
+  opportunity, RLS and authorization.
+- **Completion criteria:** reviewable opportunity without fabricated contacts or
+  inferred infrastructure.
+
+### 5. Operational telemetry and monitoring ingress
+
+- **Objective:** device/measurement contracts and replay-safe ingestion before
+  MQTT/LoRaWAN activation.
+- **Business value:** monitored assets, alerts and recommendations for pumps,
+  cold rooms, connectivity and energy.
+- **Required data:** device identity, asset link, calibrated measurement, time,
+  unit, quality and provider provenance.
+- **Dependencies:** Digital Twin assets and scoped rules.
+- **Evidence First gate:** calibration, clock, quality and transport failures
+  stay explicit; no simulated operational data.
+- **Security gate:** per-device credentials, tenant binding, replay protection,
+  rate limits and external secrets.
+- **Tests:** idempotency/replay, unit/range validation, RLS, audit, unavailable
+  provider behavior.
+- **Completion criteria:** a test-safe measurement drives a non-automated
+  alert/action/result through the rule chain.
+
+### 6. Banana operational-risk and inspection workflow
+
+- **Objective:** combine confirmed field context, weather/telemetry and imagery
+  for inspection recommendations, never disease diagnosis.
+- **Business value:** banana consulting and recurring monitoring.
+- **Required data:** confirmed fields/talhões, crop context, inspections,
+  approved agronomic rules and sensor/weather provenance.
+- **Dependencies:** fields/assets, telemetry, scoped rules, agronomist policy.
+- **Evidence First gate:** satellite alone only creates a risk/triage signal;
+  no disease, flooded banana hectares or loss claim without corroboration.
+- **Security gate:** tenant isolation and approved-rule publication.
+- **Tests:** evidence combination, missing/conflicting evidence, no-diagnosis
+  regression, provenance and result capture.
+- **Completion criteria:** agronomist-reviewable inspection and closure are
+  traceable end-to-end.
+
+## LATER
+
+- Connect feasibility: owned/official POP and tower inventories, DEM-backed
+  LoS/Fresnel/link-budget calculations and reviewable commercial action.
+- Energy and Security contextual adapters/rules after real source contracts.
+- Ribeira Trace after field, asset and operational-event foundations.
+- Contextual AI/RAG, next-best-action and automation after permissioned,
+  evidence-complete context and evaluation controls.
+
+## BLOCKED
+
+- ANA: `AUTH_REQUIRED_PENDING_PROVIDER`; no invented river data.
+- SAISP: `NOT_APPROVED_FOR_AUTOMATION`; manual evidence only and fail closed.
+- Cloudflare: `DEFERRED_BY_OPERATOR`.
+- Customer telemetry/MQTT/LoRaWAN: no approved device/provider contract.
+- Agronomic disease rules: require approved policy and corroborating data.
+
+## DEFERRED
+
+- Registro S1 V2 raster processing. The selected 06 Sep / 12 Sep 2026 pair
+  (IW, descending, relative orbit 126, VV/VH) and validation tile `x10_y355`
+  are preserved with 100% common Registro coverage. Processing requires a
+  separately authorized bounded increment; other Registro tiles and
+  municipalities are not implied.
+- Premium imagery, drones, NISAR, ECOSTRESS, EnMAP and model-led automation.
+
+## Operating cadence
+
+For each safe increment: implement → unit/integration test → diff review →
+secret check → commit → push feature branch → verify remote hash. A milestone
+does not supersede prior evidence or migrations; it adds an explicit successor
+record and provenance.
