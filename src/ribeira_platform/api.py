@@ -1170,6 +1170,19 @@ def create_app(
             "data_status": data_status(products, scenes),
         }
 
+    @app.get(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/assets",
+        tags=["farm-360", "assets"],
+    )
+    async def list_property_assets(
+        tenant_id: str, property_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "asset:read", tenant_id)
+        items = application.business.list_assets_for_property(
+            tenant_id, property_id, platform_admin=ctx.is_platform_admin
+        )
+        return {"property_id": property_id, "items": to_jsonable(items)}
+
     @app.post("/v1/tenants/{tenant_id}/sources", status_code=201, tags=["sources"])
     async def create_source(
         tenant_id: str, payload: SourceRequest, ctx: AuthContext = Depends(context)

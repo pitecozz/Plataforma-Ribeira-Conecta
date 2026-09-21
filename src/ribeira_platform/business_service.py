@@ -290,6 +290,11 @@ class BusinessApplication:
         self, item: Asset, *, actor: str, platform_admin: bool = False
     ) -> Asset:
         with self.store.tenant_transaction(item.tenant_id, platform_admin):
+            if (
+                item.property_id is not None
+                and self.store.get_property(item.tenant_id, item.property_id) is None
+            ):
+                raise LookupError("asset property is unavailable in tenant")
             self.repository.create_asset(item)
             self._audit(
                 item.tenant_id,
@@ -303,6 +308,15 @@ class BusinessApplication:
                 },
             )
         return item
+
+    def list_assets_for_property(
+        self, tenant_id: str, property_id: str, *, platform_admin: bool = False
+    ) -> list[Asset]:
+        """Read a property inventory without crossing tenant or property scope."""
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            if self.store.get_property(tenant_id, property_id) is None:
+                raise LookupError("property not found in tenant")
+            return self.repository.list_assets_for_property(tenant_id, property_id)
 
     def assign_asset_ownership(
         self, item: AssetOwnership, *, actor: str, platform_admin: bool = False

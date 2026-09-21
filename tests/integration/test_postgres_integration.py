@@ -148,6 +148,7 @@ class PostgresIntegrationTests(unittest.TestCase):
 
     def test_spatial_asset_context_is_postgis_persisted_and_tenant_scoped(self) -> None:
         tenant = self.create_test_tenant("Spatial asset PG tenant")
+        property = self.application.create_property(tenant.id, "Asset context property")
         asset = Asset(
             new_id(),
             tenant.id,
@@ -155,7 +156,7 @@ class PostgresIntegrationTests(unittest.TestCase):
             "Loading area camera",
             None,
             "ACTIVE",
-            None,
+            property.id,
             None,
             CommercialClassification.MANUAL_CONFIRMED,
             {"type": "Point", "coordinates": [-47.0, -24.0]},
@@ -175,6 +176,11 @@ class PostgresIntegrationTests(unittest.TestCase):
         self.assertEqual(row["geometry_crs"], "EPSG:4326")
         self.assertEqual(row["context"]["operational_role"], "security")
         self.assertEqual(json.loads(row["geometry"])["type"], "Point")
+        listed = self.application.business.list_assets_for_property(
+            tenant.id, property.id
+        )
+        self.assertEqual([item.id for item in listed], [asset.id])
+        self.assertEqual(listed[0].geometry_geojson, asset.geometry_geojson)
 
     def setUp(self) -> None:
         self.store = PostgresStore(DATABASE_URL)  # type: ignore[arg-type]

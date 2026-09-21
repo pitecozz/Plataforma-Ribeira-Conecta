@@ -8,7 +8,7 @@ tenant isolation, auditability, provenance and explicit limitations.
 
 | FEATURE_ID | Feature / module | Status | Purpose and user value | Main dependencies and data | Evidence/security/availability |
 |---|---|---|---|---|---|
-| F-CORE-001 | Tenant Digital Twin / Maps / Farm360 | `FOUNDATION` | Operator and customer representation of property and physical assets. | Property/asset geometry, ownership, source, timestamps; PostGIS/RLS. | Manual facts stay `MANUAL_CONFIRMED`; no inferred equipment. API/model/tests: `geospatial_*`, `test_farm360_api.py`, migration 028. |
+| F-CORE-001 | Tenant Digital Twin / Maps / Farm360 | `FOUNDATION` | Operator and customer representation of property and physical assets. | Property/asset geometry, ownership, source, timestamps; PostGIS/RLS. | Manual facts stay `MANUAL_CONFIRMED`; no inferred equipment. Property asset inventory is `asset:read`-gated; broader rule asset scope remains pending. |
 | F-RULE-001 | Scoped Rules, decisions, actions and outcomes | `PARTIAL` | Makes context yield a traceable, non-automated recommendation and closure. | Versioned rule, evidence, property scope, action/result. | Tenant/property scope only; broader inheritance pending. `engine.py`, `service.py`, migration 029/031. |
 | F-FLOOD-001 | Flood event and exposure | `FOUNDATION` | Reusable evidence-backed event, hypothesis and tenant exposure context. | Official event facts, verified zones, property/asset geometry. | H1–H4 remain independent; no causal claim/no seeded real extent. `flood_pilot.py`, migration 030, `test_flood_sar.py`. |
 | F-RS-001 | Sentinel scene catalogue and provenance | `PARTIAL` | Select reproducible satellite scenes for spatial analysis. | Official CDSE STAC item metadata and exact footprints. | No Process API scene proof; provider contract is bounded. `sentinel1_discovery.py`, `test_sentinel1_discovery.py`. |
@@ -41,7 +41,7 @@ their API schemas or migrations. It is expanded as future features ship.
 
 | Capability | Code / API surface | Persistence | Tests / detailed documentation |
 |---|---|---|---|
-| Digital Twin spatial assets | `geospatial_service.py`, `api.py` Farm360 routes | migration 028 | `test_farm360_api.py`, [Farm360](../geospatial/FARM_360_V1.md) |
+| Digital Twin spatial assets | `business_service.py`, `business_repository.py`, property-assets route in `api.py` | migration 028 | `test_business.py`, `test_farm360_api.py`, [Farm360](../geospatial/FARM_360_V1.md) |
 | Scoped rule/action/outcome | `service.py`, rule payload and outcome route in `api.py` | migrations 029 and 031 | `test_vertical_slice.py`, [rule catalogue](../rules/BUSINESS_RULE_CATALOG.md) |
 | Flood exposure foundation | `flood_pilot.py`, `POST /v1/tenants/{tenant_id}/flood-exposure-assessments` | migration 030 | `test_flood_sar.py`, [delivery plan](../CODEX_AUTONOMOUS_DELIVERY.md) |
 | Satellite catalogue | `geospatial_service.py`, satellite search routes in `api.py` | geospatial scene/asset migrations | `test_sentinel1_discovery.py`, [provider](../geospatial/COPERNICUS_PROVIDER.md) |

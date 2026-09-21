@@ -57,6 +57,7 @@ its own auditable approval policy and is deliberately not implied by the UI.
 - `GET /v1/tenants/{tenant_id}/properties`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/geospatial`
+- `GET /v1/tenants/{tenant_id}/properties/{property_id}/assets`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/scenes`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/derived-products`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/timeline`
@@ -72,6 +73,14 @@ Write operations use the same tenant authorization and RLS context:
 - `POST /v1/tenants/{tenant_id}/processing-jobs/{job_id}/run`
 
 All need the established bearer authentication and tenant authorization. The
+property-assets inventory requires `asset:read`, resolves the property inside
+the tenant transaction/RLS context, and returns only persisted asset type,
+status, geometry, source reference, timestamp, classification and context. It
+does not infer a missing physical asset, location, condition or calibration.
+An asset registration that names a property rejects a property outside the
+tenant.
+
+All other read endpoints need the established bearer authentication and tenant authorization. The
 tile endpoint applies `geospatial:read`, resolves the product under the tenant
 transaction/RLS context, validates XYZ coordinates (zoom 0–22), and only then
 resolves its already-persisted opaque object reference. It never accepts a

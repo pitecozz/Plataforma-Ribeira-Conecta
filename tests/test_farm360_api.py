@@ -15,6 +15,7 @@ from rasterio.transform import from_origin
 from shapely.geometry import Polygon, mapping
 
 from ribeira_platform.api import Settings, create_app
+from ribeira_platform.business import Asset, CommercialClassification
 from ribeira_platform.geospatial import (
     DerivedProductDependency,
     ProviderSearchResult,
@@ -191,6 +192,41 @@ class Farm360ApiTests(unittest.TestCase):
         self.assertNotIn("local://", provenance.text)
         denied = self.tenant_client.get(
             f"/v1/tenants/{self.tenant.id}/derived-products/{self.product.id}/provenance",
+            headers={"Authorization": "Bearer tenant-b"},
+        )
+        self.assertEqual(denied.status_code, 403)
+
+    def test_property_asset_inventory_is_tenant_scoped_and_preserves_context(
+        self,
+    ) -> None:
+        asset = Asset(
+            new_id(),
+            self.tenant.id,
+            "RAIN_GAUGE",
+            "Gauge A",
+            None,
+            "ACTIVE",
+            self.property.id,
+            None,
+            CommercialClassification.MANUAL_CONFIRMED,
+            {"type": "Point", "coordinates": [0.5, 0.5]},
+            "EPSG:4326",
+            "manual installation record",
+            "2026-09-21T12:00:00+00:00",
+            {"calibration_state": "UNKNOWN"},
+        )
+        self.application.business.register_asset(asset, actor="operator")
+        response = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/assets",
+            headers={"Authorization": "Bearer admin"},
+        )
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["items"][0]
+        self.assertEqual(item["id"], asset.id)
+        self.assertEqual(item["classification"], "MANUAL_CONFIRMED")
+        self.assertEqual(item["context"]["calibration_state"], "UNKNOWN")
+        denied = self.tenant_client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/assets",
             headers={"Authorization": "Bearer tenant-b"},
         )
         self.assertEqual(denied.status_code, 403)

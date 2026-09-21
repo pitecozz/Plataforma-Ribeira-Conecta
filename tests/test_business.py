@@ -63,6 +63,46 @@ class BusinessDomainTests(unittest.TestCase):
         self.assertEqual(row["geometry_crs"], "EPSG:4326")
         self.assertIn("irrigation", row["context"])
         self.assertEqual(row["source_reference"], "manual field survey 2026-09-21")
+        property = app.create_property(tenant.id, "Asset property")
+        property_asset = Asset(
+            new_id(),
+            tenant.id,
+            "WEATHER_STATION",
+            "Station A",
+            None,
+            "ACTIVE",
+            property.id,
+            None,
+            CommercialClassification.MANUAL_CONFIRMED,
+            None,
+            None,
+            "operator inventory",
+            "2026-09-21T12:00:00+00:00",
+            {"communication_health": "UNKNOWN"},
+        )
+        app.business.register_asset(property_asset, actor="operator")
+        listed = app.business.list_assets_for_property(tenant.id, property.id)
+        self.assertEqual([item.id for item in listed], [property_asset.id])
+        self.assertEqual(
+            listed[0].classification, CommercialClassification.MANUAL_CONFIRMED
+        )
+        self.assertEqual(listed[0].context["communication_health"], "UNKNOWN")
+        other_tenant = app.create_tenant("Other asset tenant")
+        with self.assertRaises(LookupError):
+            app.business.register_asset(
+                Asset(
+                    new_id(),
+                    tenant.id,
+                    "INVALID_CROSS_TENANT_PROPERTY",
+                    "Invalid link",
+                    None,
+                    "ACTIVE",
+                    app.create_property(other_tenant.id, "Other property").id,
+                    None,
+                    CommercialClassification.MANUAL_CONFIRMED,
+                ),
+                actor="operator",
+            )
         with self.assertRaises(ValueError):
             Asset(
                 new_id(),

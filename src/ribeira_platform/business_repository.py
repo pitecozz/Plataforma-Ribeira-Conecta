@@ -580,6 +580,52 @@ class BusinessRepository:
         )
         return item
 
+    def list_assets_for_property(self, tenant_id: str, property_id: str) -> list[Asset]:
+        """Return a tenant-scoped Digital Twin asset inventory for one property.
+
+        The caller establishes the tenant transaction/RLS context. This method
+        deliberately returns persisted source/classification/context fields and
+        never fills absent coordinates or operational facts.
+        """
+        p = self.placeholder
+        geometry_column = (
+            "CASE WHEN geometry IS NULL THEN NULL ELSE ST_AsGeoJSON(geometry) END"
+            if self.postgres
+            else "geometry_geojson"
+        )
+        rows = self._execute(
+            f"""SELECT id,tenant_id,asset_type,name,serial_number,status,property_id,site_id,
+                       {geometry_column} AS geometry_geojson,geometry_crs,source_reference,
+                       observed_at,context,data_classification
+                 FROM asset
+                WHERE tenant_id={p} AND property_id={p}
+                ORDER BY name ASC,id ASC""",  # nosec B608 - identifiers are fixed
+            [tenant_id, property_id],
+        ).fetchall()
+        result: list[Asset] = []
+        for row in rows:
+            geometry = row["geometry_geojson"]
+            context = row["context"]
+            result.append(
+                Asset(
+                    str(row["id"]),
+                    str(row["tenant_id"]),
+                    str(row["asset_type"]),
+                    str(row["name"]),
+                    row["serial_number"],
+                    str(row["status"]),
+                    row["property_id"],
+                    row["site_id"],
+                    self._classification(row["data_classification"]),
+                    json.loads(geometry) if isinstance(geometry, str) else geometry,
+                    row["geometry_crs"],
+                    row["source_reference"],
+                    self._timestamp(row["observed_at"]),
+                    json.loads(context) if isinstance(context, str) else context,
+                )
+            )
+        return result
+
     def create_asset_ownership(self, item: AssetOwnership) -> AssetOwnership:
         self._insert(
             "asset_ownership",
