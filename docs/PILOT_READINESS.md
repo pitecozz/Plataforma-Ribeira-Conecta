@@ -28,8 +28,8 @@ These are deliberately conservative approximations, not service-level claims.
 | Risks/opportunities/actions | scoped decision/action outcome history API | Farm360 decision panel with honest empty state | unit/PostGIS/frontend | `PARTIAL` | It shows only persisted decisions/actions; commercial opportunities still require a separate evidence-backed workflow. |
 | Intelligence Report V0.1 | loaded tenant records | printable HTML report | frontend unit | `PARTIAL` | It exposes available property/assets/provenance and explicit unknown decisions; report API/history is later. |
 | Feedback | tenant-isolated feedback API and audit | Farm360 form with explicit submission/error state | backend/frontend/PostGIS | `PARTIAL` | Creates no operational conclusion; triage/listing workflow is later. |
-| Pilot E2E | validation E2E only | validation workspace only | Playwright | `MISSING` | Requires isolated pilot fixture and full customer path. |
-| Secure external access | loopback services/health endpoints | static build | local checks | `BLOCKED` | `PILOT_ACCESS_DECISION_REQUIRED`; Cloudflare remains `DEFERRED_BY_OPERATOR`. |
+| Pilot E2E | legacy private validation spec | official Playwright container starts | container browser exercised | `BLOCKED` | Current spec asserts superseded validation workspace; a final-host OIDC pilot fixture requires operator-provisioned hostname/identity and must not reuse development-token data. |
+| Secure external access | loopback/private-origin services | production static build exists | local listener audit | `BLOCKED` | `CLOUDFLARE_STATUS=AUTHORIZED_FOR_PILOT_ACCESS`; final hostname, protected tunnel configuration and OIDC public-origin registration remain operator-held. See [onboarding](pilot/PILOT_ONBOARDING.md). |
 
 ## Pilot delivery order
 

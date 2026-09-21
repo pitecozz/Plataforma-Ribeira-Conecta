@@ -41,9 +41,10 @@ Repetir uma membership `VIEWER` já ativa é idempotente. Memberships com papel
 distinto, desativadas ou revogadas são conflitos explícitos e nunca são
 substituídas ou reativadas pelo comando.
 
-O papel `VIEWER` permite apenas `property:read` e `geospatial:read`; não
-concede escrita, aprovação de limites, administração de tenant ou privilégio
-de plataforma. O comando não recebe issuer, subject ou tenant como argumentos
+O papel `VIEWER` permite leitura de propriedade/geoespacial e de decisões,
+além de envio de feedback autenticado; não concede alteração de propriedade,
+aprovação de limites, administração de tenant ou privilégio de plataforma. O
+comando não recebe issuer, subject ou tenant como argumentos
 de linha de comando e não imprime esses identificadores, tokens ou segredos.
 
 ## Revogação controlada

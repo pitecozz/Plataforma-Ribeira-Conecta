@@ -299,7 +299,9 @@ not hard-code a one-off municipal conclusion.
 
 - ANA: `AUTH_REQUIRED_PENDING_PROVIDER`; no invented river data.
 - SAISP: `NOT_APPROVED_FOR_AUTOMATION`; manual evidence only and fail closed.
-- Cloudflare: `DEFERRED_BY_OPERATOR`.
+- Cloudflare: `AUTHORIZED_FOR_PILOT_ACCESS` only for private-origin HTTPS
+  tunnel ingress; final hostname, protected tunnel configuration and OIDC
+  public-origin/callback registration remain operator-controlled.
 - Customer telemetry/MQTT/LoRaWAN: no approved device/provider contract.
 - Agronomic disease rules: require approved policy and corroborating data.
 
