@@ -106,6 +106,10 @@ The command does not provision an OIDC user. Only after its tenant exists may
 the separate `identity_admin provision` workflow create the audited `VIEWER`
 membership from the verified issuer and subject.
 
+Use the same private inputs with `--verify` after creation to check the
+persisted boundary, assets, bootstrap audit and a cross-tenant RLS denial. It
+is read-only and does not require an OIDC identity.
+
 ### Tenant binding and audited onboarding gate
 
 The current pilot SPA intentionally requires `VITE_RIBEIRA_TENANT_ID`. It is

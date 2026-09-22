@@ -422,6 +422,65 @@ def _print_plan(plan: PilotBootstrapPlan, result: str, dry_run: bool) -> None:
     print("EXCLUDED_FEATURES=" + ",".join(plan.excluded_feature_names))
 
 
+def verify_plan(store: PostgresStore, plan: PilotBootstrapPlan) -> dict[str, Any]:
+    """Read the persisted plan through tenant context and prove RLS denial."""
+    if _existing_state(store, plan) != "COMPLETE":
+        raise BootstrapConflict("pilot bootstrap is not complete")
+    with store.tenant_transaction(plan.tenant_id, platform_admin=True):
+        property_item = store.get_property(plan.tenant_id, plan.property_id)
+        if property_item is None or property_item.geometry_geojson is None:
+            raise BootstrapConflict("pilot property boundary is unavailable")
+        _, area_hectares, _ = validate_boundary(
+            property_item.geometry_geojson, property_item.geometry_crs or ""
+        )
+        audit = store.connection.execute(
+            """SELECT payload FROM audit_log
+               WHERE tenant_id=%s AND event_type=%s AND entity_id=%s
+               ORDER BY created_at DESC LIMIT 1""",
+            (plan.tenant_id, BOOTSTRAP_EVENT, plan.property_id),
+        ).fetchone()
+    if audit is None or audit["payload"].get("legal_boundary_verified") is not False:
+        raise BootstrapConflict("pilot verification audit is unavailable or incomplete")
+    foreign_context = str(uuid.uuid4())
+    with store.tenant_transaction(foreign_context):
+        cross_tenant_property = store.get_property(plan.tenant_id, plan.property_id)
+    if cross_tenant_property is not None:
+        raise BootstrapConflict("RLS did not deny cross-tenant property visibility")
+    return {
+        "tenant_exists": True,
+        "property_exists": True,
+        "boundary_valid": True,
+        "boundary_source": property_item.boundary_source,
+        "boundary_classification": property_item.classification.value,
+        "legal_boundary_verified": False,
+        "boundary_area_hectares": area_hectares,
+        "asset_count": len(plan.assets),
+        "excluded_feature_names": list(plan.excluded_feature_names),
+        "rls_isolation": "PASS",
+        "audit_event": BOOTSTRAP_EVENT,
+    }
+
+
+def _print_verification(result: dict[str, Any]) -> None:
+    for key in (
+        "tenant_exists",
+        "property_exists",
+        "boundary_valid",
+        "boundary_source",
+        "boundary_classification",
+        "legal_boundary_verified",
+        "boundary_area_hectares",
+        "asset_count",
+        "rls_isolation",
+        "audit_event",
+    ):
+        value = result[key]
+        print(
+            f"{key.upper()}={str(value).upper() if isinstance(value, bool) else value}"
+        )
+    print("EXCLUDED_FEATURES=" + ",".join(result["excluded_feature_names"]))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Private audited pilot package bootstrap"
@@ -432,14 +491,20 @@ def main() -> None:
         "--operator-actor", default=f"LOCAL_OPERATOR:{getpass.getuser()}"
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--verify", action="store_true")
     args = parser.parse_args()
     try:
+        if args.dry_run and args.verify:
+            raise BootstrapError("--dry-run and --verify cannot be combined")
         plan = load_plan(args.manifest_file, args.geojson_file)
         dsn = os.getenv("RIBEIRA_DATABASE_URL")
         if not dsn:
             raise BootstrapError("RIBEIRA_DATABASE_URL is required")
         store = PostgresStore(dsn)
         try:
+            if args.verify:
+                _print_verification(verify_plan(store, plan))
+                return
             result = execute_plan(
                 store, plan, actor=args.operator_actor, dry_run=args.dry_run
             )

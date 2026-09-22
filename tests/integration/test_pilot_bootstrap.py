@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ribeira_platform.pilot_bootstrap import execute_plan, load_plan
+from ribeira_platform.pilot_bootstrap import execute_plan, load_plan, verify_plan
 from ribeira_platform.postgres import PostgresStore
 from tests.integration.tenant_cleanup import delete_test_tenants
 
@@ -118,6 +118,7 @@ class PilotBootstrapPostgresTests(unittest.TestCase):
             ),
             "EXISTS",
         )
+        verification = verify_plan(self.store, self.plan)
         with self.store.tenant_transaction(self.plan.tenant_id):
             property_item = self.store.get_property(
                 self.plan.tenant_id, self.plan.property_id
@@ -136,3 +137,4 @@ class PilotBootstrapPostgresTests(unittest.TestCase):
         self.assertEqual(property_item.boundary_source, "SYNTHETIC_TEST_SOURCE")
         self.assertEqual(asset_count["count"], 1)
         self.assertFalse(audit["payload"]["legal_boundary_verified"])
+        self.assertEqual(verification["rls_isolation"], "PASS")
