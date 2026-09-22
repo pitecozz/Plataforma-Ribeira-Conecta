@@ -1,0 +1,19 @@
+[Unit]
+Description=Ribeira pilot Cloudflare Tunnel
+After=network-online.target ribeira-frontend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Confirm the cloudflared binary path after operator installation.
+ExecStart=/usr/local/bin/cloudflared tunnel --config /home/ribeira/.config/ribeira/cloudflared-pilot.yml run
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ribeira-cloudflared-pilot
+
+[Install]
+WantedBy=default.target

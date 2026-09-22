@@ -33,8 +33,11 @@ participate in that chain or explicitly expose its limitation.
 - External adapters must be bounded, provider-specific, allowlisted, and fail
   closed. Never add credentials, OAuth tokens, private keys, or browser-exposed
   provider secrets to the repository.
-- Do not bypass operator decisions: Cloudflare is `DEFERRED_BY_OPERATOR`;
-  SAISP automation is `NOT_APPROVED_FOR_AUTOMATION`/fail-closed; ANA is
+- Do not bypass operator decisions: Cloudflare is
+  `AUTHORIZED_FOR_PILOT_ACCESS` only through the approved private-origin
+  tunnel for `https://app.ribeiraconecta`; PostgreSQL, metrics, debug and
+  development services remain private. SAISP automation is
+  `NOT_APPROVED_FOR_AUTOMATION`/fail-closed; ANA is
   `AUTH_REQUIRED_PENDING_PROVIDER`.
 
 ## Delivery discipline

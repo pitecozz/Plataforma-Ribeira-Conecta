@@ -8,7 +8,7 @@ Type=simple
 WorkingDirectory=/home/ribeira/Plataforma-Ribeira-Conecta
 Environment=PYTHONPATH=/home/ribeira/Plataforma-Ribeira-Conecta/src
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/ribeira/Plataforma-Ribeira-Conecta/.venv/bin/python -m ribeira_platform.static_server --root /home/ribeira/Plataforma-Ribeira-Conecta/frontend/dist --host 127.0.0.1 --port 5173
+ExecStart=/home/ribeira/Plataforma-Ribeira-Conecta/.venv/bin/python -m ribeira_platform.static_server --root /home/ribeira/Plataforma-Ribeira-Conecta/frontend/dist --host 127.0.0.1 --port 5173 --api-origin http://127.0.0.1:8080
 ExecStartPost=/home/ribeira/Plataforma-Ribeira-Conecta/.venv/bin/python -m ribeira_platform.runtime_health frontend --wait-seconds 30
 Restart=on-failure
 RestartSec=5

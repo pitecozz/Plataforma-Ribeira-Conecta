@@ -28,17 +28,17 @@ These are deliberately conservative approximations, not service-level claims.
 | Risks/opportunities/actions | scoped decision/action outcome history API | Farm360 decision panel with honest empty state | unit/PostGIS/frontend | `PARTIAL` | It shows only persisted decisions/actions; commercial opportunities still require a separate evidence-backed workflow. |
 | Intelligence Report V0.1 | loaded tenant records | printable HTML report | frontend unit | `PARTIAL` | It exposes available property/assets/provenance and explicit unknown decisions; report API/history is later. |
 | Feedback | tenant-isolated feedback API and audit | Farm360 form with explicit submission/error state | backend/frontend/PostGIS | `PARTIAL` | Creates no operational conclusion; triage/listing workflow is later. |
-| Pilot E2E | legacy private validation spec | official Playwright container starts | container browser exercised | `BLOCKED` | Current spec asserts superseded validation workspace; a final-host OIDC pilot fixture requires operator-provisioned hostname/identity and must not reuse development-token data. |
-| Secure external access | loopback/private-origin services | production static build exists | local listener audit | `BLOCKED` | `CLOUDFLARE_STATUS=AUTHORIZED_FOR_PILOT_ACCESS`; final hostname, protected tunnel configuration and OIDC public-origin registration remain operator-held. See [onboarding](pilot/PILOT_ONBOARDING.md). |
+| Pilot E2E | legacy private validation spec | official Playwright container starts | container browser exercised | `BLOCKED` | Current spec asserts a superseded validation workspace; final-host OIDC E2E requires the tunnel, Auth0 public-origin configuration and an operator-provisioned pilot identity. It must not reuse development-token data. |
+| Secure external access | API, PostgreSQL and metrics loopback-only | production static ingress proxies only `/api` to loopback API | local ingress/proxy test | `PARTIAL` | `CLOUDFLARE_STATUS=AUTHORIZED_FOR_PILOT_ACCESS`; `https://app.ribeiraconecta` is fixed. The protected tunnel credential/configuration, actual Auth0 configuration and controlled production restart remain operator-held. See [onboarding](pilot/PILOT_ONBOARDING.md). |
 
 ## Pilot delivery order
 
 1. Integrate Home, Farm360, real asset/context/evidence surfaces.
 2. Add report and feedback foundations with tenant isolation/audit.
 3. Expose applicable decision/action information or honest empty states.
-4. Create safe non-customer E2E fixtures for the complete path.
-5. Complete identity provisioning, deployment runbook and operator-approved HTTPS
-   access without exposing PostgreSQL, metrics or development services.
+4. Complete the protected named tunnel and Auth0 public-origin registration.
+5. Provision the pilot membership, then run final-host OIDC E2E without
+   reusing development-token data.
 
 ## Verification environment
 
