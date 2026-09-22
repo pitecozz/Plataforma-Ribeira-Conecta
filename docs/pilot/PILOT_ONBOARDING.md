@@ -5,7 +5,7 @@ HTTPS ingress. It does not authorize public PostgreSQL, metrics, debug routes,
 development servers, broad firewall changes, automatic identity provisioning,
 or committing pilot data/secrets.
 
-The authorized public hostname is `https://app.ribeiraconecta`. Pilot records
+The authorized public hostname is `https://app.ribeiraconecta.com.br`. Pilot records
 stay outside Git and use tenant-scoped APIs, PostgreSQL RLS, audit, provenance
 and Evidence First classifications.
 
@@ -24,15 +24,15 @@ files, never repository configuration.
 
 ## Operator prerequisites
 
-1. Create the named Cloudflare tunnel/DNS for `app.ribeiraconecta` in protected
+1. Create the named Cloudflare tunnel/DNS for `app.ribeiraconecta.com.br` in protected
    host configuration. The tunnel exposes one origin only:
    `http://127.0.0.1:5173`; its catch-all route is `http_status:404`.
 2. Register the exact OIDC callback URL and web origin:
-   `https://app.ribeiraconecta/` and `https://app.ribeiraconecta`,
+   `https://app.ribeiraconecta.com.br/` and `https://app.ribeiraconecta.com.br`,
    respectively. The SPA returns to `/`; it has no `/callback` route. The
    current SPA has no provider-logout implementation, so it has no functional
    Auth0 allowed-logout URL requirement. If an operator later enables Auth0
-   logout, its approved return URL must be `https://app.ribeiraconecta/` and
+   logout, its approved return URL must be `https://app.ribeiraconecta.com.br/` and
    the user workflow/docs must be updated in the same milestone.
 3. Configure issuer, audience, authorization/token/JWKS endpoints and public
    SPA client ID outside Git. No browser client secret.
@@ -42,7 +42,7 @@ files, never repository configuration.
 
 1. Install `cloudflared` through the vendor-supported package source and verify
    its binary path. Do not use a quick tunnel.
-2. Create a named tunnel and route `app.ribeiraconecta` to it in Cloudflare.
+2. Create a named tunnel and route `app.ribeiraconecta.com.br` to it in Cloudflare.
    Keep the generated credential JSON in
    `~/.config/cloudflared/` with mode `0600`; do not put its contents or a token
    in Git, shell history, service arguments, or chat.
@@ -67,7 +67,7 @@ files, never repository configuration.
    the catch-all is 404.
 5. Rebuild the frontend using protected OIDC configuration based on
    `ops/runtime/pilot-frontend.env.example`, update the protected API CORS
-   origin to `https://app.ribeiraconecta`, then restart only the static frontend
+   origin to `https://app.ribeiraconecta.com.br`, then restart only the static frontend
    and API during a controlled maintenance window.
 
 ## Audited onboarding

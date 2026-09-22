@@ -10,6 +10,11 @@ fi
 runtime_environment="${RIBEIRA_ENV:-production}"
 auth_mode="${RIBEIRA_AUTH_MODE:-oidc}"
 repository_root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+if [[ "$runtime_environment" == "production" ]]; then
+  cors_origins="${RIBEIRA_CORS_ORIGINS:-https://app.ribeiraconecta.com.br}"
+else
+  cors_origins="${RIBEIRA_CORS_ORIGINS:-http://127.0.0.1:5173}"
+fi
 if [[ "$runtime_environment" == "development" && "$auth_mode" != "development" ]]; then
   echo "development runtime must use explicit development authentication" >&2
   exit 2
@@ -42,7 +47,7 @@ trap 'rm -f "$temporary_file"' EXIT
   printf 'RIBEIRA_OBJECT_STORAGE_ROOT=%s\n' "$repository_root/.local/object-storage"
   printf '%s\n' 'RIBEIRA_API_HOST=127.0.0.1'
   printf '%s\n' 'RIBEIRA_API_PORT=8080'
-  printf '%s\n' 'RIBEIRA_CORS_ORIGINS=http://127.0.0.1:5173'
+  printf 'RIBEIRA_CORS_ORIGINS=%s\n' "$cors_origins"
   printf 'RIBEIRA_AUTH_MODE=%s\n' "$auth_mode"
   if [[ "$auth_mode" == "development" ]]; then
     printf 'RIBEIRA_DEV_AUTH_TOKEN=%s\n' "$RIBEIRA_DEV_AUTH_TOKEN"

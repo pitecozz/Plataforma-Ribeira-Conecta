@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"], ["html", { outputFolder: process.env.RIBEIRA_PLAYWRIGHT_REPORT_DIR ?? "test-results/report", open: "never" }]],
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: process.env.RIBEIRA_PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5173",
     headless: true,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",

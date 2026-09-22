@@ -1,7 +1,7 @@
 # Ribeira private production runtime foundation
 
 This is a private, loopback-only runtime. The authorized pilot exception is a
-Cloudflare Tunnel exposing the single hostname `https://app.ribeiraconecta` to
+Cloudflare Tunnel exposing the single hostname `https://app.ribeiraconecta.com.br` to
 the static ingress at `127.0.0.1:5173`. It does not authorize direct public
 exposure, changes to SSH/UFW, PostgreSQL publishing, or a public worker.
 
@@ -109,7 +109,7 @@ token. Copy `ops/systemd/user/ribeira-cloudflared-pilot.service.example` into
 the protected user systemd configuration, after confirming its binary path.
 
 The actual binary path must be confirmed after installation. Configure the
-Cloudflare DNS route for `app.ribeiraconecta`, install this as an operator-held
+Cloudflare DNS route for `app.ribeiraconecta.com.br`, install this as an operator-held
 user unit, then verify only HTTPS succeeds publicly; the tunnel catch-all is
 404. See [pilot onboarding](../pilot/PILOT_ONBOARDING.md) for identity and
 go-live gates.

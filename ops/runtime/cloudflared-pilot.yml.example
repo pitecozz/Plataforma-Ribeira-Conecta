@@ -4,6 +4,6 @@
 tunnel: REPLACE_WITH_TUNNEL_UUID
 credentials-file: /home/ribeira/.config/cloudflared/REPLACE_WITH_TUNNEL_UUID.json
 ingress:
-  - hostname: app.ribeiraconecta
+  - hostname: app.ribeiraconecta.com.br
     service: http://127.0.0.1:5173
   - service: http_status:404
