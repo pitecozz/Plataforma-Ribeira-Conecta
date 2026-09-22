@@ -1,8 +1,9 @@
 # Ribeira private production runtime foundation
 
 This is a private, loopback-only runtime. The authorized pilot exception is a
-Cloudflare Tunnel exposing the single hostname `https://app.ribeiraconecta.com.br` to
-the static ingress at `127.0.0.1:5173`. It does not authorize direct public
+temporary Cloudflare Quick Tunnel exposing its dynamically assigned HTTPS
+origin to the static ingress at `127.0.0.1:5173`. The current origin must be
+explicitly configured at build/runtime; it does not authorize direct public
 exposure, changes to SSH/UFW, PostgreSQL publishing, or a public worker.
 
 ## Architecture decision
@@ -94,25 +95,35 @@ Build the pilot bundle from a protected environment based on
 `ops/runtime/pilot-frontend.env.example`; do not put a development token in the
 bundle. A real interactive OIDC/session flow remains required.
 
-## Cloudflare pilot tunnel (operator-held configuration)
+## Cloudflare Quick Tunnel (current pilot only)
 
-Install `cloudflared` from Cloudflare's supported package source and create a
-named tunnel in the operator's Cloudflare account. Do not use a quick tunnel,
-do not pass a tunnel token on a command line, and do not commit a credential
-file. Copy the versioned nonsecret
-`ops/runtime/cloudflared-pilot.yml.example` to
-`~/.config/ribeira/cloudflared-pilot.yml` with mode `0600`, substituting only
-the operator-provided tunnel UUID and credential path.
+Install `cloudflared` from Cloudflare's supported package source. Start the
+temporary pilot tunnel without a token, credential file, named-tunnel service
+or DNS configuration:
 
-The user-level service must run the tunnel with this configuration, not a
-token. Copy `ops/systemd/user/ribeira-cloudflared-pilot.service.example` into
-the protected user systemd configuration, after confirming its binary path.
+```bash
+cloudflared tunnel --url http://127.0.0.1:5173
+```
 
-The actual binary path must be confirmed after installation. Configure the
-Cloudflare DNS route for `app.ribeiraconecta.com.br`, install this as an operator-held
-user unit, then verify only HTTPS succeeds publicly; the tunnel catch-all is
-404. See [pilot onboarding](../pilot/PILOT_ONBOARDING.md) for identity and
-go-live gates.
+Record the emitted `https://…trycloudflare.com` origin only in protected
+operator configuration. Set it exactly as `VITE_RIBEIRA_PUBLIC_ORIGIN` while
+building the frontend and as `RIBEIRA_CORS_ORIGINS` while provisioning the API.
+Register that same exact origin in Auth0. Do not add wildcard callback, logout
+or web-origin entries. A Quick Tunnel restart can produce a new origin, so it
+is `PILOT_TEST_ONLY`, not a durable production ingress.
+
+The tunnel origin remains only `127.0.0.1:5173`; the static ingress proxies
+only `/api/*` to `127.0.0.1:8080`. PostgreSQL, metrics, debug routes and
+development services have no tunnel route.
+
+## Future custom-domain tunnel
+
+`https://app.ribeiraconecta.com.br` is `FUTURE_CUSTOM_DOMAIN`, deferred until
+a domain can be purchased. At that time use the versioned named-tunnel
+templates `ops/runtime/cloudflared-pilot.yml.example` and
+`ops/systemd/user/ribeira-cloudflared-pilot.service.example`, substituting
+operator-held tunnel values outside Git. Update the public-origin, DNS, OIDC
+and CORS configuration together; no application-ingress rewrite is required.
 
 ## Object storage
 

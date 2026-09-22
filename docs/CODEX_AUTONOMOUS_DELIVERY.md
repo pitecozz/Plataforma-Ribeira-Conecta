@@ -299,9 +299,12 @@ not hard-code a one-off municipal conclusion.
 
 - ANA: `AUTH_REQUIRED_PENDING_PROVIDER`; no invented river data.
 - SAISP: `NOT_APPROVED_FOR_AUTOMATION`; manual evidence only and fail closed.
-- Cloudflare: `AUTHORIZED_FOR_PILOT_ACCESS` only for private-origin HTTPS
-  tunnel ingress; final hostname, protected tunnel configuration and OIDC
-  public-origin/callback registration remain operator-controlled.
+- Cloudflare: `CLOUDFLARE_QUICK_TUNNEL` is authorized only for temporary
+  pilot/test private-origin HTTPS ingress. Its exact `trycloudflare.com`
+  origin must be configured explicitly in OIDC, frontend build and API CORS;
+  no wildcard trust. `https://app.ribeiraconecta.com.br` is
+  `FUTURE_CUSTOM_DOMAIN`, requiring configuration changes rather than an
+  architecture rewrite.
 - Customer telemetry/MQTT/LoRaWAN: no approved device/provider contract.
 - Agronomic disease rules: require approved policy and corroborating data.
 

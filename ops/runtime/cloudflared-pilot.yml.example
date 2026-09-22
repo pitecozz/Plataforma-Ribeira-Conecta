@@ -1,6 +1,6 @@
-# Copy outside Git to ~/.config/ribeira/cloudflared-pilot.yml and chmod 0600.
-# The named-tunnel credential file is operator-held. Never use a quick tunnel or
-# commit a tunnel token/credential JSON.
+# FUTURE_CUSTOM_DOMAIN only. Copy outside Git to
+# ~/.config/ribeira/cloudflared-pilot.yml and chmod 0600 when the custom domain
+# becomes available. The named-tunnel credential file is operator-held.
 tunnel: REPLACE_WITH_TUNNEL_UUID
 credentials-file: /home/ribeira/.config/cloudflared/REPLACE_WITH_TUNNEL_UUID.json
 ingress:

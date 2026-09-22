@@ -1,5 +1,5 @@
 [Unit]
-Description=Ribeira pilot Cloudflare Tunnel
+Description=Ribeira future custom-domain Cloudflare Tunnel
 After=network-online.target ribeira-frontend.service
 Wants=network-online.target
 

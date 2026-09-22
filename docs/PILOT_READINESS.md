@@ -19,7 +19,7 @@ These are deliberately conservative approximations, not service-level claims.
 
 | Capability | Backend | Frontend | Tests | State | Constraint / next gate |
 |---|---|---|---|---|---|
-| Login and tenant authorization | OIDC/RBAC/RLS contracts | OIDC session configuration | unit/integration | `PARTIAL` | Pilot identity-provider configuration and user membership are not yet performed. |
+| Login and tenant authorization | OIDC/RBAC/RLS contracts | exact runtime public-origin OIDC configuration | unit/integration | `PARTIAL` | The current Quick Tunnel origin, identity-provider configuration and user membership are not yet performed. No wildcard OIDC trust is permitted. |
 | Home and property portfolio | portfolio API | Home shell, honest cards and property selector | frontend unit | `PARTIAL` | No risk/asset count is shown without an API result. |
 | Property boundary and Farm360 | property/boundary APIs | map/workspace | unit + PostGIS | `PARTIAL` | Core flow exists; the customer workflow is not yet consolidated. |
 | Map | boundary and authenticated tiles | MapLibre property/NDVI/delta layers | frontend/E2E validation | `PARTIAL` | Asset layer/click detail is being added; no fabricated contextual layers. |
@@ -28,15 +28,16 @@ These are deliberately conservative approximations, not service-level claims.
 | Risks/opportunities/actions | scoped decision/action outcome history API | Farm360 decision panel with honest empty state | unit/PostGIS/frontend | `PARTIAL` | It shows only persisted decisions/actions; commercial opportunities still require a separate evidence-backed workflow. |
 | Intelligence Report V0.1 | loaded tenant records | printable HTML report | frontend unit | `PARTIAL` | It exposes available property/assets/provenance and explicit unknown decisions; report API/history is later. |
 | Feedback | tenant-isolated feedback API and audit | Farm360 form with explicit submission/error state | backend/frontend/PostGIS | `PARTIAL` | Creates no operational conclusion; triage/listing workflow is later. |
-| Pilot E2E | legacy private validation spec | `RIBEIRA_PLAYWRIGHT_BASE_URL` can select the final host | container browser exercised | `BLOCKED` | Current spec asserts a superseded validation workspace; final-host OIDC E2E requires the tunnel, Auth0 public-origin configuration and an operator-provisioned pilot identity. It must not reuse development-token data. |
-| Secure external access | API, PostgreSQL and metrics loopback-only | production static ingress proxies only `/api` to loopback API | local ingress/proxy test | `PARTIAL` | `CLOUDFLARE_STATUS=AUTHORIZED_FOR_PILOT_ACCESS`; `https://app.ribeiraconecta.com.br` is fixed. The protected tunnel credential/configuration, actual Auth0 configuration and controlled production restart remain operator-held. See [onboarding](pilot/PILOT_ONBOARDING.md). |
+| Pilot E2E | legacy private validation spec | `RIBEIRA_PLAYWRIGHT_BASE_URL` can select the exact Quick Tunnel origin | container browser exercised | `BLOCKED` | Current spec asserts a superseded validation workspace; real OIDC E2E requires the live Quick Tunnel origin, Auth0 registration and an operator-provisioned pilot identity. It must not reuse development-token data. |
+| Secure external access | API, PostgreSQL and metrics loopback-only | production static ingress proxies only `/api` to loopback API | local ingress/proxy test | `PARTIAL` | `CLOUDFLARE_QUICK_TUNNEL=PILOT_TEST_ONLY`. The exact temporary origin must be supplied to frontend build, API CORS and Auth0 without wildcard trust. `https://app.ribeiraconecta.com.br` is deferred as `FUTURE_CUSTOM_DOMAIN`. See [onboarding](pilot/PILOT_ONBOARDING.md). |
 
 ## Pilot delivery order
 
 1. Integrate Home, Farm360, real asset/context/evidence surfaces.
 2. Add report and feedback foundations with tenant isolation/audit.
 3. Expose applicable decision/action information or honest empty states.
-4. Complete the protected named tunnel and Auth0 public-origin registration.
+4. Start the Quick Tunnel, then register its exact temporary origin with Auth0
+   and the protected frontend/API configuration.
 5. Provision the pilot membership, then run final-host OIDC E2E without
    reusing development-token data.
 

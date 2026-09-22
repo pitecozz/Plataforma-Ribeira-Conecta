@@ -5,70 +5,67 @@ HTTPS ingress. It does not authorize public PostgreSQL, metrics, debug routes,
 development servers, broad firewall changes, automatic identity provisioning,
 or committing pilot data/secrets.
 
-The authorized public hostname is `https://app.ribeiraconecta.com.br`. Pilot records
-stay outside Git and use tenant-scoped APIs, PostgreSQL RLS, audit, provenance
-and Evidence First classifications.
+`CLOUDFLARE_QUICK_TUNNEL=PILOT_TEST_ONLY` is the current access path. Its
+`https://*.trycloudflare.com` hostname is assigned at runtime and is never
+hardcoded into application behavior. Pilot records stay outside Git and use
+tenant-scoped APIs, PostgreSQL RLS, audit, provenance and Evidence First
+classifications. `https://app.ribeiraconecta.com.br` is
+`FUTURE_CUSTOM_DOMAIN`, deferred until a domain is available.
 
 ## Target ingress
 
 ```text
-pilot browser -> HTTPS Cloudflare -> named private tunnel
+pilot browser -> HTTPS Cloudflare Quick Tunnel
   -> 127.0.0.1:5173 static production frontend/private ingress
   -> /api is stripped and proxied only to 127.0.0.1:8080
 PostgreSQL 127.0.0.1:55432, metrics 127.0.0.1:9109 and internal tooling stay private.
 ```
 
 The frontend must be production/OIDC mode; Vite and development tokens are
-prohibited. Cloudflare tunnel credentials/configuration are protected operator
-files, never repository configuration.
+prohibited. Quick Tunnel does not use a tunnel credential. Its live process is
+temporary: restarting it can assign a new public origin and requires OIDC,
+frontend-build and API-CORS reconfiguration.
 
 ## Operator prerequisites
 
-1. Create the named Cloudflare tunnel/DNS for `app.ribeiraconecta.com.br` in protected
-   host configuration. The tunnel exposes one origin only:
-   `http://127.0.0.1:5173`; its catch-all route is `http_status:404`.
-2. Register the exact OIDC callback URL and web origin:
-   `https://app.ribeiraconecta.com.br/` and `https://app.ribeiraconecta.com.br`,
-   respectively. The SPA returns to `/`; it has no `/callback` route. The
-   current SPA has no provider-logout implementation, so it has no functional
-   Auth0 allowed-logout URL requirement. If an operator later enables Auth0
-   logout, its approved return URL must be `https://app.ribeiraconecta.com.br/` and
-   the user workflow/docs must be updated in the same milestone.
-3. Configure issuer, audience, authorization/token/JWKS endpoints and public
+1. Start the Quick Tunnel command below and retain its exact assigned HTTPS
+   origin for the remainder of the pilot session. It exposes one origin only:
+   `http://127.0.0.1:5173`.
+2. Register the exact assigned origin in Auth0: callback is `<origin>/`; web
+   origin is `<origin>`. The SPA returns to `/`; it has no `/callback` route.
+   The current SPA has no provider-logout implementation, so it has no
+   functional Auth0 allowed-logout URL requirement. Do not add wildcard OIDC
+   callback, logout or web-origin entries.
+3. Configure the same exact origin in protected frontend build configuration
+   (`VITE_RIBEIRA_PUBLIC_ORIGIN`) and API CORS (`RIBEIRA_CORS_ORIGINS`).
+4. Configure issuer, audience, authorization/token/JWKS endpoints and public
    SPA client ID outside Git. No browser client secret.
-4. Confirm the pilot user's issuer+subject before membership provisioning.
+5. Confirm the pilot user's issuer+subject before membership provisioning.
 
-## Cloudflare operator procedure
+## Quick Tunnel operator procedure
 
 1. Install `cloudflared` through the vendor-supported package source and verify
-   its binary path. Do not use a quick tunnel.
-2. Create a named tunnel and route `app.ribeiraconecta.com.br` to it in Cloudflare.
-   Keep the generated credential JSON in
-   `~/.config/cloudflared/` with mode `0600`; do not put its contents or a token
-   in Git, shell history, service arguments, or chat.
-3. Create `~/.config/ribeira/cloudflared-pilot.yml` from the nonsecret template
-   in [the production runtime guide](../operations/PRODUCTION_RUNTIME_FOUNDATION.md#cloudflare-pilot-tunnel-operator-held-configuration),
-   again with mode `0600`.
-4. After the credential file and tunnel UUID exist, install the nonsecret
-   templates as protected local files, replace their two UUID placeholders, and
-   enable the user service:
+   its binary path.
+2. Start the temporary tunnel without a token or credential:
 
    ```bash
-   install -d -m 700 ~/.config/ribeira ~/.config/cloudflared ~/.config/systemd/user
-   install -m 600 ops/runtime/cloudflared-pilot.yml.example ~/.config/ribeira/cloudflared-pilot.yml
-   install -m 644 ops/systemd/user/ribeira-cloudflared-pilot.service.example ~/.config/systemd/user/ribeira-cloudflared-pilot.service
-   systemctl --user daemon-reload
-   systemctl --user enable --now ribeira-cloudflared-pilot.service
-   journalctl --user -u ribeira-cloudflared-pilot.service -f
+   cloudflared tunnel --url http://127.0.0.1:5173
    ```
 
-   Do not run the service before replacing the placeholders in the protected
-   configuration. Its only origin is the static ingress at `127.0.0.1:5173`;
-   the catch-all is 404.
-5. Rebuild the frontend using protected OIDC configuration based on
-   `ops/runtime/pilot-frontend.env.example`, update the protected API CORS
-   origin to `https://app.ribeiraconecta.com.br`, then restart only the static frontend
-   and API during a controlled maintenance window.
+   Copy the assigned `https://…trycloudflare.com` origin exactly. Do not expose
+   any other origin, open a firewall port, or add a wildcard OIDC entry.
+3. In another protected operator shell, set that exact origin as
+   `VITE_RIBEIRA_PUBLIC_ORIGIN` for the frontend build and
+   `RIBEIRA_CORS_ORIGINS` for the API runtime configuration. Register the same
+   exact origin with Auth0, then rebuild the frontend and restart only the API
+   and static frontend during a controlled maintenance window.
+
+## Future custom domain
+
+When a domain becomes available, `https://app.ribeiraconecta.com.br` can use
+the named-tunnel templates in [the production runtime guide](../operations/PRODUCTION_RUNTIME_FOUNDATION.md#future-custom-domain-tunnel).
+That migration changes public-origin, DNS, OIDC and CORS configuration only; it
+does not change the loopback ingress or expose additional services.
 
 ## Audited onboarding
 

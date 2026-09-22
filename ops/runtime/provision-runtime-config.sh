@@ -10,10 +10,9 @@ fi
 runtime_environment="${RIBEIRA_ENV:-production}"
 auth_mode="${RIBEIRA_AUTH_MODE:-oidc}"
 repository_root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-if [[ "$runtime_environment" == "production" ]]; then
-  cors_origins="${RIBEIRA_CORS_ORIGINS:-https://app.ribeiraconecta.com.br}"
-else
-  cors_origins="${RIBEIRA_CORS_ORIGINS:-http://127.0.0.1:5173}"
+cors_origins="${RIBEIRA_CORS_ORIGINS:-}"
+if [[ "$runtime_environment" != "production" && -z "$cors_origins" ]]; then
+  cors_origins="http://127.0.0.1:5173"
 fi
 if [[ "$runtime_environment" == "development" && "$auth_mode" != "development" ]]; then
   echo "development runtime must use explicit development authentication" >&2
@@ -21,6 +20,10 @@ if [[ "$runtime_environment" == "development" && "$auth_mode" != "development" ]
 fi
 if [[ "$runtime_environment" == "production" && "$auth_mode" != "oidc" ]]; then
   echo "production runtime requires OIDC authentication" >&2
+  exit 2
+fi
+if [[ "$runtime_environment" == "production" && -z "$cors_origins" ]]; then
+  echo "production runtime requires RIBEIRA_CORS_ORIGINS" >&2
   exit 2
 fi
 if [[ "$auth_mode" == "oidc" ]] && [[ -z "${RIBEIRA_JWT_ISSUER:-}" || -z "${RIBEIRA_JWT_AUDIENCE:-}" || -z "${RIBEIRA_JWT_JWKS_URL:-}" ]]; then
