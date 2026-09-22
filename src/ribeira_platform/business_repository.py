@@ -203,8 +203,9 @@ class BusinessRepository:
         valid_from: str,
         valid_until: str | None,
         classification: CommercialClassification,
+        item_id: str | None = None,
     ) -> str:
-        item_id = new_id()
+        item_id = item_id or new_id()
         self._insert(
             "customer_property",
             [

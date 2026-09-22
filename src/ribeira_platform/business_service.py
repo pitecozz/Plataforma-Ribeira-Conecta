@@ -90,9 +90,10 @@ class BusinessApplication:
         external_reference: str | None = None,
         actor: str = "system",
         platform_admin: bool = False,
+        customer_id: str | None = None,
     ) -> Customer:
         item = Customer(
-            new_id(),
+            customer_id or new_id(),
             tenant_id,
             customer_type,
             display_name,
@@ -122,6 +123,7 @@ class BusinessApplication:
         valid_from: str,
         valid_until: str | None,
         actor: str,
+        link_id: str | None = None,
     ) -> str:
         parse_aware(valid_from)
         if valid_until is not None:
@@ -135,6 +137,7 @@ class BusinessApplication:
                 valid_from,
                 valid_until,
                 CommercialClassification.CONFIRMED,
+                link_id,
             )
             self._audit(
                 tenant_id,

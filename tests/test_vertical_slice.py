@@ -108,7 +108,7 @@ class VerticalSliceTests(unittest.TestCase):
         self.assertIsNotNone(result.action)
         self.assertIsNone(result.action.responsible_user_id)
         self.assertIsNone(result.action.deadline)
-        self.assertEqual(self.store.count("audit_log", self.tenant.id), 4)
+        self.assertEqual(self.store.count("audit_log", self.tenant.id), 5)
 
         self.app.complete_action(
             self.tenant.id,
@@ -137,7 +137,7 @@ class VerticalSliceTests(unittest.TestCase):
             json.loads(action["outcome_evidence_ids_json"]),
             result.decision.evidence_ids,
         )
-        self.assertEqual(self.store.count("audit_log", self.tenant.id), 5)
+        self.assertEqual(self.store.count("audit_log", self.tenant.id), 6)
 
         with self.assertRaises(LookupError):
             self.app.complete_action(

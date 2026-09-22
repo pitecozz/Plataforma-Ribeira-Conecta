@@ -71,10 +71,22 @@ class RibeiraApplication:
             self.store, self.geospatial_provider, self.object_storage
         )
 
-    def create_tenant(self, name: str) -> Tenant:
-        tenant = Tenant(new_id(), name)
+    def create_tenant(
+        self, name: str, *, tenant_id: str | None = None, actor: str = "system"
+    ) -> Tenant:
+        tenant = Tenant(tenant_id or new_id(), name)
         with self.store.tenant_transaction(None, platform_admin=True):
             self.store.create_tenant(tenant)
+            self.store.audit(
+                tenant.id,
+                actor,
+                "TENANT_CREATED",
+                "tenant",
+                tenant.id,
+                {},
+                new_id(),
+                now_utc(),
+            )
         return tenant
 
     def create_property(
@@ -87,12 +99,13 @@ class RibeiraApplication:
         boundary_source: str | None = None,
         classification: DataClassification = DataClassification.MANUAL_CONFIRMED,
         actor: str = "user",
+        property_id: str | None = None,
     ) -> Property:
         checksum = None
         if geometry_geojson is not None:
             _, _, checksum = validate_boundary(geometry_geojson, geometry_crs or "")
         property = Property(
-            new_id(),
+            property_id or new_id(),
             tenant_id,
             name,
             geometry_geojson,

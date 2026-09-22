@@ -74,6 +74,38 @@ does not change the loopback ingress or expose additional services.
 
 ## Audited onboarding
 
+### First pilot workspace bootstrap
+
+The initial tenant has a deliberate bootstrap dependency: normal tenant creation
+requires a local platform administrator, while a tenant membership cannot exist
+until its tenant exists. The host-only `pilot_bootstrap` command is the narrow
+audited exception for a verified private import package. It is not an HTTP
+endpoint, never creates a platform-admin identity, accepts only operator-owned
+mode-`600` JSON files, validates the manifest/GeoJSON contract before a write,
+uses deterministic IDs derived from both file checksums, and refuses partial or
+mismatched retries.
+
+Run its dry-run before any creation:
+
+```bash
+set -a; . ~/.config/ribeira/runtime.env; set +a
+PYTHONPATH=src .venv/bin/python -m ribeira_platform.pilot_bootstrap \
+  --manifest-file /absolute/private/import-manifest.json \
+  --geojson-file /absolute/private/import.geojson --dry-run
+```
+
+After reviewing the proposed IDs, boundary classification, legal-boundary flag,
+asset names and exclusions, repeat the same command without `--dry-run`. One
+transaction creates the tenant, customer, property/boundary version, operational
+customer-property link, approved assets and `PILOT_BOOTSTRAP_COMPLETED` audit
+record. Existing complete deterministic imports return `EXISTS`; partial data
+or changed file contents fail closed. The package source, checksums, boundary
+usage and `legal_boundary_verified=false` remain in provenance/audit metadata.
+
+The command does not provision an OIDC user. Only after its tenant exists may
+the separate `identity_admin provision` workflow create the audited `VIEWER`
+membership from the verified issuer and subject.
+
 ### Tenant binding and audited onboarding gate
 
 The current pilot SPA intentionally requires `VITE_RIBEIRA_TENANT_ID`. It is
