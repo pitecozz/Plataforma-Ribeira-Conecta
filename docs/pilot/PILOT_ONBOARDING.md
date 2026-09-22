@@ -60,6 +60,11 @@ frontend-build and API-CORS reconfiguration.
    exact origin with Auth0, then rebuild the frontend and restart only the API
    and static frontend during a controlled maintenance window.
 
+   Do not deploy the new ingress proxy against a development-auth API. First
+   configure the protected runtime as `RIBEIRA_ENV=production` and
+   `RIBEIRA_AUTH_MODE=oidc`, with its verified issuer, audience and JWKS
+   configuration.
+
 ## Future custom domain
 
 When a domain becomes available, `https://app.ribeiraconecta.com.br` can use
@@ -68,6 +73,32 @@ That migration changes public-origin, DNS, OIDC and CORS configuration only; it
 does not change the loopback ingress or expose additional services.
 
 ## Audited onboarding
+
+### Tenant binding and audited onboarding gate
+
+The current pilot SPA intentionally requires `VITE_RIBEIRA_TENANT_ID`. It is
+not an OIDC-derived tenant selector: Farm360 API routes carry an explicit
+tenant path, and the API verifies the OIDC identity's persisted membership for
+that tenant. The current API does not provide a membership-discovery endpoint,
+so the SPA must not infer a tenant from an arbitrary claim.
+
+At the 2026-09-22 pilot-access assessment, the protected runtime database had
+zero tenants, zero properties and zero active memberships. Existing external
+identity records without memberships do not authorize pilot access. Do not set
+the frontend tenant value until an operator has created or verified all of the
+following outside Git:
+
+1. tenant and customer association;
+2. pilot property with verified boundary, source and CRS;
+3. verified initial assets and contextual evidence;
+4. persisted tenant identifier for the protected frontend build input;
+5. pilot user's verified OIDC issuer and subject; and
+6. audited `VIEWER` membership through `identity_admin`.
+
+The single tenant build binding is appropriate for this pilot. A future
+multi-tenant selector requires a separately designed authenticated membership
+discovery workflow; it must not replace this binding with a guessed token
+claim.
 
 1. Create tenant/customer association, property boundary/source/CRS, and only
    verified initial assets. A drawn/imported boundary is not legal title.
