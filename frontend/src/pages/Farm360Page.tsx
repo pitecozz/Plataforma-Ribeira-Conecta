@@ -32,6 +32,19 @@ interface Props {
   token: string;
 }
 type LoadState = "loading" | "ready" | "empty" | "error";
+type PartialLoadIssues = {
+  assets: boolean;
+  context: boolean;
+  decisions: boolean;
+  provenance: boolean;
+};
+
+const noPartialLoadIssues: PartialLoadIssues = {
+  assets: false,
+  context: false,
+  decisions: false,
+  provenance: false,
+};
 
 function newestSucceeded(items: TimelineItem[]) {
   return (
@@ -72,44 +85,61 @@ export function Farm360Page({
   const [targetProductId, setTargetProductId] = useState<string | null>(null);
   const [comparison, setComparison] = useState<TemporalComparison | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [partialLoadIssues, setPartialLoadIssues] =
+    useState<PartialLoadIssues>(noPartialLoadIssues);
+  const [optionalDataLoading, setOptionalDataLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     setState("loading");
+    setOptionalDataLoading(true);
+    setPartialLoadIssues(noPartialLoadIssues);
     try {
-      const [propertyResult, scenesResult, timelineResult, assetsResult, decisionsResult] =
-        await Promise.all([
-          api.property(tenantId, propertyId),
+      const propertyResult = await api.property(tenantId, propertyId);
+      setProperty(propertyResult);
+      setState("ready");
+      const [scenesResult, timelineResult, assetsResult, decisionsResult] =
+        await Promise.allSettled([
           api.scenes(tenantId, propertyId),
           api.timeline(tenantId, propertyId),
           api.assets(tenantId, propertyId),
           api.decisions(tenantId, propertyId),
         ]);
-      const selected = newestSucceeded(timelineResult.items);
+      const scenesItems = scenesResult.status === "fulfilled" ? scenesResult.value.items : [];
+      const timelineItems = timelineResult.status === "fulfilled" ? timelineResult.value.items : [];
+      const assetItems = assetsResult.status === "fulfilled" ? assetsResult.value.items : [];
+      const decisionItems = decisionsResult.status === "fulfilled" ? decisionsResult.value.items : [];
+      const selected = newestSucceeded(timelineItems);
       const provenanceResult = selected
-        ? await api.provenance(tenantId, selected.derived_product.id)
+        ? await api.provenance(tenantId, selected.derived_product.id).catch(() => null)
         : null;
-      setProperty(propertyResult);
-      setScenes(scenesResult.items);
-      setAssets(assetsResult.items);
-      setDecisions(decisionsResult.items);
+      setScenes(scenesItems);
+      setAssets(assetItems);
+      setDecisions(decisionItems);
       setSelectedAssetId((current) =>
-        current && assetsResult.items.some((asset) => asset.id === current)
+        current && assetItems.some((asset) => asset.id === current)
           ? current
           : null,
       );
-      setTimeline(timelineResult.items);
+      setTimeline(timelineItems);
       setSelectedProductId(selected?.derived_product.id ?? null);
       setProvenanceProductId(selected?.derived_product.id ?? null);
-      setBaselineProductId(timelineResult.items[0]?.derived_product.id ?? null);
+      setBaselineProductId(timelineItems[0]?.derived_product.id ?? null);
       setTargetProductId(
         selected?.derived_product.id ??
-          timelineResult.items.at(-1)?.derived_product.id ??
+          timelineItems.at(-1)?.derived_product.id ??
           null,
       );
       setProvenance(provenanceResult);
-      setState(selected || scenesResult.items.length > 0 ? "ready" : "empty");
+      setPartialLoadIssues({
+        assets: assetsResult.status === "rejected",
+        context: scenesResult.status === "rejected" || timelineResult.status === "rejected",
+        decisions: decisionsResult.status === "rejected",
+        provenance: Boolean(selected) && provenanceResult === null,
+      });
     } catch {
       setState("error");
+    } finally {
+      setOptionalDataLoading(false);
     }
   }, [api, propertyId, tenantId]);
 
@@ -258,13 +288,19 @@ export function Farm360Page({
         </div>
       </div>
       <aside>
+        <section className="context-availability">
+          <h2>Contexto e evidências</h2>
+          {optionalDataLoading ? <p>Carregando contexto disponível…</p> : partialLoadIssues.context || partialLoadIssues.provenance ? <p>SOURCE_UNAVAILABLE — não foi possível consultar parte do contexto. Propriedade, limite e ativos disponíveis continuam acessíveis.</p> : scenes.length === 0 && timeline.length === 0 ? <p>Contexto ainda não disponível. Isso não altera os dados confirmados da propriedade.</p> : <p>Contexto persistido disponível para consulta.</p>}
+        </section>
         <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} />
         <PilotFeedbackPanel api={api} tenantId={tenantId} propertyId={propertyId} />
-        <RiskDecisionPanel decisions={decisions} />
+        {partialLoadIssues.decisions && <section><h2>Riscos e decisões</h2><p>SOURCE_UNAVAILABLE — decisões não puderam ser consultadas agora. Isso não confirma ausência de risco ou oportunidade.</p></section>}
+        {!partialLoadIssues.decisions && <RiskDecisionPanel decisions={decisions} />}
         <AssetPanel
           assets={assets}
           selectedAssetId={selectedAssetId}
           onSelect={setSelectedAssetId}
+          loadError={partialLoadIssues.assets}
         />
         <SceneOperationsPanel
           api={api}

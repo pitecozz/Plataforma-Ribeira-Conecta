@@ -16,17 +16,24 @@ export function AssetPanel({
   assets,
   selectedAssetId,
   onSelect,
+  loadError = false,
 }: {
   assets: DigitalTwinAsset[];
   selectedAssetId: string | null;
   onSelect: (assetId: string) => void;
+  loadError?: boolean;
 }) {
   const selected = assets.find((asset) => asset.id === selectedAssetId) ?? null;
   return (
     <section className="asset-panel">
       <h2>Ativos e contexto</h2>
       <p>Inventário persistido do Digital Twin. Ausências não são inferidas.</p>
-      {assets.length === 0 ? (
+      {loadError ? (
+        <p role="alert">
+          SOURCE_UNAVAILABLE — não foi possível carregar os ativos confirmados.
+          Os demais dados da propriedade continuam acessíveis.
+        </p>
+      ) : assets.length === 0 ? (
         <p className="empty-state">
           DADO_INSUFICIENTE — nenhum ativo confirmado está vinculado a esta
           propriedade.

@@ -20,7 +20,9 @@ describe("HomePage", () => {
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByText("Sítio Piloto")).toBeInTheDocument();
     expect(screen.getByText("DADO_INSUFICIENTE")).toBeInTheDocument();
-    expect(screen.getAllByText("UNKNOWN")).toHaveLength(2);
+    expect(screen.getByText(/área 12,5 ha/)).toBeInTheDocument();
+    expect(screen.getByText("Ainda não há cena catalogada")).toBeInTheDocument();
+    expect(screen.getByText("Contexto ainda não disponível")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Abrir Farm360" }));
     expect(openFarm360).toHaveBeenCalledWith("property-1");
   });

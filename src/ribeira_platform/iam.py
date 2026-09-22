@@ -135,6 +135,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         {
             "property:read",
             "decision:read",
+            "asset:read",
         }
     ),
 }

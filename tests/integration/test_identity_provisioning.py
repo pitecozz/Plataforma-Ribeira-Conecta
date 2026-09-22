@@ -14,6 +14,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from ribeira_platform.api import Settings, create_app
+from ribeira_platform.business import Asset, CommercialClassification
 from ribeira_platform.iam import AuthContext, AuthorizationError, AuthorizationPolicy
 from ribeira_platform.iam import DevelopmentIdentityProvider
 from ribeira_platform.identity_access import IdentityAccess
@@ -124,7 +125,8 @@ class IdentityProvisioningPostgresTests(unittest.TestCase):
                    WHERE role.code='VIEWER' ORDER BY permission.code"""
             ).fetchall()
         self.assertEqual(
-            [row["code"] for row in rows], ["geospatial:read", "property:read"]
+            [row["code"] for row in rows],
+            ["asset:read", "geospatial:read", "property:read"],
         )
 
     def test_new_identity_membership_is_audited_and_idempotent(self) -> None:
@@ -465,7 +467,13 @@ class IdentityProvisioningPostgresTests(unittest.TestCase):
         policy = AuthorizationPolicy()
         policy.require(resolved, "property:read", tenant_id=tenant_a.id)
         policy.require(resolved, "geospatial:read", tenant_id=tenant_a.id)
-        for permission in ("property:write", "tenant:manage", "platform:admin"):
+        policy.require(resolved, "asset:read", tenant_id=tenant_a.id)
+        for permission in (
+            "property:write",
+            "tenant:manage",
+            "asset:manage",
+            "platform:admin",
+        ):
             with self.assertRaises(AuthorizationError):
                 policy.require(resolved, permission, tenant_id=tenant_a.id)
         with self.assertRaises(AuthorizationError):
@@ -476,6 +484,23 @@ class IdentityProvisioningPostgresTests(unittest.TestCase):
         property_item = self.application.create_property(
             tenant.id, "SYNTHETIC_TEST_PROPERTY"
         )
+        asset = Asset(
+            new_id(),
+            tenant.id,
+            "BUILDING",
+            "SYNTHETIC_VIEWER_ASSET",
+            None,
+            "ACTIVE",
+            property_item.id,
+            None,
+            CommercialClassification.MANUAL_CONFIRMED,
+            {"type": "Point", "coordinates": [-46.95, -24.05]},
+            "EPSG:4326",
+            "synthetic_test_data",
+            "2026-09-22T00:00:00+00:00",
+            {},
+        )
+        self.application.business.register_asset(asset, actor="SYSTEM_OPERATOR_TEST")
         request = self.request(tenant.id, "provider|synthetic-viewer-http")
         self.provision(request)
         self.user_id(request)
@@ -500,6 +525,13 @@ class IdentityProvisioningPostgresTests(unittest.TestCase):
         portfolio = client.get(f"/v1/tenants/{tenant.id}/portfolio", headers=headers)
         self.assertEqual(portfolio.status_code, 200)
         self.assertEqual(len(portfolio.json()["items"]), 1)
+
+        assets = client.get(
+            f"/v1/tenants/{tenant.id}/properties/{property_item.id}/assets",
+            headers=headers,
+        )
+        self.assertEqual(assets.status_code, 200)
+        self.assertEqual(assets.json()["items"][0]["id"], asset.id)
 
         create = client.post(
             f"/v1/tenants/{tenant.id}/properties",

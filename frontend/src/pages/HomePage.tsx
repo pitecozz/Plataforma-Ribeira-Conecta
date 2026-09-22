@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Farm360Api } from "../api/client";
 import type { PortfolioProperty } from "../types/farm360";
 import { Status } from "../components/Status";
+import { formatHectares } from "../formatting";
 import "./HomePage.css";
 
 export function HomePage({
@@ -64,7 +65,7 @@ export function HomePage({
         </section>
         <section className="home-properties">
           <div><h2>Propriedades</h2><button type="button" onClick={() => void refresh()}>Atualizar</button></div>
-          {properties.length === 0 ? <p className="empty-state">DADO_INSUFICIENTE — nenhuma propriedade está disponível para este tenant.</p> : <div className="home-property-list">{properties.map((property) => <article key={property.id}><h3>{property.name}</h3><p><Status value={property.data_status} /> · área {property.area_hectares ?? "UNKNOWN"} ha</p><dl><dt>Última cena</dt><dd>{property.latest_scene_at ?? "UNKNOWN"}</dd><dt>Contexto</dt><dd>{property.provenance_available ? "proveniência disponível" : "UNKNOWN"}</dd></dl><button type="button" onClick={() => onOpenFarm360(property.id)}>Abrir Farm360</button></article>)}</div>}
+          {properties.length === 0 ? <p className="empty-state">DADO_INSUFICIENTE — nenhuma propriedade está disponível para este tenant.</p> : <div className="home-property-list">{properties.map((property) => { const area = formatHectares(property.area_hectares); return <article key={property.id}><h3>{property.name}</h3><p><Status value={property.data_status} /> · área {area ? `${area} ha` : "ainda não disponível"}</p><dl><dt>Última cena</dt><dd>{property.latest_scene_at ?? "Ainda não há cena catalogada"}</dd><dt>Contexto</dt><dd>{property.provenance_available ? "proveniência disponível" : "Contexto ainda não disponível"}</dd></dl><button type="button" onClick={() => onOpenFarm360(property.id)}>Abrir Farm360</button></article>; })}</div>}
         </section>
       </>}
     </main>
