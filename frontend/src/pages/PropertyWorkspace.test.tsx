@@ -31,10 +31,11 @@ describe("PropertyWorkspace portfolio flow", () => {
     render(<PropertyWorkspace api={api} apiBaseUrl="http://api" tenantId="tenant" token="test" />);
     expect(screen.getByText("Carregando portfólio…")).toBeInTheDocument();
     await act(async () => { resolve([property("one", "TEST_AOI_ONLY"), property("two", "Outra propriedade")]); });
-    expect(await screen.findByText("TEST_AOI_ONLY")).toBeInTheDocument();
-    expect(screen.getByText("TEST_AOI_ONLY permanece dado de validação.", { exact: false })).toBeInTheDocument();
-    expect(screen.getAllByText(/UNKNOWN/).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: /TEST_AOI_ONLY/ }));
+    expect(await screen.findByText("Área de validação")).toBeInTheDocument();
+    expect(screen.getByText("Consulte os dados confirmados da sua propriedade e as análises disponíveis.")).toBeInTheDocument();
+    expect(screen.queryByText("TEST_AOI_ONLY permanece dado de validação.", { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText("Nova propriedade GeoJSON")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Área de validação/ }));
     expect(screen.getByText("Farm 360: one")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Outra propriedade/ }));
     expect(screen.getByText("Farm 360: two")).toBeInTheDocument();

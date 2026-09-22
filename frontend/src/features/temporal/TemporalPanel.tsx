@@ -20,7 +20,7 @@ function dateLabel(item: TimelineItem) {
 
 export function TemporalPanel(props: Props) {
   const { items, selectedProductId, mode, baselineProductId, targetProductId, comparison, comparisonLoading } = props;
-  if (items.length === 0) return <section><h2>Linha do tempo</h2><p>DADO_INSUFICIENTE — não há NDVI temporal persistido.</p></section>;
+  if (items.length === 0) return <section><h2>Linha do tempo</h2><p>Sem dados disponíveis para comparação temporal.</p></section>;
   return <section className="temporal"><h2>Linha do tempo</h2><p className="temporal-order">Ordem: aquisição crescente. O padrão visual é o NDVI SUCCEEDED mais recente.</p><div className="timeline-items">{items.map(item => <button type="button" key={item.derived_product.id} className={selectedProductId === item.derived_product.id ? "selected" : ""} onClick={() => props.onSelectProduct(item.derived_product.id)}><strong>{dateLabel(item)}</strong><span>{item.derived_product.processing_status} · cobertura {item.derived_product.statistics.coverage_percentage ?? "NULL"}%</span><span>Nuvens: {item.cloud_cover ?? "UNKNOWN"}</span></button>)}</div><div className="temporal-mode"><button type="button" className={mode === "view" ? "selected" : ""} onClick={() => props.onModeChange("view")}>Visualizar</button><button type="button" className={mode === "compare" ? "selected" : ""} onClick={() => props.onModeChange("compare")}>Comparar</button></div>{mode === "compare" && <TemporalComparisonPanel items={items} baselineProductId={baselineProductId} targetProductId={targetProductId} comparison={comparison} loading={comparisonLoading} onBaselineChange={props.onBaselineChange} onTargetChange={props.onTargetChange} />}</section>;
 }
 

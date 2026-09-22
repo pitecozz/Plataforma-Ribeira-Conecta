@@ -722,6 +722,12 @@ def create_app(
     def authorize(ctx: AuthContext, permission: str, tenant_id: str) -> None:
         policy.require(ctx, permission, tenant_id=tenant_id)
 
+    @app.get("/v1/tenants/{tenant_id}/access", tags=["authorization"])
+    async def tenant_access(tenant_id: str, ctx: AuthContext = Depends(context)):
+        """Return only the caller's effective tenant capabilities for safe UI gating."""
+        authorize(ctx, "property:read", tenant_id)
+        return {"permissions": sorted(ctx.effective_permissions())}
+
     def property_area_hectares(item: Property) -> str | None:
         """Calculate only from an explicit, valid geometry; never estimate area."""
         if item.geometry_geojson is None or item.geometry_crs is None:

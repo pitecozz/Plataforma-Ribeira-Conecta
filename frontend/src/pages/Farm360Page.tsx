@@ -30,6 +30,8 @@ interface Props {
   tenantId: string;
   propertyId: string;
   token: string;
+  canManageBoundary?: boolean;
+  canRunSatelliteOperations?: boolean;
 }
 type LoadState = "loading" | "ready" | "empty" | "error";
 type PartialLoadIssues = {
@@ -61,6 +63,8 @@ export function Farm360Page({
   tenantId,
   propertyId,
   token,
+  canManageBoundary = false,
+  canRunSatelliteOperations = false,
 }: Props) {
   const [state, setState] = useState<LoadState>("loading");
   const [property, setProperty] = useState<PropertyRecord | null>(null);
@@ -76,8 +80,8 @@ export function Farm360Page({
     null,
   );
   const [provenance, setProvenance] = useState<Provenance | null>(null);
-  const [ndviEnabled, setNdviEnabled] = useState(true);
-  const [deltaEnabled, setDeltaEnabled] = useState(true);
+  const [ndviEnabled, setNdviEnabled] = useState(false);
+  const [deltaEnabled, setDeltaEnabled] = useState(false);
   const [mode, setMode] = useState<"view" | "compare">("view");
   const [baselineProductId, setBaselineProductId] = useState<string | null>(
     null,
@@ -222,13 +226,13 @@ export function Farm360Page({
   if (state === "error")
     return (
       <main className="state">
-        SOURCE_UNAVAILABLE — não foi possível carregar os dados persistidos.
+        Não foi possível atualizar os dados da propriedade agora.
       </main>
     );
   if (!property)
     return (
       <main className="state">
-        DADO_INSUFICIENTE — esta propriedade não possui cena ou NDVI persistido.
+        Os dados básicos desta propriedade ainda não estão disponíveis.
       </main>
     );
 
@@ -247,24 +251,8 @@ export function Farm360Page({
           token={token}
         />
         <div className="map-tools">
-          <label>
-            <input
-              type="checkbox"
-              checked={ndviEnabled}
-              onChange={(event) => setNdviEnabled(event.target.checked)}
-              disabled={!product}
-            />{" "}
-            NDVI
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={deltaEnabled}
-              onChange={(event) => setDeltaEnabled(event.target.checked)}
-              disabled={!comparison?.comparison.delta_product_id}
-            />{" "}
-            Δ NDVI
-          </label>
+          {product ? <label><input type="checkbox" checked={ndviEnabled} onChange={(event) => setNdviEnabled(event.target.checked)} /> NDVI</label> : <span>NDVI: sem dados disponíveis</span>}
+          {comparison?.comparison.delta_product_id ? <label><input type="checkbox" checked={deltaEnabled} onChange={(event) => setDeltaEnabled(event.target.checked)} /> Δ NDVI</label> : <span>Comparação NDVI: sem dados disponíveis</span>}
           {comparison?.comparison.delta_product_id && (
             <button
               type="button"
@@ -284,17 +272,16 @@ export function Farm360Page({
               NDVI maior no target
             </span>
           )}
-          {!product && <span>Nodata: transparente</span>}
         </div>
       </div>
       <aside>
         <section className="context-availability">
           <h2>Contexto e evidências</h2>
-          {optionalDataLoading ? <p>Carregando contexto disponível…</p> : partialLoadIssues.context || partialLoadIssues.provenance ? <p>SOURCE_UNAVAILABLE — não foi possível consultar parte do contexto. Propriedade, limite e ativos disponíveis continuam acessíveis.</p> : scenes.length === 0 && timeline.length === 0 ? <p>Contexto ainda não disponível. Isso não altera os dados confirmados da propriedade.</p> : <p>Contexto persistido disponível para consulta.</p>}
+          {optionalDataLoading ? <p>Carregando contexto disponível…</p> : partialLoadIssues.context || partialLoadIssues.provenance ? <p>Não foi possível atualizar parte do contexto agora. Propriedade, limite e ativos disponíveis continuam acessíveis.</p> : scenes.length === 0 && timeline.length === 0 ? <p>Contexto ainda não disponível. Isso não altera os dados confirmados da propriedade.</p> : <p>Contexto persistido disponível para consulta.</p>}
         </section>
-        <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} />
+        <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} decisions={decisions} />
         <PilotFeedbackPanel api={api} tenantId={tenantId} propertyId={propertyId} />
-        {partialLoadIssues.decisions && <section><h2>Riscos e decisões</h2><p>SOURCE_UNAVAILABLE — decisões não puderam ser consultadas agora. Isso não confirma ausência de risco ou oportunidade.</p></section>}
+        {partialLoadIssues.decisions && <section><h2>Riscos e decisões</h2><p>Não foi possível atualizar decisões agora. Isso não confirma ausência de risco ou oportunidade.</p></section>}
         {!partialLoadIssues.decisions && <RiskDecisionPanel decisions={decisions} />}
         <AssetPanel
           assets={assets}
@@ -302,19 +289,19 @@ export function Farm360Page({
           onSelect={setSelectedAssetId}
           loadError={partialLoadIssues.assets}
         />
-        <SceneOperationsPanel
+        {canRunSatelliteOperations && <SceneOperationsPanel
           api={api}
           tenantId={tenantId}
           propertyId={propertyId}
           scenes={scenes}
           onChanged={refresh}
-        />
-        <BoundaryImportPanel
+        />}
+        {canManageBoundary && <BoundaryImportPanel
           api={api}
           tenantId={tenantId}
           property={property}
           onBoundaryChanged={refresh}
-        />
+        />}
         <TemporalPanel
           items={timeline}
           selectedProductId={selectedProductId}

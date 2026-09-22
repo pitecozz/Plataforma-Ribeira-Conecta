@@ -24,3 +24,49 @@
   .farm360 { display: block; }
   .intelligence-report { border: 0; margin: 0; }
 }
+.intelligence-report {
+  max-width: 820px;
+}
+
+.intelligence-report > header,
+.intelligence-report > section,
+.intelligence-report > details {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.intelligence-report ul {
+  margin-bottom: 0;
+}
+
+@media print {
+  .report-panel > h2,
+  .report-panel > p,
+  .report-panel > button:first-of-type,
+  .intelligence-report > button,
+  .intelligence-report > details,
+  .pilot-header,
+  .module-status,
+  .property-nav,
+  .map-column,
+  .pilot-feedback,
+  .asset-panel,
+  .operations,
+  .boundary-import {
+    display: none !important;
+  }
+
+  .farm360,
+  .farm360 > aside,
+  .workspace-content {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .intelligence-report {
+    border: 0;
+    font-size: 11pt;
+    max-width: none;
+  }
+}

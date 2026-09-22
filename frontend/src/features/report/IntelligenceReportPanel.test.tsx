@@ -7,11 +7,11 @@ const property = { id: "property", tenant_id: "tenant", name: "Sítio Piloto", g
 
 describe("IntelligenceReportPanel", () => {
   it("renders available records and states unavailable decision data explicitly", () => {
-    render(<IntelligenceReportPanel property={property} assets={[]} scenes={[]} provenance={null} />);
+    render(<IntelligenceReportPanel property={property} assets={[]} scenes={[]} provenance={null} decisions={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Abrir relatório" }));
-    expect(screen.getByRole("heading", { name: "Farm360 Intelligence Report" })).toBeInTheDocument();
-    expect(screen.getByText(/nenhum ativo confirmado/i)).toBeInTheDocument();
-    expect(screen.getByText(/ainda não apresenta um resumo customer-facing/i)).toBeInTheDocument();
-    expect(screen.getAllByText("UNKNOWN").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Relatório de Inteligência Farm360" })).toBeInTheDocument();
+    expect(screen.getByText(/ainda não há ativos confirmados/i)).toBeInTheDocument();
+    expect(screen.getByText(/ausência de registro não confirma ausência de risco/i)).toBeInTheDocument();
+    expect(screen.getByText("Detalhes técnicos, proveniência e auditoria")).toBeInTheDocument();
   });
 });

@@ -7,6 +7,6 @@ describe("RiskDecisionPanel", () => {
   it("keeps an empty property decision history explicitly unknown", () => {
     render(<RiskDecisionPanel decisions={[]} />);
     expect(screen.getByText(/não há decisão persistida aplicável/i)).toBeInTheDocument();
-    expect(screen.getByText(/ausência de decisão não confirma ausência de risco/i)).toBeInTheDocument();
+    expect(screen.getByText(/ausência de registro não confirma ausência de risco/i)).toBeInTheDocument();
   });
 });

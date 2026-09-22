@@ -19,7 +19,7 @@ describe("HomePage", () => {
     render(<HomePage api={api} tenantId="tenant" onOpenFarm360={openFarm360} />);
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByText("Sítio Piloto")).toBeInTheDocument();
-    expect(screen.getByText("DADO_INSUFICIENTE")).toBeInTheDocument();
+    expect(screen.getByText("Ainda não há dados suficientes para esta análise")).toBeInTheDocument();
     expect(screen.getByText(/área 12,5 ha/)).toBeInTheDocument();
     expect(screen.getByText("Ainda não há cena catalogada")).toBeInTheDocument();
     expect(screen.getByText("Contexto ainda não disponível")).toBeInTheDocument();

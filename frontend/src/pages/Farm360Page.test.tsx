@@ -1,19 +1,19 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Farm360Api } from "../api/client";
 import { Farm360Page } from "./Farm360Page";
 
 vi.mock("../features/map/MapCanvas", () => ({
-  MapCanvas: ({ aoi }: { aoi: unknown }) => <div data-testid="property-map">{aoi ? "boundary-ready" : "boundary-missing"}</div>,
+  MapCanvas: ({ aoi, assets, onAssetSelected }: { aoi: unknown; assets?: Array<{ id: string }>; onAssetSelected?: (id: string) => void }) => <div data-testid="property-map">{aoi ? "boundary-ready" : "boundary-missing"}<span>assets-{assets?.length ?? 0}</span>{assets?.[0] && <button type="button" onClick={() => onAssetSelected?.(assets[0].id)}>select-map-asset</button>}</div>,
 }));
 
 vi.mock("../features/operations/SceneOperationsPanel", () => ({
-  SceneOperationsPanel: () => null,
+  SceneOperationsPanel: () => <div>operator-scene-controls</div>,
 }));
 
 vi.mock("../features/property/BoundaryImportPanel", () => ({
-  BoundaryImportPanel: () => null,
+  BoundaryImportPanel: () => <div>operator-boundary-controls</div>,
 }));
 
 afterEach(cleanup);
@@ -67,6 +67,11 @@ describe("Farm360Page", () => {
     await act(async () => { await Promise.resolve(); });
     expect(await screen.findByText("Casa hamilton")).toBeInTheDocument();
     expect(screen.getByTestId("property-map")).toHaveTextContent("boundary-ready");
+    expect(screen.getByTestId("property-map")).toHaveTextContent("assets-1");
+    fireEvent.click(screen.getByRole("button", { name: "select-map-asset" }));
+    expect(screen.getByRole("heading", { name: "Casa hamilton" })).toBeInTheDocument();
+    expect(screen.queryByText("operator-scene-controls")).not.toBeInTheDocument();
+    expect(screen.queryByText("operator-boundary-controls")).not.toBeInTheDocument();
     expect(screen.getByText("Contexto ainda não disponível. Isso não altera os dados confirmados da propriedade.")).toBeInTheDocument();
     expect(screen.getByText("63,87 ha")).toBeInTheDocument();
     expect(screen.queryByText(/não foi possível carregar os dados persistidos/)).not.toBeInTheDocument();
@@ -78,7 +83,7 @@ describe("Farm360Page", () => {
     await act(async () => { await Promise.resolve(); });
     expect(await screen.findByText("Sítio Hamilton")).toBeInTheDocument();
     expect(screen.getByTestId("property-map")).toHaveTextContent("boundary-ready");
-    expect(screen.getByRole("alert")).toHaveTextContent("SOURCE_UNAVAILABLE");
+    expect(screen.getByRole("alert")).toHaveTextContent("Não foi possível atualizar os ativos");
     expect(screen.queryByText(/não foi possível carregar os dados persistidos/)).not.toBeInTheDocument();
   });
 });

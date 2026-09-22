@@ -26,7 +26,7 @@ describe("AssetPanel", () => {
     render(
       <AssetPanel assets={[]} selectedAssetId={null} onSelect={vi.fn()} />,
     );
-    expect(screen.getByText(/nenhum ativo confirmado/i)).toBeInTheDocument();
+    expect(screen.getByText(/ainda não há ativos confirmados/i)).toBeInTheDocument();
   });
 
   it("shows persisted source, classification and context only after selection", () => {
@@ -43,8 +43,8 @@ describe("AssetPanel", () => {
         onSelect={select}
       />,
     );
-    expect(screen.getByText("installation survey")).toBeInTheDocument();
-    expect(screen.getByText("MANUAL_CONFIRMED")).toBeInTheDocument();
+    expect(screen.getAllByText("installation survey")).toHaveLength(2);
+    expect(screen.getByText("Confirmado")).toBeInTheDocument();
     expect(screen.getByText("calibration_state")).toBeInTheDocument();
     expect(screen.getByText("UNKNOWN")).toBeInTheDocument();
   });

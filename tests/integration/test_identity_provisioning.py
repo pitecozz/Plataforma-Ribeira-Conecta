@@ -526,6 +526,19 @@ class IdentityProvisioningPostgresTests(unittest.TestCase):
         self.assertEqual(portfolio.status_code, 200)
         self.assertEqual(len(portfolio.json()["items"]), 1)
 
+        access = client.get(f"/v1/tenants/{tenant.id}/access", headers=headers)
+        self.assertEqual(access.status_code, 200)
+        self.assertEqual(
+            access.json()["permissions"],
+            [
+                "asset:read",
+                "decision:read",
+                "feedback:write",
+                "geospatial:read",
+                "property:read",
+            ],
+        )
+
         assets = client.get(
             f"/v1/tenants/{tenant.id}/properties/{property_item.id}/assets",
             headers=headers,

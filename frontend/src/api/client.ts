@@ -82,6 +82,11 @@ export class Farm360Api {
       `/v1/tenants/${encodeURIComponent(tenantId)}/properties`,
     );
   }
+  access(tenantId: string) {
+    return this.get<{ permissions: string[] }>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/access`,
+    );
+  }
   portfolio(tenantId: string) {
     return this.get<{ items: PortfolioProperty[] }>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/portfolio`,
