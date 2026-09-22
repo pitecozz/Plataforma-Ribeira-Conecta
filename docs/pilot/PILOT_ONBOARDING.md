@@ -17,9 +17,13 @@ classifications. `https://app.ribeiraconecta.com.br` is
 ```text
 pilot browser -> HTTPS Cloudflare Quick Tunnel
   -> 127.0.0.1:5173 static production frontend/private ingress
-  -> /api is stripped and proxied only to 127.0.0.1:8080
+  -> /api/v1/* and /api/health/{live,ready} are stripped and proxied only to 127.0.0.1:8080
 PostgreSQL 127.0.0.1:55432, metrics 127.0.0.1:9109 and internal tooling stay private.
 ```
+
+The ingress allowlist deliberately returns `404` for `/metrics`,
+`/api/metrics`, `/api/docs`, `/api/redoc` and `/api/openapi.json`; backend
+diagnostics remain loopback-only.
 
 The frontend must be production/OIDC mode; Vite and development tokens are
 prohibited. Quick Tunnel does not use a tunnel credential. Its live process is
@@ -59,6 +63,12 @@ frontend-build and API-CORS reconfiguration.
    `RIBEIRA_CORS_ORIGINS` for the API runtime configuration. Register the same
    exact origin with Auth0, then rebuild the frontend and restart only the API
    and static frontend during a controlled maintenance window.
+
+   Always load the protected production/OIDC environment for a build that
+   writes the live `frontend/dist`. A plain `npm run build` without those
+   variables deliberately produces a fail-closed bundle and must not replace
+   the active pilot artifact. After any validation build, rebuild with the
+   protected environment before restarting the static service.
 
    Do not deploy the new ingress proxy against a development-auth API. First
    configure the protected runtime as `RIBEIRA_ENV=production` and
@@ -118,11 +128,10 @@ tenant path, and the API verifies the OIDC identity's persisted membership for
 that tenant. The current API does not provide a membership-discovery endpoint,
 so the SPA must not infer a tenant from an arbitrary claim.
 
-At the 2026-09-22 pilot-access assessment, the protected runtime database had
-zero tenants, zero properties and zero active memberships. Existing external
-identity records without memberships do not authorize pilot access. Do not set
-the frontend tenant value until an operator has created or verified all of the
-following outside Git:
+Runtime tenant, property and identity facts are operator-held state and are not
+copied into Git. Existing external identity records without memberships do not
+authorize pilot access. Do not set the frontend tenant value until an operator
+has created or verified all of the following outside Git:
 
 1. tenant and customer association;
 2. pilot property with verified boundary, source and CRS;
@@ -150,3 +159,21 @@ Before go-live verify HTTPS, OIDC/JWKS, final-origin CORS, RLS/RBAC, journals,
 no public Postgres/metrics/debug listener and full pilot E2E. To stop access,
 disable the tunnel/hostname then revoke membership; never delete evidence/audit
 records as rollback.
+
+The public pre-authentication smoke is safe to run without customer
+credentials. It checks exact HTTPS origin routing, API health, unauthenticated
+tenant denial, PKCE parameters and root callback, the configured OIDC host and
+that `/metrics` remains unavailable:
+
+```bash
+RIBEIRA_PLAYWRIGHT_BASE_URL='<exact-quick-tunnel-origin>' \
+RIBEIRA_PLAYWRIGHT_OIDC_HOST='<issuer-hostname>' \
+RIBEIRA_PLAYWRIGHT_TENANT_ID='<pilot-tenant-id>' \
+npm --prefix frontend run e2e -- e2e/pilot-public-access.spec.ts
+```
+
+Run this through the repository-compatible official Playwright container when
+the host lacks browser libraries. Passing this smoke does not prove user login
+or authorized property access. The final customer journey still requires an
+operator-controlled real Auth0 session; credentials, MFA material and browser
+storage state must never be committed.

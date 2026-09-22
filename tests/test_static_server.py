@@ -105,6 +105,10 @@ class StaticIngressTests(unittest.TestCase):
     def test_non_api_post_and_metrics_are_not_exposed_by_ingress(self) -> None:
         for request in (
             urllib.request.Request(f"{self.base_url}/metrics"),
+            urllib.request.Request(f"{self.base_url}/api/metrics"),
+            urllib.request.Request(f"{self.base_url}/api/docs"),
+            urllib.request.Request(f"{self.base_url}/api/openapi.json"),
+            urllib.request.Request(f"{self.base_url}/api/redoc"),
             urllib.request.Request(
                 f"{self.base_url}/not-api", data=b"x", method="POST"
             ),
@@ -112,3 +116,11 @@ class StaticIngressTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as failure:
                 urllib.request.urlopen(request)  # nosec B310 -- local test server
             self.assertEqual(failure.exception.code, HTTPStatus.NOT_FOUND)
+
+    def test_only_public_health_and_v1_api_routes_are_proxied(self) -> None:
+        for path in ("/api/health/live", "/api/health/ready", "/api/v1/example"):
+            with urllib.request.urlopen(  # nosec B310 -- local test server
+                f"{self.base_url}{path}"
+            ) as response:
+                payload = json.loads(response.read())
+            self.assertEqual(payload["path"], path.removeprefix("/api"))

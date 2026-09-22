@@ -12,6 +12,10 @@ subject; e-mail não é chave de autorização.
   de uma identidade anteriormente exposta durante diagnóstico.
 - A migration `018_persist_viewer_role` está aplicada.
 - O request fica em arquivo regular, pertencente ao operador, com modo `600`.
+- `external_issuer` é exatamente o valor canônico do claim JWT `iss`, inclusive
+  esquema HTTPS e barra final quando presentes. O comando não normaliza issuer:
+  um hostname isolado e uma URL canônica são identidades distintas e o primeiro
+  não autorizará um token emitido pelo segundo.
 
 O arquivo privado contém somente o contrato abaixo e nunca deve ser versionado:
 
@@ -40,6 +44,11 @@ membership `ACTIVE` de `VIEWER` e o evento
 Repetir uma membership `VIEWER` já ativa é idempotente. Memberships com papel
 distinto, desativadas ou revogadas são conflitos explícitos e nunca são
 substituídas ou reativadas pelo comando.
+
+Depois do provisionamento, repita o `--dry-run`: o resultado deve indicar
+`MEMBERSHIP=EXISTS` e `AUDIT=NOT_WRITTEN`. Se o issuer inicial não corresponder
+exatamente ao `iss` validado, revogue essa membership pelo fluxo controlado e
+provisione a identidade canônica; não edite nem apague o histórico.
 
 O papel `VIEWER` permite leitura de propriedade/geoespacial e de decisões,
 além de envio de feedback autenticado; não concede alteração de propriedade,

@@ -13,6 +13,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from .logging_config import configure_structured_logging
 
@@ -61,7 +62,11 @@ class FrontendHandler(SimpleHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def _proxy_api(self) -> None:
-        if not self.api_origin:
+        public_path = urlsplit(self.path).path
+        if not self.api_origin or not (
+            public_path.startswith("/api/v1/")
+            or public_path in {"/api/health/live", "/api/health/ready"}
+        ):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         target = f"{self.api_origin}{self.path.removeprefix('/api')}"
