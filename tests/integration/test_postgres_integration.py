@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import unittest
+from datetime import datetime, timezone
 
 import psycopg
 from psycopg import pq
@@ -40,6 +41,13 @@ class PostgresIntegrationTests(unittest.TestCase):
     def test_flood_exposure_requires_a_verified_zone_and_preserves_hypotheses(
         self,
     ) -> None:
+        # Historical reconciliation is the supported, idempotent registration
+        # path for this global factual event.  Do not rely on data that may
+        # happen to predate migration 030 in a shared integration database.
+        with self.store.transaction():
+            self.store.rebuild_september_event_timeline(
+                end_at=datetime(2026, 9, 30, tzinfo=timezone.utc)
+            )
         tenant = self.create_test_tenant("Flood exposure PG tenant")
         property = self.application.create_property(
             tenant.id,

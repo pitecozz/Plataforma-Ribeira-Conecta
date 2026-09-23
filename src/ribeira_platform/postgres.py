@@ -638,7 +638,75 @@ class PostgresStore:
         ).fetchone()
         if row is None:
             raise RuntimeError("event upsert did not return an identifier")
-        return self._id(row["id"])
+        event_id = self._id(row["id"])
+        # The event can be first registered after migration 030 has run (for
+        # example on a fresh installation during historical reconciliation).
+        # Keep the factual profile and its explicitly non-causal hypotheses
+        # coupled to that registration rather than relying on migration-time
+        # data being present.
+        self.connection.execute(
+            """INSERT INTO flood_event_profile(
+                   event_id,evidence_status,classification,limitations,provenance
+                 ) VALUES (%s,'INCONCLUSIVE','FACTUAL_EVIDENCE_ONLY',%s::jsonb,%s::jsonb)
+                 ON CONFLICT (event_id) DO NOTHING""",
+            (
+                event_id,
+                json.dumps(
+                    [
+                        "Flood extent and property/asset exposure remain unknown without a verified exposure zone"
+                    ]
+                ),
+                json.dumps(
+                    {
+                        "event_key": "VALE_RIBEIRA_FLOOD_2026_09",
+                        "method": "evidence_first_factual_event_profile_v1",
+                    }
+                ),
+            ),
+        )
+        for key, title, status, limitations in (
+            (
+                "H1_LOCAL_RAINFALL",
+                "Local rainfall contribution",
+                "INCONCLUSIVE",
+                ["Requires location and time-specific rainfall-to-exposure evidence"],
+            ),
+            (
+                "H2_UPSTREAM_RAINFALL",
+                "Upstream rainfall contribution",
+                "UNKNOWN",
+                ["Verified upstream rainfall and river sequence are unavailable"],
+            ),
+            (
+                "H3_RESERVOIR_OPERATION",
+                "Reservoir/Capivari operation contribution",
+                "INCONCLUSIVE",
+                ["Operational timing alone does not establish contribution"],
+            ),
+            (
+                "H4_ENSO_CONTEXT",
+                "ENSO/El Niño broader climate context",
+                "INCONCLUSIVE",
+                ["Climate context is not an event-causation conclusion"],
+            ),
+        ):
+            self.connection.execute(
+                """INSERT INTO flood_event_hypothesis(
+                       id,event_id,hypothesis_key,title,status,method,limitations,provenance
+                     ) VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb)
+                     ON CONFLICT (event_id,hypothesis_key) DO NOTHING""",
+                (
+                    new_id(),
+                    event_id,
+                    key,
+                    title,
+                    status,
+                    "separate evidence-first causal hypothesis; temporal association is not causation",
+                    json.dumps(limitations),
+                    json.dumps({"event_key": "VALE_RIBEIRA_FLOOD_2026_09"}),
+                ),
+            )
+        return event_id
 
     def record_satellite_event_scene(
         self,
