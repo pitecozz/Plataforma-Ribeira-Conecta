@@ -64,11 +64,13 @@ different property is rejected. The selected COG remains available only through
 the existing authorized tenant-scoped tile endpoint. The browser never receives
 object-store paths, CDSE S3 URLs or CDSE credentials.
 
-The current external MapLibre demo basemap remains a development/demo
-dependency, not a permanent operational basemap. Its requests never receive
-the Ribeira bearer token. `VITE_*` values are browser-visible build/runtime
-configuration, not secret storage; a `VITE_RIBEIRA_ACCESS_TOKEN` may only be a
-short-lived local development token and never a CDSE credential.
+Farm360 uses a provider-neutral visual-basemap configuration. The default is
+CARTO Positron's public vector style via `VITE_RIBEIRA_BASEMAP_STYLE_URL`; the
+style is geographic context only, never a remote-sensing evidence fallback or
+analytical input. Its requests never receive the Ribeira bearer token.
+`VITE_*` values are browser-visible build/runtime configuration, not secret
+storage; a `VITE_RIBEIRA_ACCESS_TOKEN` may only be a short-lived local
+development token and never a CDSE credential.
 
 ## Controlled real-data validation
 

@@ -34,9 +34,9 @@ participate in that chain or explicitly expose its limitation.
   closed. Never add credentials, OAuth tokens, private keys, or browser-exposed
   provider secrets to the repository.
 - Do not bypass operator decisions: Cloudflare is
-  `AUTHORIZED_FOR_PILOT_ACCESS` through a `CLOUDFLARE_QUICK_TUNNEL` only for
-  temporary pilot/test access. Its exact HTTPS origin is runtime configuration;
-  `https://app.ribeiraconecta.com.br` is `FUTURE_CUSTOM_DOMAIN`. PostgreSQL,
+  `AUTHORIZED_FOR_PILOT_ACCESS` through the named tunnel at
+  `https://app.ribeiraconecta.com.br`; the public origin remains runtime
+  configuration. Historical Quick Tunnel origins are obsolete. PostgreSQL,
   metrics, debug and development services remain private. SAISP automation is
   `NOT_APPROVED_FOR_AUTOMATION`/fail-closed; ANA is
   `AUTH_REQUIRED_PENDING_PROVIDER`.

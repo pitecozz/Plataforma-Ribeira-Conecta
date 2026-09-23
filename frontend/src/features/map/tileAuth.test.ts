@@ -18,14 +18,14 @@ describe("MapLibre request authentication", () => {
     });
   });
 
-  it("does not add Authorization to the MapLibre demo basemap", () => {
+  it("does not add Authorization to the external visual basemap", () => {
     expect(
       transformMapRequest(
-        "https://demotiles.maplibre.org/tiles/tiles.json",
+        "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
         api,
         token,
       ),
-    ).toEqual({ url: "https://demotiles.maplibre.org/tiles/tiles.json" });
+    ).toEqual({ url: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json" });
   });
 
   it("does not add Authorization to another external origin", () => {

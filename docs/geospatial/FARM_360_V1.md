@@ -117,6 +117,24 @@ slice. The MapLibre request transform attaches that token only to the exact
 same-origin Ribeira derived-product XYZ endpoint, never to basemap styles,
 glyphs, sprites, or other third-party origins.
 
+### Visual basemap
+
+Farm360 defaults to CARTO Positron's public vector style through
+`VITE_RIBEIRA_BASEMAP_STYLE_URL`, with `VITE_MAP_STYLE_URL` retained only as a
+legacy override. The provider URL is runtime/build configuration, so an
+operator can substitute an approved style without an application rewrite.
+The basemap is geographic orientation only: it is not an analytical layer,
+evidence source, or fallback for missing property, satellite, environmental or
+agronomic data. Map requests never forward Ribeira bearer tokens to that
+provider. Property boundaries and asset geometries always come from the
+tenant-scoped Ribeira API and retain their own provenance.
+
+The property map has a visible boundary fill/outline, automatic fit to the
+persisted boundary, clickable asset markers, a recenter control, zoom controls
+and metric scale. A basemap failure must not be interpreted as the absence of
+the persisted property geometry; the map still attempts to render the local
+tenant-scoped boundary and assets.
+
 ```bash
 cd frontend
 npm install

@@ -242,6 +242,7 @@ export function Farm360Page({
         <MapCanvas
           aoi={property.geometry_geojson}
           assets={assets}
+          selectedAssetId={selectedAssetId}
           onAssetSelected={setSelectedAssetId}
           apiBaseUrl={apiBaseUrl}
           tileUrl={tileUrl}
