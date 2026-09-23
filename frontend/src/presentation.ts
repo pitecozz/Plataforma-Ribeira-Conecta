@@ -38,11 +38,16 @@ export function customerStatusLabel(value: string | null | undefined): string {
 
 export function customerSourceLabel(value: string | null | undefined): string {
   if (!value) return "Fonte ainda não informada";
-  return sourceLabels[value] ?? value.replaceAll("_", " ");
+  const normalized = value.trim().toUpperCase();
+  if (/\b(MANIFEST_SHA256|GEOJSON_SHA256|IMPORT_FINGERPRINT)\b/.test(normalized)) {
+    return "Dado fornecido pelo proprietário (Google Earth)";
+  }
+  return sourceLabels[normalized] ?? value.replaceAll("_", " ");
 }
 
 export function customerAssetTypeLabel(value: string): string {
-  return assetTypeLabels[value] ?? value.replaceAll("_", " ");
+  const normalized = value.trim().toUpperCase().replaceAll(" ", "_");
+  return assetTypeLabels[normalized] ?? value.replaceAll("_", " ");
 }
 
 export function customerPropertyName(value: string): string {
