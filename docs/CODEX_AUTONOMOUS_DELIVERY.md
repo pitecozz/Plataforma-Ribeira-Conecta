@@ -1,6 +1,6 @@
 # Autonomous delivery plan — requirements resync
 
-**Updated:** 2026-09-21
+**Updated:** 2026-09-23
 **Authority order:** explicit current Product Owner requirements, documented
 Ribeira business rules, product blueprint, customer configuration, official
 provider contracts, collected data, deterministic calculation, model, then
@@ -41,6 +41,19 @@ consulting, field services, hardware and third-party costs. It is not a final
 price list. Prices, margins and unit economics remain `TO_VALIDATE` until real
 cost, capacity and customer evidence exist; this cross-cutting work does not
 reorder the current shared-foundation priorities.
+
+## Full-platform acceleration record
+
+The Hamilton pilot has proven OIDC, RLS, audited persistence and the named
+Cloudflare ingress. The former pilot-only delivery constraint is superseded:
+full-platform development is enabled, but each module must deliver an actual
+tenant-safe workflow rather than a shell or status badge. The immediate
+execution order is property-first Farm360 and Maps, Digital Twin assets, data
+availability/context, reports, remote sensing, environmental/flood, Agro,
+Soil, telemetry, Connect, Energy, Prospect/Business and contextual AI.
+Dependencies, evidence gates and provider/operator constraints below remain in
+force. The real Hamilton property is a continuous acceptance dataset; its
+facts and missing data are never changed merely to make a workflow pass.
 
 ## Requirements resync and supersession record
 
@@ -299,12 +312,10 @@ not hard-code a one-off municipal conclusion.
 
 - ANA: `AUTH_REQUIRED_PENDING_PROVIDER`; no invented river data.
 - SAISP: `NOT_APPROVED_FOR_AUTOMATION`; manual evidence only and fail closed.
-- Cloudflare: `CLOUDFLARE_QUICK_TUNNEL` is authorized only for temporary
-  pilot/test private-origin HTTPS ingress. Its exact `trycloudflare.com`
-  origin must be configured explicitly in OIDC, frontend build and API CORS;
-  no wildcard trust. `https://app.ribeiraconecta.com.br` is
-  `FUTURE_CUSTOM_DOMAIN`, requiring configuration changes rather than an
-  architecture rewrite.
+- Cloudflare named tunnel: `https://app.ribeiraconecta.com.br` is the active
+  HTTPS application origin. API, PostgreSQL, metrics, debug and development
+  listeners remain private; no wildcard OIDC trust or direct public port is
+  authorized.
 - Customer telemetry/MQTT/LoRaWAN: no approved device/provider contract.
 - Agronomic disease rules: require approved policy and corroborating data.
 

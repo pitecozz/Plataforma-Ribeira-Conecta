@@ -23,6 +23,7 @@ import { ProvenancePanel } from "../features/provenance/ProvenancePanel";
 import { TemporalPanel } from "../features/temporal/TemporalPanel";
 import { SceneOperationsPanel } from "../features/operations/SceneOperationsPanel";
 import { BoundaryImportPanel } from "../features/property/BoundaryImportPanel";
+import { DataAvailabilityPanel } from "../features/context/DataAvailabilityPanel";
 
 interface Props {
   api: Farm360Api;
@@ -280,6 +281,7 @@ export function Farm360Page({
           <h2>Contexto e evidências</h2>
           {optionalDataLoading ? <p>Carregando contexto disponível…</p> : partialLoadIssues.context || partialLoadIssues.provenance ? <p>Não foi possível atualizar parte do contexto agora. Propriedade, limite e ativos disponíveis continuam acessíveis.</p> : scenes.length === 0 && timeline.length === 0 ? <p>Contexto ainda não disponível. Isso não altera os dados confirmados da propriedade.</p> : <p>Contexto persistido disponível para consulta.</p>}
         </section>
+        <DataAvailabilityPanel property={property} assets={assets} scenes={scenes} timeline={timeline} />
         <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} decisions={decisions} />
         <PilotFeedbackPanel api={api} tenantId={tenantId} propertyId={propertyId} />
         {partialLoadIssues.decisions && <section><h2>Riscos e decisões</h2><p>Não foi possível atualizar decisões agora. Isso não confirma ausência de risco ou oportunidade.</p></section>}

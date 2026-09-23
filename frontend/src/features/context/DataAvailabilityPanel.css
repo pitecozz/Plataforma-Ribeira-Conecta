@@ -1,0 +1,50 @@
+.data-availability > p {
+  color: #52675a;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.data-availability ul {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  padding: 0;
+}
+
+.data-availability li {
+  align-items: center;
+  border: 1px solid #e1e9e2;
+  border-radius: 7px;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 8px;
+}
+
+.data-availability strong,
+.data-availability small {
+  display: block;
+}
+
+.data-availability strong {
+  font-size: 12px;
+}
+
+.data-availability small {
+  color: #66756c;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.availability-state {
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 6px;
+  text-align: center;
+}
+
+.availability-state.available { background: #dcfce7; color: #166534; }
+.availability-state.partial { background: #fef3c7; color: #92400e; }
+.availability-state.awaiting,
+.availability-state.not-configured { background: #edf2ed; color: #52675a; }
