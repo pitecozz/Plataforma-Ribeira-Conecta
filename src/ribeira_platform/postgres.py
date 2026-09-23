@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from threading import RLock
 from typing import Any, Iterable
 
 import psycopg
@@ -41,22 +42,28 @@ class PostgresStore:
         self.dsn = dsn
         self.connection = psycopg.connect(dsn, row_factory=dict_row)
         self._transaction_depth = 0
+        # A production API keeps one store per process. FastAPI may execute
+        # synchronous dependencies in different worker threads, so transaction
+        # depth and PostgreSQL session-local RLS settings must never overlap on
+        # this single connection.
+        self._transaction_lock = RLock()
 
     def close(self) -> None:
         self.connection.close()
 
     @contextmanager
     def transaction(self):
-        outer = self._transaction_depth > 0
-        self._transaction_depth += 1
-        try:
-            if outer:
-                yield self
-            else:
-                with self.connection.transaction():
+        with self._transaction_lock:
+            outer = self._transaction_depth > 0
+            self._transaction_depth += 1
+            try:
+                if outer:
                     yield self
-        finally:
-            self._transaction_depth -= 1
+                else:
+                    with self.connection.transaction():
+                        yield self
+            finally:
+                self._transaction_depth -= 1
 
     @contextmanager
     def tenant_transaction(self, tenant_id: str | None, platform_admin: bool = False):

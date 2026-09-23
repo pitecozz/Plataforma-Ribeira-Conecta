@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 import unittest
 from datetime import datetime, timezone
 
@@ -372,6 +374,42 @@ class PostgresIntegrationTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNotNone(row)
         self.assertNotEqual(row[0], "idle in transaction")
+
+    def test_shared_store_serializes_tenant_transactions(self) -> None:
+        """Concurrent request dependencies cannot leak an RLS setting."""
+        tenant_a = self.create_test_tenant("Serialized transaction tenant A")
+        tenant_b = self.create_test_tenant("Serialized transaction tenant B")
+        start = threading.Barrier(2)
+        observed: list[str] = []
+        errors: list[BaseException] = []
+
+        def read_tenant(tenant_id: str) -> None:
+            try:
+                start.wait(timeout=2)
+                with self.store.tenant_transaction(tenant_id):
+                    row = self.store.connection.execute(
+                        "SELECT current_setting('app.tenant_id', true) AS tenant_id"
+                    ).fetchone()
+                    assert row is not None
+                    observed.append(str(row["tenant_id"]))
+                    time.sleep(0.03)
+            except BaseException as exc:  # pragma: no cover - asserted below
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=read_tenant, args=(tenant_a.id,)),
+            threading.Thread(target=read_tenant, args=(tenant_b.id,)),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=3)
+        self.assertFalse(any(thread.is_alive() for thread in threads))
+        self.assertEqual(errors, [])
+        self.assertCountEqual(observed, [tenant_a.id, tenant_b.id])
+        self.assertEqual(
+            self.store.connection.info.transaction_status, pq.TransactionStatus.IDLE
+        )
 
     def test_rls_denies_cross_tenant_read_write_and_references(self) -> None:
         tenant_a = self.create_test_tenant("Tenant A PG")
