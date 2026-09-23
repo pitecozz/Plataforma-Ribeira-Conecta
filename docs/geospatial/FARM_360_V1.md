@@ -176,7 +176,9 @@ does not create an unproven pixel delta raster, see
 MapLibre 6 derives its worker URL relative to `import.meta.url`. Vite's default
 dependency optimization rewrites that URL into `node_modules/.vite/deps` but
 does not emit MapLibre's sibling `maplibre-gl-worker.mjs`, causing a worker 404.
-Clearing the Vite cache alone does not fix this. `vite.config.ts` therefore
-excludes only `maplibre-gl` from `optimizeDeps`, so Vite serves the package's
-actual `dist/maplibre-gl.mjs` and its sibling worker. No worker is copied into
-`public/`.
+Clearing the Vite cache alone does not fix this. `MapCanvas` therefore imports
+`maplibre-gl-worker.mjs?worker&url` and calls `setWorkerUrl()` once before any
+map instance. Vite emits a hashed, bundled worker asset under `dist/assets/`;
+deployment validation must request that exact emitted URL and require HTTP 200
+with a JavaScript MIME type. The browser must never request the non-emitted
+`/assets/maplibre-gl-worker.mjs` fallback path.
