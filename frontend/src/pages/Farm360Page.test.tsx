@@ -77,6 +77,7 @@ describe("Farm360Page", () => {
     expect(screen.getByRole("heading", { name: "Disponibilidade de dados" })).toBeInTheDocument();
     expect(screen.getByText("1 ativo(s) confirmado(s)")).toBeInTheDocument();
     expect(screen.getByText("Nenhuma cena ou produto disponível")).toBeInTheDocument();
+    expect(screen.getByText("Limite cadastrado; visualização do mapa é verificada separadamente")).toBeInTheDocument();
     expect(screen.queryByText(/não foi possível carregar os dados persistidos/)).not.toBeInTheDocument();
   });
 

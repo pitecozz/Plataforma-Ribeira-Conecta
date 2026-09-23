@@ -119,10 +119,11 @@ glyphs, sprites, or other third-party origins.
 
 ### Visual basemap
 
-Farm360 defaults to CARTO Positron's public vector style through
+Farm360 defaults to a minimal CARTO raster style through
 `VITE_RIBEIRA_BASEMAP_STYLE_URL`, with `VITE_MAP_STYLE_URL` retained only as a
-legacy override. The provider URL is runtime/build configuration, so an
-operator can substitute an approved style without an application rewrite.
+legacy override. The default has one CORS-enabled tile origin and no sprite,
+glyph or vector-style dependency, while an operator can substitute an approved
+style without an application rewrite.
 The basemap is geographic orientation only: it is not an analytical layer,
 evidence source, or fallback for missing property, satellite, environmental or
 agronomic data. Map requests never forward Ribeira bearer tokens to that

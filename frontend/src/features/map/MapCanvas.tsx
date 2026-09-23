@@ -22,15 +22,29 @@ interface Props {
 
 const sourceId = "property-aoi";
 const assetSourceId = "property-assets";
-const defaultBasemapStyle =
-  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+const defaultBasemapStyle: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {
+    "carto-visual": {
+      type: "raster",
+      tiles: ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: "© OpenStreetMap contributors © CARTO",
+    },
+  },
+  layers: [{ id: "carto-visual", type: "raster", source: "carto-visual" }],
+};
 
 function pointCoordinates(asset: DigitalTwinAsset): [number, number] | null {
-  if (asset.geometry_geojson?.type !== "Point") return null;
-  const [longitude, latitude] = asset.geometry_geojson.coordinates;
-  return typeof longitude === "number" && typeof latitude === "number"
-    ? [longitude, latitude]
-    : null;
+  if (!asset.geometry_geojson) return null;
+  if (asset.geometry_geojson.type === "Point") {
+    const [longitude, latitude] = asset.geometry_geojson.coordinates;
+    return typeof longitude === "number" && typeof latitude === "number"
+      ? [longitude, latitude]
+      : null;
+  }
+  const bounds = boundsForGeometry(asset.geometry_geojson);
+  return bounds ? [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2] : null;
 }
 
 export function MapCanvas({
@@ -71,6 +85,12 @@ export function MapCanvas({
     });
     active.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-right");
     active.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: "metric" }), "bottom-left");
+    active.on("error", (event) => {
+      element.current?.setAttribute("data-map-error", event.error.message);
+    });
+    active.on("style.load", () => {
+      element.current?.setAttribute("data-map-style-loaded", "true");
+    });
     map.current = active;
 
     return () => {
@@ -116,6 +136,9 @@ export function MapCanvas({
         },
       });
       fitProperty();
+      const currentBounds = active.getBounds();
+      element.current?.setAttribute("data-map-bounds", currentBounds.toArray().flat().join(","));
+      element.current?.setAttribute("data-map-zoom", String(active.getZoom()));
     };
     if (active.isStyleLoaded()) update();
     else active.once("load", update);
@@ -208,6 +231,7 @@ export function MapCanvas({
       markerElement.type = "button";
       markerElement.className = `property-asset-marker${selectedAssetId === asset.id ? " selected" : ""}`;
       markerElement.setAttribute("aria-label", `Abrir ativo: ${asset.name}`);
+      markerElement.setAttribute("data-asset-id", asset.id);
       markerElement.title = asset.name;
       markerElement.textContent = assetMarkerSymbol(asset.asset_type);
       markerElement.addEventListener("click", () => onAssetSelectedRef.current?.(asset.id));
