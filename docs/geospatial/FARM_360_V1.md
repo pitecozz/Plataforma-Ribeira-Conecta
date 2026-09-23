@@ -139,6 +139,17 @@ never committed or logged. Without an approved configured provider, Farm360
 uses a neutral background and explicitly says that a basemap is unavailable;
 it never presents CARTO's watermark as a usable customer map.
 
+For the pilot, protected frontend build configuration selects
+`VITE_RIBEIRA_BASEMAP_PROVIDER=openfreemap` and
+`VITE_RIBEIRA_BASEMAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty`.
+OpenFreeMap needs no key. Its style, sprites, glyphs and tiles use the exact
+`https://tiles.openfreemap.org` origin; attribution remains enabled. Future
+providers include `OPENFREEMAP`, `CARTO`, `PROTOMAPS`, `SELF_HOSTED` and another
+approved configured provider. OpenFreeMap public hosting has no SLA: a future
+production option is self-hosted OpenFreeMap or Protomaps/PMTiles, while the
+current fallback keeps property overlays and states that only the basemap is
+unavailable.
+
 The property map has a visible boundary fill/outline, automatic fit to the
 persisted boundary, clickable asset markers, a recenter control, zoom controls
 and metric scale. A basemap failure must not be interpreted as the absence of
