@@ -26,6 +26,21 @@
   background: #f0fdf4;
 }
 
+.map-basemap-unavailable {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #d1ddd4;
+  border-radius: 5px;
+  bottom: 10px;
+  color: #52675a;
+  font-size: 11px;
+  left: 10px;
+  margin: 0;
+  max-width: 290px;
+  padding: 7px 9px;
+  position: absolute;
+  z-index: 2;
+}
+
 .property-asset-marker {
   align-items: center;
   background: #f59e0b;

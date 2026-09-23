@@ -24,16 +24,28 @@ const sourceId = "property-aoi";
 const assetSourceId = "property-assets";
 const defaultBasemapStyle: maplibregl.StyleSpecification = {
   version: 8,
-  sources: {
-    "carto-visual": {
-      type: "raster",
-      tiles: ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      attribution: "© OpenStreetMap contributors © CARTO",
-    },
-  },
-  layers: [{ id: "carto-visual", type: "raster", source: "carto-visual" }],
+  sources: {},
+  layers: [{ id: "neutral-background", type: "background", paint: { "background-color": "#e8f0eb" } }],
 };
+
+function configuredBasemapStyle(): string | maplibregl.StyleSpecification {
+  const configuredStyle = import.meta.env.VITE_RIBEIRA_BASEMAP_STYLE_URL || import.meta.env.VITE_MAP_STYLE_URL;
+  if (configuredStyle) return configuredStyle;
+  const cartoKey = import.meta.env.VITE_RIBEIRA_CARTO_BASEMAP_API_KEY;
+  if (!cartoKey) return defaultBasemapStyle;
+  return {
+    version: 8,
+    sources: {
+      "carto-visual": {
+        type: "raster",
+        tiles: [`https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?api_key=${encodeURIComponent(cartoKey)}`],
+        tileSize: 256,
+        attribution: "© OpenStreetMap contributors © CARTO",
+      },
+    },
+    layers: [{ id: "carto-visual", type: "raster", source: "carto-visual" }],
+  };
+}
 
 function pointCoordinates(asset: DigitalTwinAsset): [number, number] | null {
   if (!asset.geometry_geojson) return null;
@@ -59,6 +71,11 @@ export function MapCanvas({
   deltaEnabled,
   token,
 }: Props) {
+  const externalBasemapConfigured = Boolean(
+    import.meta.env.VITE_RIBEIRA_BASEMAP_STYLE_URL ||
+      import.meta.env.VITE_MAP_STYLE_URL ||
+      import.meta.env.VITE_RIBEIRA_CARTO_BASEMAP_API_KEY,
+  );
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<maplibregl.Marker[]>([]);
@@ -74,10 +91,7 @@ export function MapCanvas({
     if (!element.current || map.current) return;
     const active = new maplibregl.Map({
       container: element.current,
-      style:
-        import.meta.env.VITE_RIBEIRA_BASEMAP_STYLE_URL ||
-        import.meta.env.VITE_MAP_STYLE_URL ||
-        defaultBasemapStyle,
+      style: configuredBasemapStyle(),
       center: [-47, -24],
       zoom: 4,
       transformRequest: (url: string) =>
@@ -113,6 +127,7 @@ export function MapCanvas({
 
     const update = () => {
       if (active.getLayer("property-outline")) active.removeLayer("property-outline");
+      if (active.getLayer("property-outline-halo")) active.removeLayer("property-outline-halo");
       if (active.getLayer("property-fill")) active.removeLayer("property-fill");
       if (active.getSource(sourceId)) active.removeSource(sourceId);
       active.addSource(sourceId, {
@@ -123,15 +138,21 @@ export function MapCanvas({
         id: "property-fill",
         type: "fill",
         source: sourceId,
-        paint: { "fill-color": "#0f766e", "fill-opacity": 0.14 },
+        paint: { "fill-color": "#22c55e", "fill-opacity": 0.28 },
+      });
+      active.addLayer({
+        id: "property-outline-halo",
+        type: "line",
+        source: sourceId,
+        paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.92 },
       });
       active.addLayer({
         id: "property-outline",
         type: "line",
         source: sourceId,
         paint: {
-          "line-color": "#047857",
-          "line-width": 4,
+          "line-color": "#065f46",
+          "line-width": 4.5,
           "line-opacity": 0.96,
         },
       });
@@ -141,7 +162,10 @@ export function MapCanvas({
       element.current?.setAttribute("data-map-zoom", String(active.getZoom()));
     };
     if (active.isStyleLoaded()) update();
-    else active.once("load", update);
+    active.on("style.load", update);
+    return () => {
+      active.off("style.load", update);
+    };
   }, [aoi]);
 
   useEffect(() => {
@@ -218,7 +242,10 @@ export function MapCanvas({
       }
     };
     if (active.isStyleLoaded()) update();
-    else active.once("load", update);
+    active.on("style.load", update);
+    return () => {
+      active.off("style.load", update);
+    };
   }, [assets]);
 
   useEffect(() => {
@@ -287,6 +314,7 @@ export function MapCanvas({
   return (
     <div className="map-frame">
       <div className="map-canvas" ref={element} aria-label="Mapa da propriedade" />
+      {!externalBasemapConfigured && <p className="map-basemap-unavailable">Mapa base não configurado. O limite e os ativos cadastrados continuam disponíveis neste mapa.</p>}
       <button className="map-recenter" type="button" onClick={() => fitPropertyRef.current?.()}>
         Centralizar sítio
       </button>

@@ -130,6 +130,15 @@ agronomic data. Map requests never forward Ribeira bearer tokens to that
 provider. Property boundaries and asset geometries always come from the
 tenant-scoped Ribeira API and retain their own provenance.
 
+Current CARTO raster access requires a key. Set
+`VITE_RIBEIRA_CARTO_BASEMAP_API_KEY` only in protected build/runtime
+configuration when CARTO is the selected provider. Since a browser retrieves
+tiles directly, this is a **public restricted credential**, not a secret: it
+must be domain/referer restricted, quota-limited, rotated through the provider,
+never committed or logged. Without an approved configured provider, Farm360
+uses a neutral background and explicitly says that a basemap is unavailable;
+it never presents CARTO's watermark as a usable customer map.
+
 The property map has a visible boundary fill/outline, automatic fit to the
 persisted boundary, clickable asset markers, a recenter control, zoom controls
 and metric scale. A basemap failure must not be interpreted as the absence of
