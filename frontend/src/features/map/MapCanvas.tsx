@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Geometry } from "geojson";
 import * as maplibregl from "maplibre-gl";
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./MapCanvas.css";
 import { assetMarkerSymbol, boundsForGeometry } from "./mapPresentation";
@@ -22,6 +23,7 @@ interface Props {
 
 const sourceId = "property-aoi";
 const assetSourceId = "property-assets";
+maplibregl.setWorkerUrl(maplibreWorkerUrl);
 const defaultBasemapStyle: maplibregl.StyleSpecification = {
   version: 8,
   sources: {},
