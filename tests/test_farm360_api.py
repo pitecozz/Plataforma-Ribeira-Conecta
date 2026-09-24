@@ -529,6 +529,34 @@ class Farm360ApiTests(unittest.TestCase):
         original_scene = repository.get_scene(self.tenant.id, self.product.scene_id)
         assert original_job is not None
         assert original_scene is not None
+        quality_mask = {
+            "policy_id": "SENTINEL2_SCL_CONSERVATIVE_V1",
+            "version": 1,
+            "scl_asset_key": "SCL_20m",
+            "accepted_classes": [4, 5, 6],
+            "excluded_classes": [0, 1, 2, 3, 7, 8, 9, 10, 11],
+            "optional_policy_dependent_classes": [7],
+            "scl_asset_id": "synthetic_test_scl",
+            "scl_checksum": "synthetic_test_scl_checksum",
+            "valid_before_scl": self.product.statistics.valid_count,
+            "discarded_by_scl": 0,
+            "valid_after_scl": self.product.statistics.valid_count,
+        }
+        baseline_job = replace(
+            original_job,
+            id=new_id(),
+            job_type="QUALITY_MASKED_NDVI",
+            idempotency_key=new_id(),
+            output_product_id=None,
+        )
+        baseline = replace(
+            self.product,
+            id=new_id(),
+            processing_job_id=baseline_job.id,
+            product_type="NDVI_QUALITY_MASKED",
+            output_checksum="synthetic_test_baseline",
+            parameters={"quality_mask": quality_mask},
+        )
         target_scene = replace(
             original_scene,
             id=new_id(),
@@ -543,12 +571,12 @@ class Farm360ApiTests(unittest.TestCase):
             output_product_id=None,
         )
         target = replace(
-            self.product,
+            baseline,
             id=new_id(),
             scene_id=target_scene.id,
             processing_job_id=target_job.id,
             output_checksum="synthetic_test_target",
-            statistics=replace(self.product.statistics, mean=Decimal("0.7")),
+            statistics=replace(baseline.statistics, mean=Decimal("0.7")),
         )
         delta_job = replace(
             original_job,
@@ -558,13 +586,16 @@ class Farm360ApiTests(unittest.TestCase):
             output_product_id=None,
         )
         delta = replace(
-            self.product,
+            baseline,
             id=new_id(),
             processing_job_id=delta_job.id,
             product_type="NDVI_DELTA",
+            algorithm_id="NDVI_TEMPORAL_DELTA",
+            algorithm_version="1.0.0",
+            formula="NDVI_target - NDVI_baseline",
             output_checksum="synthetic_test_delta",
             statistics=replace(
-                self.product.statistics,
+                baseline.statistics,
                 minimum=Decimal("-0.1"),
                 maximum=Decimal("0.2"),
                 mean=Decimal("0.05"),
@@ -572,7 +603,29 @@ class Farm360ApiTests(unittest.TestCase):
                 valid_count=12,
                 coverage_percentage=Decimal("75.0"),
             ),
-            parameters={"alignment": {"status": "IDENTICAL_GRID"}},
+            parameters={
+                "baseline_product_id": baseline.id,
+                "target_product_id": target.id,
+                "baseline_checksum": baseline.output_checksum,
+                "target_checksum": target.output_checksum,
+                "alignment": {
+                    "status": "IDENTICAL_GRID",
+                    "target_grid": "baseline",
+                    "resampling": None,
+                },
+                "quality_mask_policies": {
+                    "baseline": quality_mask,
+                    "target": quality_mask,
+                },
+            },
+        )
+        repository.create_job(baseline_job)
+        repository.create_derived_product(baseline)
+        repository.mark_job(
+            self.tenant.id,
+            baseline_job.id,
+            original_job.status,
+            output_product_id=baseline.id,
         )
         repository.upsert_scene(target_scene)
         repository.create_job(target_job)
@@ -587,7 +640,7 @@ class Farm360ApiTests(unittest.TestCase):
         repository.create_derived_product(delta)
         repository.create_product_dependency(
             DerivedProductDependency(
-                self.tenant.id, delta.id, self.product.id, "BASELINE_NDVI"
+                self.tenant.id, delta.id, baseline.id, "BASELINE_NDVI"
             )
         )
         repository.create_product_dependency(
@@ -603,7 +656,7 @@ class Farm360ApiTests(unittest.TestCase):
         comparison = self.client.get(
             f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
             params={
-                "baseline_product_id": self.product.id,
+                "baseline_product_id": baseline.id,
                 "target_product_id": target.id,
             },
             headers={"Authorization": "Bearer admin"},

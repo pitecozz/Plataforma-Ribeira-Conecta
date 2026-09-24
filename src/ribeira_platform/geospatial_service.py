@@ -1045,6 +1045,58 @@ class GeospatialApplication:
             )
         return NdviResult(completed, product, [evidence.id])
 
+    @staticmethod
+    def _has_valid_quality_mask(product: DerivedProduct) -> bool:
+        quality_mask = product.parameters.get("quality_mask")
+        policy = Sentinel2QualityPolicy()
+        if product.product_type != "NDVI_QUALITY_MASKED" or not isinstance(
+            quality_mask, dict
+        ):
+            return False
+        expected = policy.record()
+        return (
+            all(quality_mask.get(key) == value for key, value in expected.items())
+            and isinstance(quality_mask.get("scl_asset_id"), str)
+            and bool(quality_mask["scl_asset_id"].strip())
+            and isinstance(quality_mask.get("scl_checksum"), str)
+            and bool(quality_mask["scl_checksum"].strip())
+            and isinstance(quality_mask.get("valid_before_scl"), int)
+            and isinstance(quality_mask.get("discarded_by_scl"), int)
+            and isinstance(quality_mask.get("valid_after_scl"), int)
+            and quality_mask["valid_before_scl"]
+            == quality_mask["discarded_by_scl"] + quality_mask["valid_after_scl"]
+            and quality_mask["valid_after_scl"] == product.statistics.valid_count
+        )
+
+    @classmethod
+    def _has_valid_temporal_delta_provenance(
+        cls,
+        delta: DerivedProduct,
+        baseline: DerivedProduct,
+        target: DerivedProduct,
+    ) -> bool:
+        alignment = delta.parameters.get("alignment")
+        policies = delta.parameters.get("quality_mask_policies")
+        return (
+            delta.product_type == "NDVI_DELTA"
+            and delta.algorithm_id == TemporalDeltaProcessor.algorithm_id
+            and delta.algorithm_version == TemporalDeltaProcessor.algorithm_version
+            and delta.formula == TemporalDeltaProcessor.formula
+            and bool(delta.output_reference)
+            and bool(delta.output_checksum)
+            and isinstance(alignment, dict)
+            and alignment.get("status") in {"IDENTICAL_GRID", "REPROJECTED_TO_BASELINE"}
+            and alignment.get("target_grid") == "baseline"
+            and isinstance(policies, list)
+            and policies
+            == [
+                baseline.parameters.get("quality_mask"),
+                target.parameters.get("quality_mask"),
+            ]
+            and cls._has_valid_quality_mask(baseline)
+            and cls._has_valid_quality_mask(target)
+        )
+
     def create_temporal_delta_job(
         self,
         tenant_id: str,
@@ -1067,11 +1119,11 @@ class GeospatialApplication:
             )
         if (
             baseline.id == target.id
-            or baseline.product_type != "NDVI_QUALITY_MASKED"
-            or target.product_type != "NDVI_QUALITY_MASKED"
+            or not self._has_valid_quality_mask(baseline)
+            or not self._has_valid_quality_mask(target)
         ):
             raise ValueError(
-                "temporal delta requires two different quality-masked NDVI products"
+                "temporal delta requires two different provenance-valid quality-masked NDVI products"
             )
         params = {
             "baseline_product_id": baseline.id,

@@ -19,7 +19,11 @@ asset resampled with nearest neighbour onto the RED 10 m AOI grid.
 Bare soil and water remain accepted: their NDVI is mathematically meaningful.
 SCL class, local checksum, accepted/excluded class sets, policy version and
 discarded pixels are persisted in the quality-masked product parameters.
-Scene `eo:cloud_cover` remains scene metadata; it is not AOI valid coverage.
+Temporal-delta creation and read paths fail closed unless both upstream products
+retain that complete, internally consistent mask record; legacy or tampered
+deltas fall back to the explicitly aggregate comparison rather than being
+presented as pixel-comparable evidence. Scene `eo:cloud_cover` remains scene
+metadata; it is not AOI valid coverage.
 
 ## Scientific processing
 
