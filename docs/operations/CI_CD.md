@@ -15,3 +15,14 @@ publicada.
 Ainda não são gates desta fase: image scanning, IaC scanning, DAST, pentest,
 test deploy, canary e rollback de release. Esses itens são risco residual e não
 são simulados por um job que apenas imprime uma mensagem.
+
+## Promoção controlada do frontend
+
+Push de código não é implantação. A versão pública conhecida como boa continua
+ativa até que uma candidata seja validada com a configuração protegida de
+produção/OIDC, testes relevantes, build de produção e smoke isolado. Use
+`ops/runtime/validate-production-frontend-candidate.sh` para gerar e testar
+uma candidata fora de `frontend/dist`. Somente uma candidata aprovada pode ser
+promovida com `ops/runtime/promote-frontend-candidate.sh`; esse procedimento
+mantém o artefato anterior e o restaura se a validação posterior à promoção
+falhar. Não execute esses scripts para cada commit de desenvolvimento.

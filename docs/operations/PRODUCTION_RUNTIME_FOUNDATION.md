@@ -1,9 +1,9 @@
 # Ribeira private production runtime foundation
 
-This is a private, loopback-only runtime. The authorized pilot exception is a
-temporary Cloudflare Quick Tunnel exposing its dynamically assigned HTTPS
-origin to the static ingress at `127.0.0.1:5173`. The current origin must be
-explicitly configured at build/runtime; it does not authorize direct public
+This is a private, loopback-only runtime. The authorized public pilot ingress
+is the named Cloudflare Tunnel for `https://app.ribeiraconecta.com.br`, which
+reaches the static ingress at `127.0.0.1:5173`. The origin is explicit
+protected build/runtime configuration; it does not authorize direct public
 exposure, changes to SSH/UFW, PostgreSQL publishing, or a public worker.
 
 ## Architecture decision
@@ -79,51 +79,59 @@ credential data. Liveness means the API process is running. Readiness requires P
 not an API liveness failure. `runtime_health` reports `degraded` for unavailable
 private dependencies without serializing credentials.
 
-## Frontend
+## Frontend release candidates
 
-Build static assets before starting the frontend service:
+The static service serves only `frontend/dist` on `127.0.0.1:5173`; it never
+runs Vite. Source commits must not overwrite that live directory. The
+protected OIDC configuration is kept outside Git in mode-`600` files:
 
-```bash
-cd frontend
-npm run build
-```
+- `~/.config/ribeira/runtime.env` for server runtime configuration;
+- `~/.config/ribeira/oidc-validation.env` for protected OIDC resource-server
+  and SPA configuration;
+- `~/.config/ribeira/pilot-oidc-overrides.env` for public SPA build
+  configuration.
 
-`ribeira-frontend.service` serves `frontend/dist` on `127.0.0.1:5173`; it never
-runs Vite. It is the only Cloudflare Tunnel origin for the pilot; its `/api/*`
-proxy removes `/api` and forwards to the private API at `127.0.0.1:8080`.
-Build the pilot bundle from a protected environment based on
-`ops/runtime/pilot-frontend.env.example`; do not put a development token in the
-bundle. A real interactive OIDC/session flow remains required.
+Together, the latter two contain public browser configuration (origin, tenant
+selection, OIDC endpoints and SPA client ID), not a browser secret. They are
+protected to avoid committing customer/runtime identifiers and must be loaded
+before Vite builds. `ops/runtime/pilot-frontend.env.example` documents
+placeholder names only.
 
-## Cloudflare Quick Tunnel (current pilot only)
-
-Install `cloudflared` from Cloudflare's supported package source. Start the
-temporary pilot tunnel without a token, credential file, named-tunnel service
-or DNS configuration:
+Build and smoke-test a candidate outside the live directory:
 
 ```bash
-cloudflared tunnel --url http://127.0.0.1:5173
+ops/runtime/validate-production-frontend-candidate.sh
 ```
 
-Record the emitted `https://…trycloudflare.com` origin only in protected
-operator configuration. Set it exactly as `VITE_RIBEIRA_PUBLIC_ORIGIN` while
-building the frontend and as `RIBEIRA_CORS_ORIGINS` while provisioning the API.
-Register that same exact origin in Auth0. Do not add wildcard callback, logout
-or web-origin entries. A Quick Tunnel restart can produce a new origin, so it
-is `PILOT_TEST_ONLY`, not a durable production ingress.
+The validator fails closed when required configuration is absent, builds in an
+isolated temporary directory, checks that the MapLibre worker was emitted, and
+smoke-tests the candidate on loopback. It does not restart services or touch
+`frontend/dist`. Run relevant source tests before it.
 
-The tunnel origin remains only `127.0.0.1:5173`; the static ingress proxies
-only `/api/*` to `127.0.0.1:8080`. PostgreSQL, metrics, debug routes and
-development services have no tunnel route.
+Only after a candidate passes and a deliberate release window is chosen, an
+operator may promote its reported candidate directory:
 
-## Future custom-domain tunnel
+```bash
+ops/runtime/promote-frontend-candidate.sh /absolute/candidate/dist
+```
 
-`https://app.ribeiraconecta.com.br` is `FUTURE_CUSTOM_DOMAIN`, deferred until
-a domain can be purchased. At that time use the versioned named-tunnel
-templates `ops/runtime/cloudflared-pilot.yml.example` and
-`ops/systemd/user/ribeira-cloudflared-pilot.service.example`, substituting
-operator-held tunnel values outside Git. Update the public-origin, DNS, OIDC
-and CORS configuration together; no application-ingress rewrite is required.
+Promotion retains the former `frontend/dist`, restarts only the private static
+frontend service, checks private health and the configured public origin, then
+removes the backup only after success. On a failed post-promotion check it
+restores the prior artifact and restarts the static service again. It does not
+restart Cloudflare, API, PostgreSQL or workers. The static ingress is the only
+Cloudflare Tunnel origin; its `/api/*` proxy forwards only to the private API at
+`127.0.0.1:8080`. A real interactive OIDC/session flow remains required before
+calling a candidate customer-ready.
+
+## Named Cloudflare Tunnel
+
+The public hostname is `https://app.ribeiraconecta.com.br` through the healthy
+named Cloudflare Tunnel. Its only origin remains `http://127.0.0.1:5173`; the
+static ingress proxies only `/api/*` to `127.0.0.1:8080`. PostgreSQL, metrics,
+debug routes and development services have no tunnel route. Do not restart or
+recreate Cloudflare as part of frontend source delivery or promotion unless the
+tunnel itself is unhealthy.
 
 ## Object storage
 

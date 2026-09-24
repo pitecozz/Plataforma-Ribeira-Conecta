@@ -51,6 +51,12 @@ participate in that chain or explicitly expose its limitation.
 - Before commit: run relevant tests, diff review, formatting, lint/type checks,
   and a secret check when available. Never force-push, rewrite published
   history, or push to `main`.
+- Source delivery and production promotion are separate operations. Commit and
+  push coherent source increments frequently, but promote a frontend release
+  only after protected build configuration is present, relevant tests and the
+  production build pass, and an isolated candidate smoke check succeeds. If a
+  candidate check or post-promotion health check fails, retain or restore the
+  known-good public release; never knowingly replace it with a failing build.
 - A major capability is not complete until its purpose, business rules,
   provenance/data sources, security and operational assumptions, limitations,
   user workflow, and tests are documented or explicitly recorded as

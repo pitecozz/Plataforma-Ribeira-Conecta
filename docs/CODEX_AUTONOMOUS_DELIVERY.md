@@ -35,6 +35,20 @@ their kind. Every major increment updates those references or records bounded
 documentation debt. Ribeira Academy is planned documentation/training content,
 not a separate product at this stage.
 
+## Production promotion policy
+
+Source delivery is deliberately independent from public release promotion.
+Coherent increments are committed and pushed after their relevant verification,
+but the running customer release is not rebuilt or restarted for every source
+commit. A frontend candidate must be built outside `frontend/dist` from the
+protected production/OIDC configuration, pass configuration preflight,
+relevant tests, a production build and an isolated candidate smoke check before
+an operator promotes it. Promotion retains the previous static artifact and
+automatically restores it if local or public health checks fail. A failed
+candidate is recorded as delivery evidence and never knowingly replaces the
+known-good public release. See
+[`PRODUCTION_RUNTIME_FOUNDATION.md`](operations/PRODUCTION_RUNTIME_FOUNDATION.md#frontend-release-candidates).
+
 Commercial packaging follows an Evidence-First **hybrid** hypothesis:
 onboarding/initial study + recurring platform subscription + optional
 consulting, field services, hardware and third-party costs. It is not a final
