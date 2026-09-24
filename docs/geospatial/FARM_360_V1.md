@@ -159,12 +159,30 @@ resolution, horizontal CRS, elevation value/vertical unit, processing version an
 or stored. Derived terrain is neither a field survey nor legal boundary,
 drainage, soil, coverage or agronomic conclusion.
 
+## Field/talhão context foundation
+
+A user with `property:write` may register a field/talhão only against a persisted
+tenant property boundary. The request requires a WGS84 Polygon or MultiPolygon,
+a factual source reference and its observation time. The submitted geometry must
+be fully contained by the current property boundary; Ribeira rejects an outside
+or boundary-less field instead of clipping or inferring one.
+
+The initial geometry is stored as immutable version 1 with its checksum,
+classification, source/time, tenant-local `FIELD_REGISTRATION` evidence and
+`FIELD_REGISTERED` audit event. PostgreSQL migrations 039/040 add forced RLS,
+composite tenant/property foreign keys, a PostGIS containment trigger and immutable versions. This
+is operational context only: it is not legal title, survey, crop declaration,
+soil observation, management zone, agronomic recommendation or rule result.
+A later field-boundary update and field/zone/crop rule applicability need their
+own explicit versioned workflow; registering a field does not activate a rule.
+
 ## Read endpoints
 
 - `GET /v1/tenants/{tenant_id}/properties`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/geospatial`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/assets`
+- `GET /v1/tenants/{tenant_id}/properties/{property_id}/fields`
 - `POST /v1/tenants/{tenant_id}/assets/{asset_id}/evaluate` (requires `asset:read` and `decision:read`; writes an immutable decision)
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/scenes`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/derived-products`
@@ -179,6 +197,7 @@ Write operations use the same tenant authorization and RLS context:
 - `POST /v1/tenants/{tenant_id}/properties/{property_id}/boundary-imports`
 - `POST /v1/tenants/{tenant_id}/properties/{property_id}/satellite-searches`
 - `POST /v1/tenants/{tenant_id}/properties/{property_id}/ndvi-jobs`
+- `POST /v1/tenants/{tenant_id}/properties/{property_id}/fields`
 - `POST /v1/tenants/{tenant_id}/processing-jobs/{job_id}/run`
 
 All need the established bearer authentication and tenant authorization. The

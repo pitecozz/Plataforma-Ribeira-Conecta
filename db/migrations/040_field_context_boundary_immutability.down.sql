@@ -1,0 +1,2 @@
+DROP TRIGGER field_context_boundary_version_immutable ON field_context_boundary_version;
+DROP FUNCTION field_context_boundary_version_immutable();

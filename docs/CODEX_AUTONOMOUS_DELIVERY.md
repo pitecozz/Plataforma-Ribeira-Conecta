@@ -187,9 +187,9 @@ not hard-code a one-off municipal conclusion.
   Equally specific active rules return an explicit `CONFLICTING` decision rather
   than selecting by insertion order/version. The decision and audit event
   snapshot selected scope and linked customer context. PostgreSQL migration 038
-  adds composite tenant FKs and a decision-context guard. Field/talhão and
-  broader inheritance remain pending because a versioned non-legal field model
-  is still a dependency. Farm360 exposes outcome capture only to `action:write`
+  adds composite tenant FKs and a decision-context guard. Migrations 039/040 now
+  supplies a source-backed, versioned non-legal field/talhão foundation; field,
+  zone and crop inheritance remain follow-on scoped-rule work. Farm360 exposes outcome capture only to `action:write`
   users; the user supplies an explicit result, classification, timestamp and
   optional tenant-local evidence identifiers, while the decision and
   recommendation remain immutable.

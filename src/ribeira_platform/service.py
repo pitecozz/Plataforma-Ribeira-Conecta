@@ -31,6 +31,7 @@ from .boundary_imports import (
     parse_boundary_import,
     validate_import_filename,
 )
+from .field_context import FieldContextApplication
 from .sources import HttpJsonSourceAdapter, SourceAdapter
 from .object_storage import LocalObjectStorage
 from .iam import AuthorizationError
@@ -63,6 +64,7 @@ class RibeiraApplication:
         self.default_adapter = HttpJsonSourceAdapter()
         self.decisions = DecisionEngine(self.store)
         self.evidence = EvidenceEngine(self.store)
+        self.fields = FieldContextApplication(self.store)
         self.business = BusinessApplication(self.store)
         registry = default_copernicus_registry()
         self.geospatial_provider = geospatial_provider or CopernicusStacAdapter(

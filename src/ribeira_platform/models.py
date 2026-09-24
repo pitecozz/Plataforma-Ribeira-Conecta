@@ -45,6 +45,25 @@ class Property:
 
 
 @dataclass(frozen=True)
+class FieldContext:
+    """A source-backed, non-legal field/talhão geometry within one property."""
+
+    id: str
+    tenant_id: str
+    property_id: str
+    name: str
+    status: str
+    geometry_geojson: dict[str, Any]
+    geometry_crs: str
+    boundary_version: int
+    boundary_checksum: str
+    source_reference: str
+    observed_at: str
+    classification: DataClassification
+    created_at: str = field(default_factory=now_utc)
+
+
+@dataclass(frozen=True)
 class BoundaryImport:
     id: str
     tenant_id: str

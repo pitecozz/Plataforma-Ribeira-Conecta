@@ -123,6 +123,27 @@ class PropertyRequest(BaseModel):
     classification: DataClassification = DataClassification.MANUAL_CONFIRMED
 
 
+class FieldContextRequest(BaseModel):
+    """A non-legal field/talhão needs its own source-backed geometry."""
+
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=200)
+    status: str = Field(default="ACTIVE", min_length=1, max_length=40)
+    geometry_geojson: dict[str, Any]
+    geometry_crs: str = Field(min_length=1, max_length=32)
+    source_reference: str = Field(min_length=1, max_length=2000)
+    observed_at: str
+    classification: DataClassification = DataClassification.MANUAL_CONFIRMED
+
+    @field_validator("source_reference")
+    @classmethod
+    def source_reference_must_not_be_blank(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("field source_reference must not be blank")
+        return normalized
+
+
 class BoundaryUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     geometry_geojson: dict[str, Any]
@@ -915,6 +936,13 @@ def create_app(
         payload["evidence_id"] = evidence.id if evidence is not None else None
         return payload
 
+    def safe_field_context(item: Any) -> dict[str, Any]:
+        """Return stored field context and evidence, never an agronomic interpretation."""
+        payload = to_jsonable(item)
+        evidence = application.store.evidence_for_reference(item.tenant_id, item.id)
+        payload["evidence_id"] = evidence.id if evidence is not None else None
+        return payload
+
     def safe_product(item: Any) -> dict[str, Any]:
         stats = item.statistics
         return {
@@ -1294,6 +1322,49 @@ def create_app(
             "geometry_crs": item.geometry_crs,
             "data_status": data_status(products, scenes),
         }
+
+    @app.get(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/fields",
+        tags=["farm-360", "fields"],
+    )
+    async def list_property_fields(
+        tenant_id: str, property_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "property:read", tenant_id)
+        items = application.fields.list_for_property(
+            tenant_id, property_id, platform_admin=ctx.is_platform_admin
+        )
+        return {
+            "property_id": property_id,
+            "items": [safe_field_context(item) for item in items],
+        }
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/fields",
+        status_code=201,
+        tags=["farm-360", "fields"],
+    )
+    async def create_property_field(
+        tenant_id: str,
+        property_id: str,
+        payload: FieldContextRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "property:write", tenant_id)
+        item = application.fields.create(
+            tenant_id,
+            property_id=property_id,
+            name=payload.name,
+            status=payload.status,
+            geometry_geojson=payload.geometry_geojson,
+            geometry_crs=payload.geometry_crs,
+            source_reference=payload.source_reference,
+            observed_at=payload.observed_at,
+            classification=payload.classification,
+            actor=ctx.subject,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return safe_field_context(item)
 
     @app.get(
         "/v1/tenants/{tenant_id}/properties/{property_id}/assets",
