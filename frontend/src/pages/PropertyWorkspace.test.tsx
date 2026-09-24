@@ -54,4 +54,17 @@ describe("PropertyWorkspace portfolio flow", () => {
     render(<PropertyWorkspace api={unavailable} apiBaseUrl="http://api" tenantId="tenant" token="test" />);
     expect(await screen.findByRole("alert")).toHaveTextContent("SOURCE_UNAVAILABLE");
   });
+  it("filters only the loaded tenant portfolio by normalized registered name", async () => {
+    const api = apiFor([property("one", "Fazenda São João"), property("two", "Sítio Lago")]);
+    render(<PropertyWorkspace api={api} apiBaseUrl="http://api" tenantId="tenant" token="test" />);
+    expect(await screen.findByText("Fazenda São João")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar pelo nome cadastrado" }), { target: { value: "sao joao" } });
+    expect(screen.getByText("Fazenda São João")).toBeInTheDocument();
+    expect(screen.queryByText("Sítio Lago")).not.toBeInTheDocument();
+    expect(screen.getByText("1 de 2 propriedades exibidas.")).toBeInTheDocument();
+    expect(api.portfolio).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar pelo nome cadastrado" }), { target: { value: "inexistente" } });
+    expect(screen.getByText("Nenhuma propriedade corresponde ao nome informado.")).toBeInTheDocument();
+  });
+
 });

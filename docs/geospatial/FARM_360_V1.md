@@ -74,6 +74,16 @@ positions where their actual geometries permit it.
 
 The map also accepts an explicit coordinate pair for local navigation while drawing or inspecting a property. It uses no geocoder or external provider: a temporary marker and viewport change are purely a screen interaction. The lookup is not persisted, does not change a boundary or asset coordinate, and is not evidence of an address, ownership, coverage or condition.
 
+## Portfolio search
+
+The Maps portfolio can filter the properties already returned by the authenticated,
+tenant-scoped portfolio request using their registered names. Matching is local to
+that response, case- and accent-insensitive, and narrows the list and portfolio
+map only; it performs no address lookup, geocoding, provider request, boundary
+mutation or claim about a property beyond its persisted record. A selected Farm360
+workspace remains available until the property itself is absent from a refreshed
+authorized portfolio.
+
 ## Terrain foundation
 
 `terrain.py` provides the bounded, provider-neutral calculation core for an
