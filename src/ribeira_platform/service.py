@@ -16,6 +16,7 @@ from .geospatial_service import GeospatialApplication
 from .property_refresh import PropertyRefreshService
 from .models import (
     BoundaryImport,
+    DecisionResult,
     FetchResult,
     Property,
     PilotFeedback,
@@ -75,6 +76,68 @@ class RibeiraApplication:
             self.store, self.geospatial_provider, self.object_storage
         )
         self.property_refresh = PropertyRefreshService(self)
+
+    def evaluate_temporal_delta(
+        self,
+        tenant_id: str,
+        property_id: str,
+        product_id: str,
+        actor: str = "system",
+        platform_admin: bool = False,
+    ) -> DecisionResult:
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            property_item = self.store.get_property(tenant_id, property_id)
+            if property_item is None:
+                raise LookupError("property not found in tenant")
+            product = self.geospatial.repository.get_derived_product(
+                tenant_id, product_id
+            )
+            if product is None:
+                raise LookupError("derived product not found in tenant")
+            if product.property_id != property_id:
+                raise ValueError("derived product does not belong to property")
+            if product.product_type != "NDVI_DELTA":
+                raise ValueError("derived product must be NDVI_DELTA")
+            dependencies = self.geospatial.repository.list_product_dependencies(
+                tenant_id, product.id
+            )
+            dependency_ids = {
+                dependency.relationship: dependency.upstream_product_id
+                for dependency in dependencies
+            }
+            baseline = self.geospatial.repository.get_derived_product(
+                tenant_id, dependency_ids.get("BASELINE_NDVI", "")
+            )
+            target = self.geospatial.repository.get_derived_product(
+                tenant_id, dependency_ids.get("TARGET_NDVI", "")
+            )
+            provenance_valid = (
+                baseline is not None
+                and target is not None
+                and baseline.property_id == property_id
+                and target.property_id == property_id
+                and self.geospatial._has_valid_temporal_delta_provenance(
+                    product, baseline, target
+                )
+            )
+            evidence = self.store.evidence_for_reference(tenant_id, product.id)
+            provenance_valid = (
+                provenance_valid
+                and evidence is not None
+                and evidence.evidence_type == "DERIVED_PRODUCT"
+                and evidence.classification == DataClassification.DERIVED
+            )
+            return self.decisions.evaluate_temporal_delta(
+                tenant_id,
+                property_item,
+                product.id,
+                float(product.statistics.mean)
+                if product.statistics.mean is not None
+                else None,
+                evidence.id if evidence is not None else None,
+                provenance_valid,
+                actor,
+            )
 
     def create_tenant(
         self, name: str, *, tenant_id: str | None = None, actor: str = "system"

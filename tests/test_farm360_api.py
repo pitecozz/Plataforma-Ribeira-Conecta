@@ -17,6 +17,7 @@ from shapely.geometry import Polygon, mapping
 
 from ribeira_platform.api import Settings, create_app
 from ribeira_platform.business import Asset, CommercialClassification
+from ribeira_platform.epistemology import DataClassification, RuleAuthority
 from ribeira_platform.geospatial import (
     DerivedProductDependency,
     ProviderSearchResult,
@@ -26,7 +27,7 @@ from ribeira_platform.geospatial import (
 from ribeira_platform.geospatial_service import GeospatialApplication
 from ribeira_platform.iam import AuthContext, DevelopmentIdentityProvider
 from ribeira_platform.object_storage import LocalObjectStorage
-from ribeira_platform.models import new_id
+from ribeira_platform.models import Evidence, RuleDefinition, new_id
 from ribeira_platform.service import RibeiraApplication
 from ribeira_platform.storage import SQLiteStore
 
@@ -650,6 +651,18 @@ class Farm360ApiTests(unittest.TestCase):
             original_job.status,
             output_product_id=delta.id,
         )
+        evidence = Evidence(
+            new_id(),
+            self.tenant.id,
+            "DERIVED_PRODUCT",
+            delta.id,
+            DataClassification.DERIVED,
+            None,
+            None,
+            "NDVI_TEMPORAL_DELTA 1.0.0: NDVI_target - NDVI_baseline",
+            delta.limitations,
+        )
+        repository.create_evidence(evidence)
 
         comparison = self.client.get(
             f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
@@ -665,12 +678,95 @@ class Farm360ApiTests(unittest.TestCase):
         )
         self.assertEqual(comparison.json()["comparison"]["delta_product_id"], delta.id)
         self.assertEqual(comparison.json()["comparison"]["comparable_valid_pixels"], 12)
+
+        self.application.create_rule(
+            RuleDefinition(
+                new_id(),
+                self.tenant.id,
+                3,
+                "Synthetic NDVI delta inspection threshold",
+                RuleAuthority.REGRA_AGRONOMICA,
+                "ndvi_temporal_delta_mean",
+                ">=",
+                0.04,
+                "index_delta",
+                "MEDIUM",
+                "ACTIVE",
+                "synthetic-reviewer",
+                "2026-01-01T00:00:00+00:00",
+                scope_type="PROPERTY",
+                scope_property_id=self.property.id,
+            )
+        )
+        evaluation_path = (
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}"
+            f"/temporal-deltas/{delta.id}/evaluate"
+        )
+        evaluation = self.client.post(
+            evaluation_path, headers={"Authorization": "Bearer admin"}
+        )
+        self.assertEqual(evaluation.status_code, 200)
+        evaluated = evaluation.json()
+        self.assertEqual(evaluated["decision"]["status"], "ACTIONABLE")
+        self.assertEqual(evaluated["decision"]["evidence_ids"], [evidence.id])
+        self.assertEqual(evaluated["decision"]["rule_version"], 3)
+        self.assertEqual(evaluated["decision"]["selected_rule_scope_type"], "PROPERTY")
+        self.assertFalse(evaluated["decision"]["recommended_action"]["automated"])
+        self.assertEqual(
+            evaluated["action"]["action_type"],
+            "targeted field inspection recommendation",
+        )
+        self.assertIsNotNone(evaluated["alert"])
+        audit = self.store.connection.execute(
+            "SELECT * FROM audit_log WHERE tenant_id=? AND entity_id=?",
+            (self.tenant.id, evaluated["decision"]["id"]),
+        ).fetchone()
+        self.assertIsNotNone(audit)
+
+        other_property = self.application.create_property(
+            self.tenant.id, "OTHER_SYNTHETIC_AOI", None, None
+        )
+        wrong_property = self.client.post(
+            f"/v1/tenants/{self.tenant.id}/properties/{other_property.id}"
+            f"/temporal-deltas/{delta.id}/evaluate",
+            headers={"Authorization": "Bearer admin"},
+        )
+        self.assertEqual(wrong_property.status_code, 422)
+        cross_tenant = self.tenant_client.post(
+            evaluation_path, headers={"Authorization": "Bearer tenant-b"}
+        )
+        self.assertEqual(cross_tenant.status_code, 403)
+        wrong_type = self.client.post(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}"
+            f"/temporal-deltas/{baseline.id}/evaluate",
+            headers={"Authorization": "Bearer admin"},
+        )
+        self.assertEqual(wrong_type.status_code, 422)
+
         tile = self.client.get(
             f"/v1/tenants/{self.tenant.id}/derived-products/{delta.id}/tiles/0/0/0",
             headers={"Authorization": "Bearer admin"},
         )
         self.assertEqual(tile.status_code, 200)
         self.assertEqual(tile.headers["content-type"], "image/png")
+
+        no_trigger_rule = self.store.connection.execute(
+            "SELECT id FROM rules WHERE tenant_id=? AND metric=?",
+            (self.tenant.id, "ndvi_temporal_delta_mean"),
+        ).fetchone()
+        assert no_trigger_rule is not None
+        self.store.connection.execute(
+            "UPDATE rules SET threshold=? WHERE tenant_id=? AND id=?",
+            (0.06, self.tenant.id, no_trigger_rule["id"]),
+        )
+        self.store.connection.commit()
+        no_trigger = self.client.post(
+            evaluation_path, headers={"Authorization": "Bearer admin"}
+        )
+        self.assertEqual(no_trigger.status_code, 200)
+        self.assertEqual(no_trigger.json()["decision"]["status"], "NO_TRIGGER")
+        self.assertIsNone(no_trigger.json()["alert"])
+        self.assertIsNone(no_trigger.json()["action"])
 
         malformed_parameters = dict(delta.parameters)
         malformed_parameters["alignment"] = {"status": "IDENTICAL_GRID"}
@@ -682,6 +778,16 @@ class Farm360ApiTests(unittest.TestCase):
                 delta.id,
             ),
         )
+        self.application.store.connection.commit()
+        invalid_provenance = self.client.post(
+            evaluation_path, headers={"Authorization": "Bearer admin"}
+        )
+        self.assertEqual(invalid_provenance.status_code, 200)
+        self.assertEqual(
+            invalid_provenance.json()["decision"]["status"], "INCONCLUSIVE"
+        )
+        self.assertIsNone(invalid_provenance.json()["alert"])
+        self.assertIsNone(invalid_provenance.json()["action"])
         malformed = self.client.get(
             f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
             params={

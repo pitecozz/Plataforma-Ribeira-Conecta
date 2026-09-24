@@ -45,6 +45,25 @@ class VerticalSliceTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.store.close()
 
+    def test_temporal_delta_without_rule_is_inconclusive_without_action(self) -> None:
+        result = self.app.decisions.evaluate_temporal_delta(
+            self.tenant.id,
+            self.property,
+            "synthetic-derived-product",
+            -0.12,
+            "synthetic-derived-evidence",
+            True,
+            "operator",
+        )
+
+        self.assertEqual(result.decision.status, DecisionStatus.INCONCLUSIVE)
+        self.assertEqual(
+            result.decision.missing_data,
+            ["active_rule:ndvi_temporal_delta_mean"],
+        )
+        self.assertIsNone(result.alert)
+        self.assertIsNone(result.action)
+
     def activate_rule(
         self, metric: str = "soil_moisture", threshold: float = 30.0
     ) -> None:

@@ -68,6 +68,205 @@ class DecisionEngine:
             return value == rule.threshold
         raise ValueError(f"unsupported operator: {rule.operator}")
 
+    def evaluate_temporal_delta(
+        self,
+        tenant_id: str,
+        property: Property,
+        product_id: str,
+        mean_delta: float | None,
+        evidence_id: str | None,
+        provenance_valid: bool,
+        actor: str = "system",
+    ) -> DecisionResult:
+        metric = "ndvi_temporal_delta_mean"
+        evidence_ids = [evidence_id] if evidence_id is not None else []
+        if not provenance_valid or mean_delta is None:
+            decision = Decision(
+                id=new_id(),
+                tenant_id=tenant_id,
+                property_id=property.id,
+                conclusion="O delta temporal de NDVI não possui proveniência válida para avaliação.",
+                classification=DataClassification.UNKNOWN,
+                status=DecisionStatus.INCONCLUSIVE,
+                evidence_ids=evidence_ids,
+                rule_id=None,
+                rule_version=None,
+                model_id=None,
+                model_version=None,
+                confidence=None,
+                limitations=[
+                    "delta temporal sem proveniência completa não pode acionar recomendação operacional"
+                ],
+                missing_data=["valid_ndvi_temporal_delta_provenance"],
+                conflicts=[],
+                recommended_action=None,
+            )
+            decision = self.store.create_decision(decision)
+            self._audit(
+                tenant_id, actor, decision, "derived_product_provenance_invalid"
+            )
+            return DecisionResult(decision, None, None)
+
+        applicable_rules = self.store.active_rules(
+            tenant_id, metric, property.id, None, None
+        )
+        if not applicable_rules:
+            decision = Decision(
+                id=new_id(),
+                tenant_id=tenant_id,
+                property_id=property.id,
+                conclusion="Não há regra ativa versionada para avaliar a média do delta temporal de NDVI.",
+                classification=DataClassification.UNKNOWN,
+                status=DecisionStatus.INCONCLUSIVE,
+                evidence_ids=evidence_ids,
+                rule_id=None,
+                rule_version=None,
+                model_id=None,
+                model_version=None,
+                confidence=None,
+                limitations=[
+                    "a ausência de regra não autoriza aplicar um limiar padrão"
+                ],
+                missing_data=[f"active_rule:{metric}"],
+                conflicts=[],
+                recommended_action=None,
+            )
+            decision = self.store.create_decision(decision)
+            self._audit(tenant_id, actor, decision, "rule_missing")
+            return DecisionResult(decision, None, None)
+
+        priority = {"PROPERTY": 0, "CUSTOMER": 1, "TENANT": 2}
+        supported_rules = [
+            rule for rule in applicable_rules if rule.scope_type in priority
+        ]
+        if not supported_rules:
+            raise ValueError(
+                "temporal delta evaluation does not support asset or field scope"
+            )
+        selected_priority = min(priority[rule.scope_type] for rule in supported_rules)
+        selected_rules = [
+            rule
+            for rule in supported_rules
+            if priority[rule.scope_type] == selected_priority
+        ]
+        if len(selected_rules) != 1:
+            scope_type = selected_rules[0].scope_type
+            decision = Decision(
+                id=new_id(),
+                tenant_id=tenant_id,
+                property_id=property.id,
+                conclusion="Conclusão inconclusiva porque há regras ativas igualmente específicas.",
+                classification=DataClassification.CONFLICTING,
+                status=DecisionStatus.CONFLICTING,
+                evidence_ids=evidence_ids,
+                rule_id=None,
+                rule_version=None,
+                model_id=None,
+                model_version=None,
+                confidence=None,
+                limitations=[
+                    "a plataforma não escolhe uma regra por ordem de inserção ou versão quando a aplicabilidade é igualmente específica"
+                ],
+                missing_data=[],
+                conflicts=[
+                    {
+                        "type": "equally_specific_active_rules",
+                        "scope_type": scope_type,
+                        "rule_versions": [
+                            {"rule_id": rule.id, "version": rule.version}
+                            for rule in selected_rules
+                        ],
+                    }
+                ],
+                recommended_action=None,
+                selected_rule_scope_type=scope_type,
+            )
+            decision = self.store.create_decision(decision)
+            self._audit(tenant_id, actor, decision, "rule_ambiguity")
+            return DecisionResult(decision, None, None)
+
+        rule = selected_rules[0]
+        selected_customer_id = (
+            rule.scope_customer_id if rule.scope_type == "CUSTOMER" else None
+        )
+        triggered = self._matches(rule, mean_delta)
+        recommendation = (
+            {
+                "type": "targeted_field_inspection",
+                "automated": False,
+                "derived_product_id": product_id,
+                "metric": metric,
+                "responsible_user_id": None,
+                "deadline": None,
+            }
+            if triggered
+            else None
+        )
+        decision = Decision(
+            id=new_id(),
+            tenant_id=tenant_id,
+            property_id=property.id,
+            conclusion=(
+                "A média do delta temporal de NDVI atingiu o limiar configurado; recomenda-se inspeção de campo direcionada, sem inferir diagnóstico."
+                if triggered
+                else "A média do delta temporal de NDVI não atingiu o limiar configurado."
+            ),
+            classification=DataClassification.DERIVED,
+            status=DecisionStatus.ACTIONABLE
+            if triggered
+            else DecisionStatus.NO_TRIGGER,
+            evidence_ids=evidence_ids,
+            rule_id=rule.id,
+            rule_version=rule.version,
+            model_id=None,
+            model_version=None,
+            confidence=None,
+            limitations=[
+                "o delta de NDVI não identifica causa nem confirma diagnóstico agronômico"
+            ],
+            missing_data=[],
+            conflicts=[],
+            recommended_action=recommendation,
+            selected_rule_scope_type=rule.scope_type,
+            subject_customer_id=selected_customer_id,
+        )
+        decision = self.store.create_decision(decision)
+        alert = None
+        action = None
+        if triggered:
+            alert = self.store.create_alert(
+                Alert(
+                    new_id(),
+                    tenant_id,
+                    property.id,
+                    "RULE_TRIGGERED",
+                    rule.severity,
+                    "OPEN",
+                    "Delta temporal de NDVI requer inspeção de campo direcionada",
+                    decision.id,
+                )
+            )
+            action = self.store.create_action(
+                Action(
+                    new_id(),
+                    tenant_id,
+                    "targeted field inspection recommendation",
+                    "OPEN",
+                    None,
+                    None,
+                    decision.id,
+                )
+            )
+        self._audit(
+            tenant_id,
+            actor,
+            decision,
+            "rule_triggered" if triggered else "rule_not_triggered",
+            alert,
+            action,
+        )
+        return DecisionResult(decision, alert, action)
+
     def evaluate(
         self,
         tenant_id: str,

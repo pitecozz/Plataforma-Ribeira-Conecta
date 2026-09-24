@@ -22,8 +22,13 @@ discarded pixels are persisted in the quality-masked product parameters.
 Temporal-delta creation and read paths fail closed unless both upstream products
 retain that complete, internally consistent mask record; legacy or tampered
 deltas fall back to the explicitly aggregate comparison rather than being
-presented as pixel-comparable evidence. Scene `eo:cloud_cover` remains scene
-metadata; it is not AOI valid coverage.
+presented as pixel-comparable evidence. The authenticated temporal-delta
+evaluation uses only the persisted mean as `ndvi_temporal_delta_mean`, preserves
+the derived-product evidence and exact selected rule version/scope, and creates
+an alert plus a non-automated targeted field-inspection recommendation only when
+the rule triggers. Invalid provenance or no applicable rule is `INCONCLUSIVE`;
+a valid non-trigger is `NO_TRIGGER`. The delta never constitutes a diagnosis.
+Scene `eo:cloud_cover` remains scene metadata; it is not AOI valid coverage.
 
 ## Scientific processing
 
