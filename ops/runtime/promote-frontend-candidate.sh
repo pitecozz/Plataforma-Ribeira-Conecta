@@ -50,6 +50,22 @@ if [[ "${RIBEIRA_ENV:-}" != "production" || "${RIBEIRA_AUTH_MODE:-}" != "oidc" |
   echo "promotion requires protected production/OIDC configuration" >&2
   exit 2
 fi
+required=(
+  VITE_RIBEIRA_PUBLIC_ORIGIN
+  VITE_RIBEIRA_TENANT_ID
+  VITE_RIBEIRA_AUTH_MODE
+  VITE_RIBEIRA_OIDC_AUDIENCE
+  VITE_RIBEIRA_OIDC_AUTHORIZATION_ENDPOINT
+  VITE_RIBEIRA_OIDC_TOKEN_ENDPOINT
+  VITE_RIBEIRA_OIDC_CLIENT_ID
+)
+candidate_bundle="$(find "$candidate_dir/assets" -maxdepth 1 -type f -name 'index-*.js' -print -quit)"
+for variable_name in "${required[@]}"; do
+  if [[ -z "${!variable_name:-}" ]] || ! grep -Fq "${!variable_name}" "$candidate_bundle"; then
+    echo "candidate application configuration smoke failed" >&2
+    exit 2
+  fi
+done
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="$repository_root/.local/frontend-previous-$timestamp"
@@ -75,6 +91,19 @@ systemctl --user restart ribeira-frontend
 curl --fail --silent --show-error http://127.0.0.1:5173/health/ready >/dev/null
 curl --fail --silent --show-error "${VITE_RIBEIRA_PUBLIC_ORIGIN%/}/" >/dev/null
 curl --fail --silent --show-error "${VITE_RIBEIRA_PUBLIC_ORIGIN%/}/api/health/ready" >/dev/null
+live_bundle="$(find "$live_dir/assets" -maxdepth 1 -type f -name 'index-*.js' -print -quit)"
+for variable_name in "${required[@]}"; do
+  if ! grep -Fq "${!variable_name}" "$live_bundle"; then
+    echo "promoted frontend application configuration smoke failed" >&2
+    false
+  fi
+done
+worker_path="/assets/$(find "$live_dir/assets" -maxdepth 1 -type f -name 'maplibre-gl-worker-*.js' -printf '%f' -quit)"
+worker_headers="$(curl --fail --silent --show-error --head "${VITE_RIBEIRA_PUBLIC_ORIGIN%/}$worker_path")"
+if ! grep -qi '^content-type:.*javascript' <<<"$worker_headers"; then
+  echo "promoted MapLibre worker has an invalid MIME type" >&2
+  false
+fi
 
 rm -rf -- "$backup_dir"
 promoted=0

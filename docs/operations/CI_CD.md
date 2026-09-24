@@ -26,3 +26,10 @@ uma candidata fora de `frontend/dist`. Somente uma candidata aprovada pode ser
 promovida com `ops/runtime/promote-frontend-candidate.sh`; esse procedimento
 mantém o artefato anterior e o restaura se a validação posterior à promoção
 falhar. Não execute esses scripts para cada commit de desenvolvimento.
+
+O smoke não pode interpretar HTTP `200` como aplicação funcional: ele deve
+validar o carregamento do JavaScript principal, a presença no bundle de cada
+configuração pública obrigatória, a ausência das telas de bootstrap/configuração
+e o worker MapLibre com MIME JavaScript. Transporte, processo, aplicação e
+produto autenticado são estados distintos; a confirmação do produto requer E2E
+ou aceitação manual adequada.

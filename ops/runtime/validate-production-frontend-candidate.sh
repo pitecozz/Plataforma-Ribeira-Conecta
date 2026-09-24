@@ -89,6 +89,19 @@ if [[ -z "$worker_file" || ! -s "$worker_file" ]]; then
   echo "candidate MapLibre worker was not emitted" >&2
   exit 1
 fi
+main_bundle="$(find "$candidate_dir/assets" -maxdepth 1 -type f -name 'index-*.js' -print -quit)"
+if [[ -z "$main_bundle" || ! -s "$main_bundle" ]]; then
+  echo "candidate application bundle was not emitted" >&2
+  exit 1
+fi
+for variable_name in "${required[@]}"; do
+  if ! grep -Fq "${!variable_name}" "$main_bundle"; then
+    printf '%s=NOT_EMBEDDED\n' "$variable_name" >&2
+    echo "candidate does not contain required protected build configuration" >&2
+    exit 1
+  fi
+done
+printf 'APPLICATION_CONFIG_SMOKE=PASS\n'
 
 candidate_port="$($repository_root/.venv/bin/python - <<'PY'
 import socket
@@ -117,6 +130,23 @@ for attempt in $(seq 1 20); do
   fi
   sleep 0.25
 done
+playwright_log="$(mktemp "$candidate_parent/playwright.XXXXXX")"
+if ! (
+  cd "$repository_root/frontend"
+  RIBEIRA_PLAYWRIGHT_BASE_URL="http://127.0.0.1:$candidate_port" \
+    ./node_modules/.bin/playwright test e2e/production-bootstrap.spec.ts
+) >"$playwright_log" 2>&1; then
+  if grep -q "Host system is missing dependencies to run browsers" "$playwright_log"; then
+    printf 'APPLICATION_BROWSER_SMOKE=BLOCKED_BROWSER_DEPENDENCIES\n'
+  else
+    cat "$playwright_log" >&2
+    rm -f -- "$playwright_log"
+    exit 1
+  fi
+else
+  printf 'APPLICATION_BROWSER_SMOKE=PASS\n'
+fi
+rm -f -- "$playwright_log"
 worker_relative="assets/$(basename -- "$worker_file")"
 worker_headers="$(curl --fail --silent --show-error --head "http://127.0.0.1:$candidate_port/$worker_relative")"
 if ! grep -qi '^content-type:.*javascript' <<<"$worker_headers"; then

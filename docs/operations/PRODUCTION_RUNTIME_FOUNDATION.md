@@ -104,9 +104,13 @@ ops/runtime/validate-production-frontend-candidate.sh
 ```
 
 The validator fails closed when required configuration is absent, builds in an
-isolated temporary directory, checks that the MapLibre worker was emitted, and
-smoke-tests the candidate on loopback. It does not restart services or touch
-`frontend/dist`. Run relevant source tests before it.
+isolated temporary directory, verifies that each required public value is
+actually embedded in the emitted application bundle, checks that the MapLibre
+worker was emitted with JavaScript MIME, and smoke-tests the candidate on
+loopback. It also runs the bootstrap browser assertion when browser dependencies
+are available; otherwise it reports that browser check as blocked while the
+deterministic build-configuration assertion remains mandatory. It does not
+restart services or touch `frontend/dist`. Run relevant source tests before it.
 
 Only after a candidate passes and a deliberate release window is chosen, an
 operator may promote its reported candidate directory:
@@ -123,6 +127,20 @@ restart Cloudflare, API, PostgreSQL or workers. The static ingress is the only
 Cloudflare Tunnel origin; its `/api/*` proxy forwards only to the private API at
 `127.0.0.1:8080`. A real interactive OIDC/session flow remains required before
 calling a candidate customer-ready.
+
+Health has four deliberately separate meanings:
+
+- **transport health:** Cloudflare/DNS/HTTPS can reach the origin;
+- **process health:** the private static/API processes are running;
+- **application health:** the emitted SPA has all required build-time
+  configuration and can render its OIDC shell rather than a configuration
+  failure;
+- **authenticated product health:** an authorized customer can complete the
+  applicable Farm360 workflow.
+
+HTTP 200 or an active systemd unit proves only the first two. Promotion checks
+application configuration and worker assets; authenticated product health still
+requires the relevant E2E or manual acceptance evidence.
 
 ## Named Cloudflare Tunnel
 
