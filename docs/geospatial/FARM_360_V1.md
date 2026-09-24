@@ -52,6 +52,12 @@ scene or raster. A job reports its persisted status (`QUEUED`, `RUNNING`,
 Selection is policy-driven in this phase; a manual override workflow requires
 its own auditable approval policy and is deliberately not implied by the UI.
 
+The customer-facing satellite section can show a persisted catalogue scene
+before any derived product exists. It labels this as catalogue metadata and
+retains acquisition time, reported cloud coverage and provider provenance. A
+scene does not enable NDVI controls or imply vegetation, agronomic or flood
+conclusions; those require a separately persisted, traceable derived product.
+
 When persisted property assets are available, Farm360 renders them as a
 separate Digital Twin map layer and lists them for inspection. Selection shows
 only stored type, status, geometry, CRS, source reference, observed timestamp,

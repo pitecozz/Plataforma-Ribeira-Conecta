@@ -352,7 +352,7 @@ export function Farm360Page({
           onTargetChange={setTargetProductId}
         />
         <PropertyPanel property={property} />
-        <SatellitePanel scene={scene} />
+        <SatellitePanel scene={scene} scenes={scenes} />
         <NdviPanel product={product} />
         <ProvenancePanel provenance={provenance} />
       </aside>
