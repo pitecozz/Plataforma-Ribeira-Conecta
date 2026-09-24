@@ -87,6 +87,16 @@ that property, applies RLS and records the existing `ASSET_REGISTERED` audit
 event. The registration does not assert ownership, calibration, connectivity,
 service availability or condition beyond the submitted factual fields.
 
+When a persisted property decision creates an `OPEN` human action, a user with
+`action:write` can record its result in Farm360. The user supplies the result
+text, an explicit classification, the recorded-at time and any tenant-local
+evidence identifiers that support that result. The screen never prepopulates
+outcome evidence from decision evidence: a recommendation and its subsequent
+result are different claims. The original decision remains immutable; the API
+records the authenticated actor and audit event, and a failed submission leaves
+the action open. Read-only users can inspect the history without seeing the
+completion control.
+
 At the current zoom, very close real asset locations may be represented by one
 temporary overlap marker. Selecting it opens the names of every corresponding
 persisted asset; selecting an asset from the list recentres and highlights its

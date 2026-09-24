@@ -63,4 +63,12 @@ describe("Farm360Api", () => {
     await new Farm360Api("https://api.example", "session-token").uploadBoundaryImport("tenant", "property", file, "synthetic source", "MANUAL_CONFIRMED", "EPSG:4326");
     expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant/properties/property/boundary-imports", expect.objectContaining({ headers: expect.objectContaining({ "Content-Type": "application/vnd.google-earth.kmz", "X-Boundary-Filename": "boundary.kmz" }) }));
   });
+
+  it("records an action outcome only through the encoded authenticated tenant endpoint", async () => {
+    const payload = { outcome_detail: "Inspection completed", outcome_classification: "MANUAL_CONFIRMED", evidence_ids: ["evidence-1"], completed_at: "2026-09-24T15:30:00.000Z" };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "action", status: "COMPLETED" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await new Farm360Api("https://api.example", "session-token").completeAction("tenant / id", "action / id", payload);
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/actions/action%20%2F%20id/outcome", { method: "POST", headers: { Authorization: "Bearer session-token", "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  });
 });

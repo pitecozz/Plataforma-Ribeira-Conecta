@@ -51,6 +51,14 @@ export interface AssetCreate {
   context: Record<string, unknown>;
   classification: "MANUAL_CONFIRMED";
 }
+
+export interface ActionOutcomeCreate {
+  outcome_detail: string;
+  outcome_classification: string;
+  evidence_ids: string[];
+  completed_at: string;
+}
+
 export type PilotFeedbackType =
   | "BUG"
   | "CONFUSING"

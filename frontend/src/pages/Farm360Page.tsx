@@ -38,6 +38,7 @@ interface Props {
   canManageBoundary?: boolean;
   canRunSatelliteOperations?: boolean;
   canManageAssets?: boolean;
+  canCompleteActions?: boolean;
 }
 type LoadState = "loading" | "ready" | "empty" | "error";
 type PartialLoadIssues = {
@@ -72,6 +73,7 @@ export function Farm360Page({
   canManageBoundary = false,
   canRunSatelliteOperations = false,
   canManageAssets = false,
+  canCompleteActions = false,
 }: Props) {
   const [state, setState] = useState<LoadState>("loading");
   const [property, setProperty] = useState<PropertyRecord | null>(null);
@@ -252,6 +254,15 @@ export function Farm360Page({
     assetPanelAnchor.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     if (assets[0]) setSelectedAssetId(assets[0].id);
   };
+  const refreshDecisions = async () => {
+    try {
+      const result = await api.decisions(tenantId, propertyId);
+      setDecisions(result.items);
+      setPartialLoadIssues((current) => ({ ...current, decisions: false }));
+    } catch {
+      setPartialLoadIssues((current) => ({ ...current, decisions: true }));
+    }
+  };
 
   return (
     <main className="farm360">
@@ -320,7 +331,7 @@ export function Farm360Page({
         <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} decisions={decisions} open={reportOpen} onOpenChange={setReportOpen} />
         <PilotFeedbackPanel api={api} tenantId={tenantId} propertyId={propertyId} />
         {partialLoadIssues.decisions && <section><h2>Riscos e decisões</h2><p>Não foi possível atualizar decisões agora. Isso não confirma ausência de risco ou oportunidade.</p></section>}
-        {!partialLoadIssues.decisions && <RiskDecisionPanel decisions={decisions} />}
+        {!partialLoadIssues.decisions && <RiskDecisionPanel decisions={decisions} api={api} tenantId={tenantId} canCompleteActions={canCompleteActions} onActionCompleted={refreshDecisions} />}
         <div ref={assetPanelAnchor}>
           <AssetPanel
             assets={assets}

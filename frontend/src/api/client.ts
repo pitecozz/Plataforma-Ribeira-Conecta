@@ -1,4 +1,5 @@
 import type {
+  ActionOutcomeCreate,
   BoundaryImport,
   BoundaryImportPreview,
   AssetCreate,
@@ -151,6 +152,16 @@ export class Farm360Api {
   decisions(tenantId: string, propertyId: string) {
     return this.get<{ property_id: string; items: PropertyDecision[] }>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/decisions`,
+    );
+  }
+  completeAction(
+    tenantId: string,
+    actionId: string,
+    payload: ActionOutcomeCreate,
+  ) {
+    return this.post<{ id: string; status: "COMPLETED" }>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/actions/${encodeURIComponent(actionId)}/outcome`,
+      payload,
     );
   }
   scenes(tenantId: string, propertyId: string) {
