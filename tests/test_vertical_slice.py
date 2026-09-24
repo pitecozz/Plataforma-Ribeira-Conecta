@@ -492,6 +492,79 @@ class VerticalSliceTests(unittest.TestCase):
                 )
             )
 
+    def test_field_scoped_rule_requires_explicit_field_evaluation(self) -> None:
+        field = self.app.fields.create(
+            self.tenant.id,
+            property_id=self.property.id,
+            name="Talhao operacional A",
+            status="ACTIVE",
+            geometry_geojson={
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-47.01, -24.01],
+                        [-47.01, -24.05],
+                        [-47.05, -24.05],
+                        [-47.05, -24.01],
+                        [-47.01, -24.01],
+                    ]
+                ],
+            },
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic_test_data field walk",
+            observed_at="2026-09-24T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            actor="operator",
+        )
+        field_evidence = self.store.evidence_for_reference(self.tenant.id, field.id)
+        assert field_evidence is not None
+        self.app.create_rule(
+            RuleDefinition(
+                id=new_id(),
+                tenant_id=self.tenant.id,
+                version=1,
+                name="Field-specific moisture threshold",
+                authority=RuleAuthority.REGRA_AGRONOMICA,
+                metric="soil_moisture",
+                operator="<",
+                threshold=30,
+                unit="%",
+                severity="HIGH",
+                status="ACTIVE",
+                approved_by="agronomist-test",
+                valid_from="2026-09-16T00:00:00+00:00",
+                scope_type="FIELD",
+                scope_field_id=field.id,
+            )
+        )
+        self.app.adapters[self.source.id] = SyntheticFixtureAdapter(
+            [
+                {
+                    "metric": "soil_moisture",
+                    "value": 27.0,
+                    "unit": "%",
+                    "observation_timestamp": "2026-09-24T13:42:11+00:00",
+                    "quality_flag": "VALID",
+                }
+            ]
+        )
+        self.app.ingest(self.tenant.id, self.property.id, self.source.id)
+
+        property_decision = self.app.evaluate(self.tenant.id, self.property.id).decision
+        self.assertIsNone(property_decision.rule_id)
+        self.assertIsNone(property_decision.subject_field_id)
+
+        result = self.app.evaluate_field(self.tenant.id, field.id, actor="operator")
+        self.assertEqual(result.decision.status, DecisionStatus.ACTIONABLE)
+        self.assertEqual(result.decision.selected_rule_scope_type, "FIELD")
+        self.assertEqual(result.decision.subject_field_id, field.id)
+        self.assertIn(field_evidence.id, result.decision.evidence_ids)
+        self.assertIn("não é evidência de cultura", result.decision.limitations[-1])
+        history = self.app.decision_history_for_property(
+            self.tenant.id, self.property.id
+        )
+        self.assertEqual(history[0]["subject_field_id"], field.id)
+
 
 if __name__ == "__main__":
     unittest.main()

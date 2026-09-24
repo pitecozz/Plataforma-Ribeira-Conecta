@@ -1,4 +1,4 @@
-import type { DigitalTwinAsset, PropertyRecord, Scene, TimelineItem } from "../../types/farm360";
+import type { DigitalTwinAsset, FieldContext, PropertyRecord, Scene, TimelineItem } from "../../types/farm360";
 import "./DataAvailabilityPanel.css";
 
 type Availability = "available" | "partial" | "awaiting" | "not-configured";
@@ -19,13 +19,17 @@ const stateLabel: Record<Availability, string> = {
 export function DataAvailabilityPanel({
   property,
   assets,
+  fields,
   scenes,
   timeline,
+  fieldsUnavailable = false,
 }: {
   property: PropertyRecord;
   assets: DigitalTwinAsset[];
+  fields: FieldContext[];
   scenes: Scene[];
   timeline: TimelineItem[];
+  fieldsUnavailable?: boolean;
 }) {
   const hasDerivedProduct = timeline.some(
     (item) => item.derived_product.processing_status === "SUCCEEDED",
@@ -42,6 +46,15 @@ export function DataAvailabilityPanel({
       label: "Ativos",
       state: assets.length > 0 ? "available" : "awaiting",
       detail: assets.length > 0 ? `${assets.length} ativo(s) confirmado(s)` : "Nenhum ativo confirmado",
+    },
+    {
+      label: "Talhões operacionais",
+      state: fieldsUnavailable ? "partial" : fields.length > 0 ? "available" : "awaiting",
+      detail: fieldsUnavailable
+        ? "Inventário de talhões indisponível nesta consulta"
+        : fields.length > 0
+          ? `${fields.length} talhão(ões) com fonte e tempo registrados`
+          : "Nenhum talhão operacional registrado",
     },
     {
       label: "Satélite",

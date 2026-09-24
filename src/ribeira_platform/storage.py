@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS rules (
   approved_by TEXT, valid_from TEXT NOT NULL, valid_until TEXT, created_at TEXT NOT NULL,
   scope_type TEXT NOT NULL DEFAULT 'TENANT', scope_property_id TEXT REFERENCES properties(id),
   scope_asset_id TEXT,
+  scope_field_id TEXT,
   scope_customer_id TEXT,
   PRIMARY KEY (id, version)
 );
@@ -78,7 +79,7 @@ CREATE TABLE IF NOT EXISTS decisions (
   classification TEXT NOT NULL, status TEXT NOT NULL, evidence_ids_json TEXT NOT NULL,
   rule_id TEXT, rule_version INTEGER, model_id TEXT, model_version TEXT,
   confidence REAL, limitations_json TEXT NOT NULL, missing_data_json TEXT NOT NULL,
-  conflicts_json TEXT NOT NULL, recommended_action_json TEXT, subject_asset_id TEXT, selected_rule_scope_type TEXT, subject_customer_id TEXT,
+  conflicts_json TEXT NOT NULL, recommended_action_json TEXT, subject_asset_id TEXT, subject_field_id TEXT, selected_rule_scope_type TEXT, subject_customer_id TEXT,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_property ON decisions(tenant_id, property_id, created_at);
@@ -132,6 +133,19 @@ class SQLiteStore:
         self.connection.execute("PRAGMA foreign_keys = ON")
         self._transaction_depth = 0
         self.connection.executescript(SCHEMA)
+        self._ensure_column("rules", "scope_field_id", "TEXT")
+        self._ensure_column("decisions", "subject_field_id", "TEXT")
+
+    def _ensure_column(self, table: str, column: str, definition: str) -> None:
+        columns = {
+            row["name"]
+            for row in self.connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if column not in columns:
+            self.connection.execute(
+                f"ALTER TABLE {table} ADD COLUMN {column} {definition}"
+            )
+            self.connection.commit()
 
     def close(self) -> None:
         self.connection.close()
@@ -398,6 +412,7 @@ class SQLiteStore:
         metric: str,
         property_id: str | None = None,
         asset_id: str | None = None,
+        field_id: str | None = None,
     ) -> list[RuleDefinition]:
         """Return every currently applicable rule; callers handle precedence.
 
@@ -458,6 +473,7 @@ class SQLiteStore:
                 scope == "TENANT"
                 or (scope == "PROPERTY" and row["scope_property_id"] == property_id)
                 or (scope == "ASSET" and row["scope_asset_id"] == asset_id)
+                or (scope == "FIELD" and row["scope_field_id"] == field_id)
                 or (scope == "CUSTOMER" and row["scope_customer_id"] in customer_ids)
             )
             if not applicable:
@@ -482,6 +498,7 @@ class SQLiteStore:
                     row["scope_type"],
                     row["scope_property_id"],
                     row["scope_asset_id"],
+                    row["scope_field_id"],
                     row["scope_customer_id"],
                 )
             )
@@ -493,9 +510,10 @@ class SQLiteStore:
         metric: str,
         property_id: str | None = None,
         asset_id: str | None = None,
+        field_id: str | None = None,
     ) -> RuleDefinition | None:
-        rules = self.active_rules(tenant_id, metric, property_id, asset_id)
-        priority = {"ASSET": 0, "PROPERTY": 1, "CUSTOMER": 2, "TENANT": 3}
+        rules = self.active_rules(tenant_id, metric, property_id, asset_id, field_id)
+        priority = {"ASSET": 0, "FIELD": 1, "PROPERTY": 2, "CUSTOMER": 3, "TENANT": 4}
         return (
             min(rules, key=lambda rule: (priority[rule.scope_type], -rule.version))
             if rules
@@ -504,7 +522,7 @@ class SQLiteStore:
 
     def create_rule(self, item: RuleDefinition) -> RuleDefinition:
         self._insert(
-            "INSERT INTO rules(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id,scope_asset_id,scope_customer_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO rules(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id,scope_asset_id,scope_field_id,scope_customer_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 item.id,
                 item.tenant_id,
@@ -524,6 +542,7 @@ class SQLiteStore:
                 item.scope_type,
                 item.scope_property_id,
                 item.scope_asset_id,
+                item.scope_field_id,
                 item.scope_customer_id,
             ),
         )
@@ -532,8 +551,8 @@ class SQLiteStore:
     def create_decision(self, item: Decision) -> Decision:
         self._insert(
             """INSERT INTO decisions(id,tenant_id,property_id,conclusion,classification,status,evidence_ids_json,rule_id,rule_version,
-               model_id,model_version,confidence,limitations_json,missing_data_json,conflicts_json,recommended_action_json,subject_asset_id,selected_rule_scope_type,subject_customer_id,created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               model_id,model_version,confidence,limitations_json,missing_data_json,conflicts_json,recommended_action_json,subject_asset_id,subject_field_id,selected_rule_scope_type,subject_customer_id,created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 item.id,
                 item.tenant_id,
@@ -554,6 +573,7 @@ class SQLiteStore:
                 if item.recommended_action is not None
                 else None,
                 item.subject_asset_id,
+                item.subject_field_id,
                 item.selected_rule_scope_type,
                 item.subject_customer_id,
                 item.created_at,
@@ -578,6 +598,7 @@ class SQLiteStore:
                 "id": row["id"],
                 "property_id": row["property_id"],
                 "subject_asset_id": row["subject_asset_id"],
+                "subject_field_id": row["subject_field_id"],
                 "selected_rule_scope_type": row["selected_rule_scope_type"],
                 "subject_customer_id": row["subject_customer_id"],
                 "conclusion": row["conclusion"],

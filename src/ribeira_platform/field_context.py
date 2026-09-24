@@ -140,6 +140,45 @@ class FieldContextRepository:
             for row in rows
         ]
 
+    def get(self, tenant_id: str, field_id: str) -> FieldContext | None:
+        p = self.placeholder
+        geometry = (
+            "ST_AsGeoJSON(version.geometry)"
+            if self.postgres
+            else "version.geometry_geojson"
+        )
+        row = self._execute(
+            f"""SELECT field.id,field.tenant_id,field.property_id,field.name,field.status,
+                       {geometry} AS geometry_geojson,version.geometry_crs,version.version,
+                       version.geometry_checksum,field.source_reference,field.observed_at,
+                       field.data_classification,field.created_at
+                  FROM field_context field
+                  JOIN field_context_boundary_version version
+                    ON version.tenant_id=field.tenant_id AND version.field_context_id=field.id
+                   AND version.version=1
+                 WHERE field.tenant_id={p} AND field.id={p}""",  # nosec B608 - fixed internal SQL and placeholder
+            [tenant_id, field_id],
+        ).fetchone()
+        if row is None:
+            return None
+        return FieldContext(
+            str(row["id"]),
+            str(row["tenant_id"]),
+            str(row["property_id"]),
+            str(row["name"]),
+            str(row["status"]),
+            json.loads(row["geometry_geojson"])
+            if isinstance(row["geometry_geojson"], str)
+            else row["geometry_geojson"],
+            str(row["geometry_crs"]),
+            int(row["version"]),
+            str(row["geometry_checksum"]),
+            str(row["source_reference"]),
+            self._timestamp(row["observed_at"]),
+            DataClassification(str(row["data_classification"])),
+            self._timestamp(row["created_at"]),
+        )
+
 
 class FieldContextApplication:
     """Register a field only when its source, time and containing property exist."""
@@ -247,3 +286,12 @@ class FieldContextApplication:
             if self.store.get_property(tenant_id, property_id) is None:
                 raise LookupError("property not found in tenant")
             return self.repository.list_for_property(tenant_id, property_id)
+
+    def get(
+        self, tenant_id: str, field_id: str, *, platform_admin: bool = False
+    ) -> FieldContext:
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            item = self.repository.get(tenant_id, field_id)
+            if item is None:
+                raise LookupError("field context not found in tenant")
+            return item

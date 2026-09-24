@@ -76,6 +76,8 @@ class DecisionEngine:
         *,
         asset_id: str | None = None,
         asset_evidence_id: str | None = None,
+        field_id: str | None = None,
+        field_evidence_id: str | None = None,
     ) -> DecisionResult:
         observations = [
             item
@@ -118,8 +120,35 @@ class DecisionEngine:
         if asset_evidence_id is not None:
             evidence_ids.append(asset_evidence_id)
 
+        if field_id is not None and field_evidence_id is None:
+            decision = Decision(
+                id=new_id(),
+                tenant_id=tenant_id,
+                property_id=property.id,
+                conclusion="Não há evidência de registro disponível para usar o talhão como contexto da regra.",
+                classification=DataClassification.UNKNOWN,
+                status=DecisionStatus.INCONCLUSIVE,
+                evidence_ids=evidence_ids,
+                rule_id=None,
+                rule_version=None,
+                model_id=None,
+                model_version=None,
+                confidence=None,
+                limitations=[
+                    "um talhão sem proveniência registrada não pode restringir a aplicabilidade de uma regra"
+                ],
+                missing_data=["field_registration_evidence"],
+                conflicts=[],
+                recommended_action=None,
+            )
+            decision = self._persist_decision(decision, asset_id, field_id=field_id)
+            self._audit(tenant_id, actor, decision, "field_context_evidence_missing")
+            return DecisionResult(decision, None, None)
+        if field_evidence_id is not None:
+            evidence_ids.append(field_evidence_id)
+
         applicable_rules = self.store.active_rules(
-            tenant_id, metric, property.id, asset_id
+            tenant_id, metric, property.id, asset_id, field_id
         )
         if not applicable_rules:
             decision = Decision(
@@ -142,11 +171,11 @@ class DecisionEngine:
                 conflicts=[],
                 recommended_action=None,
             )
-            decision = self._persist_decision(decision, asset_id)
+            decision = self._persist_decision(decision, asset_id, field_id=field_id)
             self._audit(tenant_id, actor, decision, "rule_missing")
             return DecisionResult(decision, None, None)
 
-        priority = {"ASSET": 0, "PROPERTY": 1, "CUSTOMER": 2, "TENANT": 3}
+        priority = {"ASSET": 0, "FIELD": 1, "PROPERTY": 2, "CUSTOMER": 3, "TENANT": 4}
         selected_priority = min(priority[rule.scope_type] for rule in applicable_rules)
         selected_rules = [
             rule
@@ -198,7 +227,7 @@ class DecisionEngine:
                     else None
                 ),
             )
-            decision = self._persist_decision(decision, asset_id)
+            decision = self._persist_decision(decision, asset_id, field_id=field_id)
             self._audit(tenant_id, actor, decision, "rule_scope_conflict")
             return DecisionResult(decision, None, None)
         rule = selected_rules[0]
@@ -223,7 +252,9 @@ class DecisionEngine:
                 conflicts=[],
                 recommended_action=None,
             )
-            decision = self._persist_decision(decision, asset_id, rule)
+            decision = self._persist_decision(
+                decision, asset_id, rule, field_id=field_id
+            )
             self._audit(tenant_id, actor, decision, "missing_observation")
             return DecisionResult(decision, None, None)
 
@@ -267,7 +298,9 @@ class DecisionEngine:
                     "responsible_user_id": None,
                 },
             )
-            decision = self._persist_decision(decision, asset_id, rule)
+            decision = self._persist_decision(
+                decision, asset_id, rule, field_id=field_id
+            )
             alert = Alert(
                 new_id(),
                 tenant_id,
@@ -323,7 +356,9 @@ class DecisionEngine:
                     "deadline": None,
                 },
             )
-            decision = self._persist_decision(decision, asset_id, rule)
+            decision = self._persist_decision(
+                decision, asset_id, rule, field_id=field_id
+            )
             alert = Alert(
                 new_id(),
                 tenant_id,
@@ -366,7 +401,7 @@ class DecisionEngine:
             conflicts=[],
             recommended_action=None,
         )
-        decision = self._persist_decision(decision, asset_id, rule)
+        decision = self._persist_decision(decision, asset_id, rule, field_id=field_id)
         self._audit(tenant_id, actor, decision, "rule_not_triggered")
         return DecisionResult(decision, None, None)
 
@@ -375,6 +410,8 @@ class DecisionEngine:
         decision: Decision,
         asset_id: str | None,
         rule: RuleDefinition | None = None,
+        *,
+        field_id: str | None = None,
     ) -> Decision:
         """Persist immutable applicability context without inferring customer facts."""
         if rule is not None:
@@ -392,6 +429,15 @@ class DecisionEngine:
                 limitations=[
                     *decision.limitations,
                     "o ativo é contexto factual de aplicabilidade; não é uma medição",
+                ],
+            )
+        if field_id is not None:
+            decision = replace(
+                decision,
+                subject_field_id=field_id,
+                limitations=[
+                    *decision.limitations,
+                    "o talhão é contexto operacional não legal; não é evidência de cultura, solo ou diagnóstico",
                 ],
             )
         self.store.create_decision(decision)
@@ -418,6 +464,7 @@ class DecisionEngine:
                 "rule_id": decision.rule_id,
                 "rule_version": decision.rule_version,
                 "subject_asset_id": decision.subject_asset_id,
+                "subject_field_id": decision.subject_field_id,
                 "selected_rule_scope_type": decision.selected_rule_scope_type,
                 "subject_customer_id": decision.subject_customer_id,
                 "model_id": decision.model_id,

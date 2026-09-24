@@ -216,10 +216,11 @@ class RuleRequest(BaseModel):
     valid_from: str = Field(default_factory=now_utc)
     valid_until: str | None = None
     scope_type: str = Field(
-        default="TENANT", pattern=r"^(TENANT|PROPERTY|ASSET|CUSTOMER)$"
+        default="TENANT", pattern=r"^(TENANT|PROPERTY|ASSET|FIELD|CUSTOMER)$"
     )
     scope_property_id: str | None = Field(default=None, min_length=1, max_length=200)
     scope_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    scope_field_id: str | None = Field(default=None, min_length=1, max_length=200)
     scope_customer_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
@@ -1426,6 +1427,7 @@ def create_app(
             scope_type=payload.scope_type,
             scope_property_id=payload.scope_property_id,
             scope_asset_id=payload.scope_asset_id,
+            scope_field_id=payload.scope_field_id,
             scope_customer_id=payload.scope_customer_id,
         )
         return to_jsonable(application.create_rule(rule))
@@ -1484,6 +1486,26 @@ def create_app(
         result = application.evaluate_asset(
             tenant_id,
             asset_id,
+            (payload.actor if payload and payload.actor else ctx.subject),
+            ctx.is_platform_admin,
+        )
+        return to_jsonable(result)
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/fields/{field_id}/evaluate",
+        tags=["decisions", "fields"],
+    )
+    async def evaluate_field(
+        tenant_id: str,
+        field_id: str,
+        payload: ActorRequest | None = None,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "property:read", tenant_id)
+        authorize(ctx, "decision:read", tenant_id)
+        result = application.evaluate_field(
+            tenant_id,
+            field_id,
             (payload.actor if payload and payload.actor else ctx.subject),
             ctx.is_platform_admin,
         )

@@ -15,7 +15,7 @@ evidence returns `UNKNOWN` or `INCONCLUSIVE`; it does not default to false.
 
 | Rule family | Current state | Scope / constraints | Canonical detail |
 |---|---|---|---|
-| Versioned decision rules | `IMPLEMENTED` | `TENANT`, `PROPERTY` and explicit `ASSET`. An asset rule is considered only by `POST /v1/tenants/{tenant_id}/assets/{asset_id}/evaluate`, requires a tenant-local asset linked to the decision property, and takes precedence over that property's rule only in that request. Property evaluation never selects an asset rule. | `engine.py`, `service.py`, migration 036. |
+| Versioned decision rules | `IMPLEMENTED` | `TENANT`, `PROPERTY`, explicit `ASSET`, explicit `FIELD` and `CUSTOMER`. Asset and field rules are considered only by their explicit evaluation endpoints, require tenant-local source-backed context linked to the decision property, and never apply during property-only evaluation. | `engine.py`, `service.py`, migrations 036/038/041. |
 | Action outcome closure | `IMPLEMENTED` | Tenant-authorized `OPEN` action; explicit result, classification, timestamp, optional tenant evidence and responsible actor retained. Farm360 exposes it only with `action:write`. | migration 029; `test_vertical_slice.py`, `RiskDecisionPanel.test.tsx`. |
 | Commercial opportunity qualification | `IMPLEMENTED` | Valid tenant evidence required; unknown does not create opportunity. | [Business rules](../business/RIBEIRA_BUSINESS_RULES.md), `business.py`. |
 | Flood exposure assessment | `FOUNDATION` | Only verified flood extent and tenant geometry can calculate exposure. | migration 030; H1–H4 are hypotheses, not causal arrows. |
@@ -25,7 +25,13 @@ evidence returns `UNKNOWN` or `INCONCLUSIVE`; it does not default to false.
 
 An asset registration contributes only factual applicability context. The evaluation retains its opaque `ASSET_REGISTRATION` evidence ID and `subject_asset_id` in the immutable decision, alongside the property-scoped observation evidence. If that registration evidence is unavailable, the result is `UNKNOWN`/`INCONCLUSIVE`; Ribeira does not use an unproven asset record to select a rule. The asset is never converted into a sensor reading, health state, agronomic diagnosis or automatic action.
 
-The API requires both `asset:read` and `decision:read`; Farm360 renders the evaluation control only when both permissions are present and the selected asset retains its registration evidence. Evaluation is an explicit operator action, not background monitoring, and the resulting immutable decision is refreshed in the property history. Active-rule creation retains the existing `rule:create` and distinct-approver controls. PostgreSQL binds both rule and decision asset references to the same tenant, and a trigger requires the decision's asset to belong to its recorded property. Customer, field, management-zone and crop inheritance are not implied by this slice.
+The API requires both `asset:read` and `decision:read`; Farm360 renders the evaluation control only when both permissions are present and the selected asset retains its registration evidence. Evaluation is an explicit operator action, not background monitoring, and the resulting immutable decision is refreshed in the property history. Active-rule creation retains the existing `rule:create` and distinct-approver controls. PostgreSQL binds both rule and decision asset references to the same tenant, and a trigger requires the decision's asset to belong to its recorded property.
+
+## Field-scoped rule boundary
+
+A field/talhão registration contributes only non-legal operational applicability context. The evaluation retains its opaque `FIELD_REGISTRATION` evidence ID and `subject_field_id` in the immutable decision, alongside property-scoped observation evidence. If that registration evidence is unavailable, the result is `UNKNOWN`/`INCONCLUSIVE`; Ribeira does not use an unproven field record to select a rule. The field is never converted into a crop declaration, soil/lab result, management zone, diagnosis or automatic action.
+
+The API requires `property:read` and `decision:read` through `POST /v1/tenants/{tenant_id}/fields/{field_id}/evaluate`. Property-only evaluation never selects a field rule. PostgreSQL binds both rule and decision field references to the same tenant, and a trigger requires the decision's field to belong to its recorded property. Management-zone and crop inheritance are not implied by this slice.
 
 ## Rule-to-outcome flow
 

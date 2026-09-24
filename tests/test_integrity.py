@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import sqlite3
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from datetime import datetime, timedelta, timezone
@@ -20,6 +23,46 @@ from ribeira_platform.storage import SQLiteStore
 
 
 class IntegrityTests(unittest.TestCase):
+    def test_existing_sqlite_schema_adds_field_rule_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.sqlite3"
+            connection = sqlite3.connect(path)
+            connection.executescript(
+                """
+                CREATE TABLE rules (
+                  id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, version INTEGER NOT NULL,
+                  name TEXT NOT NULL, authority TEXT NOT NULL, metric TEXT NOT NULL,
+                  operator TEXT NOT NULL, threshold REAL NOT NULL, unit TEXT NOT NULL,
+                  severity TEXT NOT NULL, status TEXT NOT NULL, approved_by TEXT,
+                  valid_from TEXT NOT NULL, valid_until TEXT, scope_type TEXT NOT NULL,
+                  scope_property_id TEXT, scope_asset_id TEXT, scope_customer_id TEXT
+                );
+                CREATE TABLE decisions (
+                  id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, property_id TEXT NOT NULL,
+                  rule_id TEXT, selected_rule_scope_type TEXT, subject_customer_id TEXT,
+                  subject_asset_id TEXT, status TEXT NOT NULL, severity TEXT,
+                  rationale TEXT NOT NULL, missing_data TEXT NOT NULL,
+                  evidence_ids TEXT NOT NULL, classification TEXT NOT NULL,
+                  created_at TEXT NOT NULL
+                );
+                """
+            )
+            connection.close()
+
+            store = SQLiteStore(path)
+            rule_columns = {
+                row["name"]
+                for row in store.connection.execute("PRAGMA table_info(rules)")
+            }
+            decision_columns = {
+                row["name"]
+                for row in store.connection.execute("PRAGMA table_info(decisions)")
+            }
+            store.close()
+
+            self.assertIn("scope_field_id", rule_columns)
+            self.assertIn("subject_field_id", decision_columns)
+
     def test_no_active_rule_is_explicitly_inconclusive(self) -> None:
         store = SQLiteStore()
         app = RibeiraApplication(store)

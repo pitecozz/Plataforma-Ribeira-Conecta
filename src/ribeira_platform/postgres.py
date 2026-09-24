@@ -1665,6 +1665,7 @@ class PostgresStore:
         metric: str,
         property_id: str | None = None,
         asset_id: str | None = None,
+        field_id: str | None = None,
     ) -> list[RuleDefinition]:
         rows = self.connection.execute(
             """SELECT DISTINCT r.* FROM rule_definition r
@@ -1677,11 +1678,12 @@ class PostgresStore:
                 WHERE r.tenant_id=%s AND r.metric=%s AND r.status='ACTIVE'
                   AND r.valid_from <= now() AND (r.valid_until IS NULL OR now() < r.valid_until)
                   AND (r.scope_type='TENANT'
-                       OR (r.scope_type='PROPERTY' AND r.scope_property_id=%s)
-                       OR (r.scope_type='ASSET' AND r.scope_asset_id=%s)
-                       OR (r.scope_type='CUSTOMER' AND cp.id IS NOT NULL))
-                ORDER BY r.version DESC""",
-            (property_id, tenant_id, metric, property_id, asset_id),
+                   OR (r.scope_type='PROPERTY' AND r.scope_property_id=%s)
+                   OR (r.scope_type='ASSET' AND r.scope_asset_id=%s)
+                   OR (r.scope_type='FIELD' AND r.scope_field_id=%s)
+                   OR (r.scope_type='CUSTOMER' AND cp.id IS NOT NULL))
+                 ORDER BY r.version DESC""",
+            (property_id, tenant_id, metric, property_id, asset_id, field_id),
         ).fetchall()
         return [
             RuleDefinition(
@@ -1705,6 +1707,7 @@ class PostgresStore:
                 if row["scope_property_id"]
                 else None,
                 self._id(row["scope_asset_id"]) if row["scope_asset_id"] else None,
+                self._id(row["scope_field_id"]) if row["scope_field_id"] else None,
                 self._id(row["scope_customer_id"])
                 if row["scope_customer_id"]
                 else None,
@@ -1718,9 +1721,10 @@ class PostgresStore:
         metric: str,
         property_id: str | None = None,
         asset_id: str | None = None,
+        field_id: str | None = None,
     ) -> RuleDefinition | None:
-        rules = self.active_rules(tenant_id, metric, property_id, asset_id)
-        priority = {"ASSET": 0, "PROPERTY": 1, "CUSTOMER": 2, "TENANT": 3}
+        rules = self.active_rules(tenant_id, metric, property_id, asset_id, field_id)
+        priority = {"ASSET": 0, "FIELD": 1, "PROPERTY": 2, "CUSTOMER": 3, "TENANT": 4}
         return (
             min(rules, key=lambda rule: (priority[rule.scope_type], -rule.version))
             if rules
@@ -1729,7 +1733,7 @@ class PostgresStore:
 
     def create_rule(self, item: RuleDefinition) -> RuleDefinition:
         self.connection.execute(
-            "INSERT INTO rule_definition(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id,scope_asset_id,scope_customer_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "INSERT INTO rule_definition(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id,scope_asset_id,scope_field_id,scope_customer_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (
                 item.id,
                 item.tenant_id,
@@ -1749,6 +1753,7 @@ class PostgresStore:
                 item.scope_type,
                 item.scope_property_id,
                 item.scope_asset_id,
+                item.scope_field_id,
                 item.scope_customer_id,
             ),
         )
@@ -1756,8 +1761,8 @@ class PostgresStore:
 
     def create_decision(self, item: Decision) -> Decision:
         self.connection.execute(
-            """INSERT INTO decision(id,tenant_id,property_id,conclusion,data_classification,status,evidence_ids,rule_id,rule_version,model_id,model_version,confidence,limitations,missing_data,conflicts,recommended_action,subject_asset_id,selected_rule_scope_type,subject_customer_id,created_at)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            """INSERT INTO decision(id,tenant_id,property_id,conclusion,data_classification,status,evidence_ids,rule_id,rule_version,model_id,model_version,confidence,limitations,missing_data,conflicts,recommended_action,subject_asset_id,subject_field_id,selected_rule_scope_type,subject_customer_id,created_at)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 item.id,
                 item.tenant_id,
@@ -1778,6 +1783,7 @@ class PostgresStore:
                 if item.recommended_action is not None
                 else None,
                 item.subject_asset_id,
+                item.subject_field_id,
                 item.selected_rule_scope_type,
                 item.subject_customer_id,
                 item.created_at,
@@ -1804,6 +1810,11 @@ class PostgresStore:
                 "subject_asset_id": (
                     self._id(row["subject_asset_id"])
                     if row["subject_asset_id"]
+                    else None
+                ),
+                "subject_field_id": (
+                    self._id(row["subject_field_id"])
+                    if row["subject_field_id"]
                     else None
                 ),
                 "selected_rule_scope_type": row["selected_rule_scope_type"],

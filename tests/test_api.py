@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from ribeira_platform.api import Settings, create_app
 from ribeira_platform.business import Asset, CommercialClassification
-from ribeira_platform.epistemology import RuleAuthority
+from ribeira_platform.epistemology import DataClassification, RuleAuthority
 from ribeira_platform.iam import AuthContext, DevelopmentIdentityProvider
 from ribeira_platform.models import RuleDefinition, new_id
 from ribeira_platform.service import RibeiraApplication
@@ -288,6 +288,99 @@ class ApiSecurityTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["decision"]["subject_asset_id"], asset.id)
+        self.assertIn("action", response.json())
+
+    def test_field_evaluation_requires_authentication_and_preserves_context(
+        self,
+    ) -> None:
+        tenant = self.application.create_tenant("Field decision API tenant")
+        property_item = self.application.create_property(
+            tenant.id,
+            "Field rule property",
+            {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-47.0, -24.0],
+                        [-47.0, -24.1],
+                        [-47.1, -24.1],
+                        [-47.1, -24.0],
+                        [-47.0, -24.0],
+                    ]
+                ],
+            },
+            "EPSG:4326",
+        )
+        field = self.application.fields.create(
+            tenant.id,
+            property_id=property_item.id,
+            name="API field",
+            status="ACTIVE",
+            geometry_geojson={
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-47.01, -24.01],
+                        [-47.01, -24.05],
+                        [-47.05, -24.05],
+                        [-47.05, -24.01],
+                        [-47.01, -24.01],
+                    ]
+                ],
+            },
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic API field walk",
+            observed_at="2026-09-24T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            actor="operator",
+        )
+        self.application.create_rule(
+            RuleDefinition(
+                new_id(),
+                tenant.id,
+                1,
+                "Field moisture threshold",
+                RuleAuthority.REGRA_AGRONOMICA,
+                "soil_moisture",
+                "<",
+                30,
+                "%",
+                "HIGH",
+                "ACTIVE",
+                "reviewer",
+                "2026-09-16T00:00:00+00:00",
+                scope_type="FIELD",
+                scope_field_id=field.id,
+            )
+        )
+        source = self.application.create_source(tenant.id, "Fixture", "TEST", "fixture")
+        self.application.adapters[source.id] = SyntheticFixtureAdapter(
+            [
+                {
+                    "metric": "soil_moisture",
+                    "value": 27.0,
+                    "unit": "%",
+                    "observation_timestamp": "2026-09-24T13:42:11+00:00",
+                    "quality_flag": "VALID",
+                }
+            ]
+        )
+        self.application.ingest(tenant.id, property_item.id, source.id)
+
+        missing = self.client.post(
+            f"/v1/tenants/{tenant.id}/fields/{field.id}/evaluate"
+        )
+        self.assertEqual(missing.status_code, 401)
+        response = self.client.post(
+            f"/v1/tenants/{tenant.id}/fields/{field.id}/evaluate",
+            headers={"Authorization": "Bearer platform-secret-dev-only"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["decision"]["subject_field_id"], field.id)
+        self.assertEqual(
+            response.json()["decision"]["selected_rule_scope_type"], "FIELD"
+        )
         self.assertIn("action", response.json())
 
     def test_pilot_feedback_is_authenticated_audited_and_property_scoped(self) -> None:

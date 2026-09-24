@@ -1,20 +1,31 @@
 # Scoped rule inheritance
 
-**Status:** `PARTIAL` — tenant, property, explicit asset and customer scope are implemented.
-Field/talhão scope remains deliberately unavailable.
+**Status:** `PARTIAL` — tenant, property, explicit asset, explicit
+field/talhão and customer scope are implemented. Zone and crop scope remain
+deliberately unavailable.
 
 ## Current safe precedence
 
 An evaluation uses the most specific applicable active rule:
 
 ```text
-asset (only during an explicit asset evaluation) -> property -> customer -> tenant
+asset (only during an explicit asset evaluation)
+-> field/talhão (only during an explicit field evaluation)
+-> property
+-> customer
+-> tenant
 ```
 
 An asset registration establishes only sourced asset facts and its use as
 applicability context. It is not an observation, calibration, condition,
 coverage result or diagnosis. Property-only evaluations never consume an
 asset-scoped rule.
+
+A field/talhão registration establishes only sourced, non-legal operational
+context inside a property. It is not title/survey, crop, soil, laboratory,
+management-zone or agronomic evidence. Property-only evaluations never consume a
+field-scoped rule; it is selected only by explicit field evaluation, and the
+decision retains `FIELD_REGISTRATION` evidence plus `subject_field_id`.
 
 ## Customer-scope guarantees
 
@@ -25,7 +36,8 @@ valid only when all of the following are true:
 - the evaluated property has an explicit, active `customer_property` link at
   evaluation time (`valid_from <= now < valid_until`, or no end time);
 - a missing, expired or cross-tenant link makes the customer rule inapplicable;
-- precedence is deterministic: `asset -> property -> customer -> tenant`;
+- precedence is deterministic:
+  `asset -> field/talhão -> property -> customer -> tenant`;
 - equally specific active rules do not fall back to insertion order or version:
   evaluation returns an explicit `CONFLICTING` decision for human resolution;
 - each decision and its audit event retain the selected scope and, for customer
@@ -40,7 +52,7 @@ the authorized API remains the operational surface.
 
 ## Documentation debt
 
-A customer-scoped rule API/UI is not exposed until the above conflict policy,
-forward migration and PostGIS/RLS regression tests are delivered together.
-Field/talhão scope remains a separate dependency: a versioned non-legal field
-model and its tenant-scoped relationship to a property must exist first.
+Zone/crop inheritance remains a separate dependency: versioned management-zone,
+crop/context models and approved agronomic policy must exist first. A customer
+or field rule-creation UI remains future work; the authorized API is the current
+operational surface.

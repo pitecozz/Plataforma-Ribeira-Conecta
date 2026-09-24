@@ -229,6 +229,108 @@ class PostgresIntegrationTests(unittest.TestCase):
                     (other_property.id, result.decision.id),
                 )
 
+    def test_field_scoped_rule_persists_context_and_postgis_integrity(self) -> None:
+        tenant = self.create_test_tenant("Field-scoped rule PG tenant")
+        property_item = self.application.create_property(
+            tenant.id,
+            "Field rule property",
+            {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-47.0, -24.0],
+                        [-47.0, -24.1],
+                        [-47.1, -24.1],
+                        [-47.1, -24.0],
+                        [-47.0, -24.0],
+                    ]
+                ],
+            },
+            "EPSG:4326",
+        )
+        other_property = self.application.create_property(
+            tenant.id, "Other field property"
+        )
+        field = self.application.fields.create(
+            tenant.id,
+            property_id=property_item.id,
+            name="Field rule target",
+            status="ACTIVE",
+            geometry_geojson={
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-47.01, -24.01],
+                        [-47.01, -24.05],
+                        [-47.05, -24.05],
+                        [-47.05, -24.01],
+                        [-47.01, -24.01],
+                    ]
+                ],
+            },
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic integration field walk",
+            observed_at="2026-09-24T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            actor="integration-operator",
+        )
+        with self.store.tenant_transaction(tenant.id):
+            evidence = self.store.evidence_for_reference(tenant.id, field.id)
+            self.assertIsNotNone(evidence)
+            assert evidence is not None
+            self.assertEqual(evidence.evidence_type, "FIELD_REGISTRATION")
+        self.application.create_rule(
+            RuleDefinition(
+                new_id(),
+                tenant.id,
+                1,
+                "field moisture rule",
+                RuleAuthority.REGRA_AGRONOMICA,
+                "soil_moisture",
+                "<",
+                30,
+                "%",
+                "HIGH",
+                "ACTIVE",
+                "distinct-approver",
+                "2026-09-16T00:00:00+00:00",
+                scope_type="FIELD",
+                scope_field_id=field.id,
+            )
+        )
+        source = self.application.create_source(tenant.id, "Fixture", "TEST", "fixture")
+        self.application.adapters[source.id] = SyntheticFixtureAdapter(
+            [
+                {
+                    "metric": "soil_moisture",
+                    "value": 27.0,
+                    "unit": "%",
+                    "observation_timestamp": "2026-09-24T13:42:11+00:00",
+                    "quality_flag": "VALID",
+                }
+            ]
+        )
+        self.application.ingest(tenant.id, property_item.id, source.id)
+        self.assertIsNone(
+            self.application.evaluate(tenant.id, property_item.id).decision.rule_id
+        )
+        result = self.application.evaluate_field(tenant.id, field.id)
+        self.assertEqual(result.decision.subject_field_id, field.id)
+        self.assertEqual(result.decision.selected_rule_scope_type, "FIELD")
+        self.assertIn(evidence.id, result.decision.evidence_ids)
+        with self.store.tenant_transaction(tenant.id):
+            stored = self.store.connection.execute(
+                "SELECT subject_field_id,selected_rule_scope_type FROM decision WHERE id=%s",
+                (result.decision.id,),
+            ).fetchone()
+            self.assertEqual(str(stored["subject_field_id"]), field.id)
+            self.assertEqual(stored["selected_rule_scope_type"], "FIELD")
+            with self.assertRaises(psycopg.Error):
+                self.store.connection.execute(
+                    "UPDATE decision SET property_id=%s WHERE id=%s",
+                    (other_property.id, result.decision.id),
+                )
+
     def test_spatial_asset_context_is_postgis_persisted_and_tenant_scoped(self) -> None:
         tenant = self.create_test_tenant("Spatial asset PG tenant")
         property = self.application.create_property(tenant.id, "Asset context property")

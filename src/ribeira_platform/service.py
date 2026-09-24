@@ -537,33 +537,44 @@ class RibeiraApplication:
             parse_aware(rule.valid_until)
         if rule.status == "ACTIVE" and not rule.approved_by:
             raise ValueError("active rule requires approved_by")
-        if rule.scope_type not in {"TENANT", "PROPERTY", "ASSET", "CUSTOMER"}:
+        if rule.scope_type not in {"TENANT", "PROPERTY", "ASSET", "FIELD", "CUSTOMER"}:
             raise ValueError(
-                "rule scope_type must be TENANT, PROPERTY, ASSET or CUSTOMER"
+                "rule scope_type must be TENANT, PROPERTY, ASSET, FIELD or CUSTOMER"
             )
         scope_is_valid = (
             (
                 rule.scope_type == "TENANT"
                 and rule.scope_property_id is None
                 and rule.scope_asset_id is None
+                and rule.scope_field_id is None
                 and rule.scope_customer_id is None
             )
             or (
                 rule.scope_type == "PROPERTY"
                 and rule.scope_property_id is not None
                 and rule.scope_asset_id is None
+                and rule.scope_field_id is None
                 and rule.scope_customer_id is None
             )
             or (
                 rule.scope_type == "ASSET"
                 and rule.scope_property_id is None
                 and rule.scope_asset_id is not None
+                and rule.scope_field_id is None
+                and rule.scope_customer_id is None
+            )
+            or (
+                rule.scope_type == "FIELD"
+                and rule.scope_property_id is None
+                and rule.scope_asset_id is None
+                and rule.scope_field_id is not None
                 and rule.scope_customer_id is None
             )
             or (
                 rule.scope_type == "CUSTOMER"
                 and rule.scope_property_id is None
                 and rule.scope_asset_id is None
+                and rule.scope_field_id is None
                 and rule.scope_customer_id is not None
             )
         )
@@ -580,6 +591,12 @@ class RibeiraApplication:
                 self.business.asset_for_rule_evaluation(
                     rule.tenant_id, rule.scope_asset_id
                 )
+            if rule.scope_field_id is not None:
+                if (
+                    self.fields.repository.get(rule.tenant_id, rule.scope_field_id)
+                    is None
+                ):
+                    raise LookupError("rule scope field is unavailable in tenant")
             if (
                 rule.scope_customer_id is not None
                 and self.business.repository.get_customer(
@@ -602,6 +619,7 @@ class RibeiraApplication:
                     "scope_type": rule.scope_type,
                     "scope_property_id": rule.scope_property_id,
                     "scope_asset_id": rule.scope_asset_id,
+                    "scope_field_id": rule.scope_field_id,
                     "scope_customer_id": rule.scope_customer_id,
                 },
                 new_id(),
@@ -758,6 +776,42 @@ class RibeiraApplication:
             if self.store.get_property(tenant_id, property_id) is None:
                 raise LookupError("property not found in tenant")
             return self.store.decision_history_for_property(tenant_id, property_id)
+
+    def evaluate_field(
+        self,
+        tenant_id: str,
+        field_id: str,
+        actor: str = "system",
+        platform_admin: bool = False,
+    ):
+        """Evaluate a rule selected for one source-backed non-legal field/talhao.
+
+        The current observations remain property-scoped. Field registration is
+        only applicability context and does not become crop, soil or agronomic
+        evidence.
+        """
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            field = self.fields.repository.get(tenant_id, field_id)
+            if field is None:
+                raise LookupError("field context not found in tenant")
+            evidence = self.store.evidence_for_reference(tenant_id, field.id)
+            evidence_id = (
+                evidence.id
+                if evidence is not None
+                and evidence.evidence_type == "FIELD_REGISTRATION"
+                else None
+            )
+            property_item = self.store.get_property(tenant_id, field.property_id)
+            if property_item is None:
+                raise LookupError("field property is unavailable in tenant")
+            with self.store.transaction():
+                return self.decisions.evaluate(
+                    tenant_id,
+                    property_item,
+                    actor,
+                    field_id=field.id,
+                    field_evidence_id=evidence_id,
+                )
 
     def complete_action(
         self,

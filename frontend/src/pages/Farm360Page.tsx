@@ -338,10 +338,10 @@ export function Farm360Page({
         </section>
         <section className="context-availability">
           <h2>Contexto e evidências</h2>
-          {optionalDataLoading ? <p>Carregando contexto disponível…</p> : partialLoadIssues.context || partialLoadIssues.provenance ? <p>Não foi possível atualizar parte do contexto agora. Propriedade, limite e ativos disponíveis continuam acessíveis.</p> : scenes.length === 0 && timeline.length === 0 ? <p>Contexto ainda não disponível. Isso não altera os dados confirmados da propriedade.</p> : <p>Contexto persistido disponível para consulta.</p>}
+          {optionalDataLoading ? <p>Carregando contexto disponível…</p> : partialLoadIssues.context || partialLoadIssues.provenance || partialLoadIssues.fields ? <p>Não foi possível atualizar parte do contexto agora. Propriedade, limite e ativos disponíveis continuam acessíveis.</p> : scenes.length === 0 && timeline.length === 0 && fields.length === 0 ? <p>Contexto ainda não disponível. Isso não altera os dados confirmados da propriedade.</p> : <p>Contexto persistido disponível para consulta.</p>}
         </section>
         <LayerManager basemap={basemap} ndviAvailable={Boolean(product && product.processing_status === "SUCCEEDED")} ndviEnabled={ndviEnabled} onNdviEnabled={setNdviEnabled} deltaAvailable={Boolean(comparison?.comparison.delta_product_id)} deltaEnabled={deltaEnabled} onDeltaEnabled={setDeltaEnabled} />
-        <DataAvailabilityPanel property={property} assets={assets} scenes={scenes} timeline={timeline} />
+        <DataAvailabilityPanel property={property} assets={assets} fields={fields} scenes={scenes} timeline={timeline} fieldsUnavailable={partialLoadIssues.fields} />
         <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} decisions={decisions} open={reportOpen} onOpenChange={setReportOpen} />
         <PilotFeedbackPanel api={api} tenantId={tenantId} propertyId={propertyId} />
         {partialLoadIssues.decisions && <section><h2>Riscos e decisões</h2><p>Não foi possível atualizar decisões agora. Isso não confirma ausência de risco ou oportunidade.</p></section>}
