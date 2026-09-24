@@ -72,9 +72,14 @@ def _require_projected_metre_crs(crs: CRS | object | None) -> CRS:
 
 
 def _transform_to_crs(geometry: dict, target_crs: CRS):
-    source = shape(geometry)
-    if source.is_empty:
-        raise TerrainProcessingError("geometry must not be empty")
+    try:
+        source = shape(geometry)
+    except (TypeError, ValueError) as exc:
+        raise TerrainProcessingError("geometry must be valid GeoJSON") from exc
+    if source.is_empty or not source.is_valid:
+        raise TerrainProcessingError("geometry must be valid and non-empty")
+    if not np.isfinite(source.bounds).all():
+        raise TerrainProcessingError("geometry coordinates must be finite")
     transformer = Transformer.from_crs("EPSG:4326", target_crs, always_xy=True)
     return transform_geometry(transformer.transform, source)
 
@@ -123,7 +128,7 @@ def _derivatives(
 def _profile_distances(
     line: LineString, spacing_metres: float
 ) -> Iterable[tuple[float, tuple[float, float]]]:
-    if len(line.coords) < 2:
+    if len(line.coords) < 2 or line.length <= 0:
         raise TerrainProcessingError(
             "terrain profile requires at least two coordinates"
         )
@@ -170,6 +175,10 @@ class TerrainProcessor:
                     "terrain DEM must contain exactly one elevation band"
                 )
             elevation = np.ma.masked_invalid(clipped[0].astype(np.float64, copy=False))
+            if elevation.count() == 0:
+                raise TerrainProcessingError(
+                    "terrain DEM has no valid elevation cells within the AOI"
+                )
             x_size, y_size = _cell_size(transform)
             dzdx, dzdy = _derivatives(elevation, x_size, y_size)
             slope = np.ma.arctan(np.ma.sqrt(dzdx**2 + dzdy**2)) * (180.0 / np.pi)

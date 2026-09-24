@@ -95,3 +95,27 @@ class TerrainProcessorTests(unittest.TestCase):
 
         with self.assertRaisesRegex(TerrainProcessingError, "fully contained"):
             TerrainProcessor().analyze(self.path, self.aoi(), profile_geojson=profile)
+
+    def test_rejects_invalid_aoi_and_zero_length_profile(self) -> None:
+        self.write_dem(np.tile(np.arange(5) * 10, (5, 1)))
+        invalid_aoi = {
+            "type": "Polygon",
+            "coordinates": [
+                [[0.0, 0.0], [0.0045, 0.0045], [0.0045, 0.0], [0.0, 0.0045], [0.0, 0.0]]
+            ],
+        }
+        with self.assertRaisesRegex(TerrainProcessingError, "valid and non-empty"):
+            TerrainProcessor().analyze(self.path, invalid_aoi)
+        zero_profile = {
+            "type": "LineString",
+            "coordinates": [[0.002, 0.002], [0.002, 0.002]],
+        }
+        with self.assertRaisesRegex(TerrainProcessingError, "valid and non-empty"):
+            TerrainProcessor().analyze(
+                self.path, self.aoi(), profile_geojson=zero_profile
+            )
+
+    def test_rejects_dem_without_valid_cells_inside_aoi(self) -> None:
+        self.write_dem(np.full((5, 5), -9999.0))
+        with self.assertRaisesRegex(TerrainProcessingError, "no valid elevation cells"):
+            TerrainProcessor().analyze(self.path, self.aoi())
