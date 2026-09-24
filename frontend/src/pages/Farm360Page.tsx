@@ -398,6 +398,9 @@ export function Farm360Page({
           onChanged={refresh}
         />}
         <TemporalPanel
+          api={api}
+          tenantId={tenantId}
+          propertyId={propertyId}
           items={timeline}
           selectedProductId={selectedProductId}
           mode={mode}
@@ -405,10 +408,9 @@ export function Farm360Page({
           targetProductId={targetProductId}
           comparison={comparison}
           comparisonLoading={comparisonLoading}
-          onSelectProduct={(productId) => {
-            setSelectedProductId(productId);
-            setProvenanceProductId(productId);
-          }}
+          canProcess={canRunSatelliteOperations}
+          onChanged={refresh}
+          onSelectProduct={(id) => { setSelectedProductId(id); setProvenanceProductId(id); }}
           onModeChange={setMode}
           onBaselineChange={setBaselineProductId}
           onTargetChange={setTargetProductId}

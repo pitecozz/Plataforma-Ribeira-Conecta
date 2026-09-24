@@ -237,6 +237,30 @@ export class Farm360Api {
       { search_id: searchId },
     );
   }
+  createQualityMaskedNdviJob(
+    tenantId: string,
+    propertyId: string,
+    productId: string,
+  ) {
+    return this.post<ProcessingJob>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/quality-masked-ndvi-jobs`,
+      { product_id: productId },
+    );
+  }
+  createTemporalDeltaJob(
+    tenantId: string,
+    propertyId: string,
+    baselineProductId: string,
+    targetProductId: string,
+  ) {
+    return this.post<ProcessingJob>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/temporal-delta-jobs`,
+      {
+        baseline_product_id: baselineProductId,
+        target_product_id: targetProductId,
+      },
+    );
+  }
   job(tenantId: string, jobId: string) {
     return this.get<ProcessingJob>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/processing-jobs/${encodeURIComponent(jobId)}`,
