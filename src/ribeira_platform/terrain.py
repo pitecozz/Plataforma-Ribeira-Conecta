@@ -71,6 +71,17 @@ def _require_projected_metre_crs(crs: CRS | object | None) -> CRS:
     return parsed
 
 
+def _require_elevation_metres(elevation_unit: str | None) -> None:
+    """Require a caller assertion before labelling DEM values as metres."""
+    if not isinstance(elevation_unit, str):
+        raise TerrainProcessingError("DEM elevation unit must be explicitly declared")
+    normalized = elevation_unit.strip().lower()
+    if normalized not in {"m", "metre", "metres", "meter", "meters"}:
+        raise TerrainProcessingError(
+            "terrain analysis requires DEM elevations in metres"
+        )
+
+
 def _transform_to_crs(geometry: dict, target_crs: CRS):
     try:
         source = shape(geometry)
@@ -80,8 +91,20 @@ def _transform_to_crs(geometry: dict, target_crs: CRS):
         raise TerrainProcessingError("geometry must be valid and non-empty")
     if not np.isfinite(source.bounds).all():
         raise TerrainProcessingError("geometry coordinates must be finite")
+    west, south, east, north = source.bounds
+    if west < -180 or east > 180 or south < -90 or north > 90:
+        raise TerrainProcessingError(
+            "geometry coordinates must be valid WGS84 longitude/latitude"
+        )
     transformer = Transformer.from_crs("EPSG:4326", target_crs, always_xy=True)
-    return transform_geometry(transformer.transform, source)
+    transformed = transform_geometry(transformer.transform, source)
+    if (
+        transformed.is_empty
+        or not transformed.is_valid
+        or not np.isfinite(transformed.bounds).all()
+    ):
+        raise TerrainProcessingError("geometry cannot be transformed into the DEM CRS")
+    return transformed
 
 
 def _cell_size(transform: Affine) -> tuple[float, float]:
@@ -153,8 +176,10 @@ class TerrainProcessor:
         dem_path: str | Path,
         aoi_geojson: dict,
         *,
+        elevation_unit: str | None = None,
         profile_geojson: dict | None = None,
     ) -> TerrainAnalysis:
+        _require_elevation_metres(elevation_unit)
         with rasterio.open(dem_path) as dataset:
             crs = _require_projected_metre_crs(dataset.crs)
             aoi = _transform_to_crs(aoi_geojson, crs)
@@ -247,7 +272,10 @@ class TerrainProcessor:
         samples = dataset.sample([coordinate for _, coordinate in points], masked=True)
         return [
             TerrainProfilePoint(
-                distance, None if np.ma.is_masked(sample[0]) else float(sample[0])
+                distance,
+                None
+                if np.ma.is_masked(sample[0]) or not np.isfinite(sample[0])
+                else float(sample[0]),
             )
             for (distance, _), sample in zip(points, samples, strict=True)
         ]

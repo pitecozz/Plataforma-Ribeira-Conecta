@@ -142,16 +142,18 @@ authorized portfolio.
 
 `terrain.py` provides the bounded, provider-neutral calculation core for an
 explicitly supplied DEM: clipped elevation, slope, downslope aspect, hillshade and an
-optional line-profile sample at DEM-resolution intervals. Its input AOI is transformed from WGS84 to a
+optional line-profile sample at DEM-resolution intervals. The caller must explicitly declare that
+the DEM sample values are metres before the core labels any elevation result in metres; its
+horizontal CRS alone cannot establish that vertical/value unit. Its input AOI is transformed from WGS84 to a
 projected metre-based DEM CRS; geographic or rotated grids are rejected rather
 than producing misleading slope values. Border cells and cells with missing
-neighbours remain unavailable, and profile samples over nodata remain `NULL`; intermediate profile samples are derived from the DEM grid, not a surveyed trace. Invalid, empty or non-finite AOIs/profile geometries and a DEM with no valid clipped elevation cells are rejected rather than becoming an empty terrain conclusion.
+neighbours remain unavailable, and profile samples over nodata or non-finite values remain `NULL`; intermediate profile samples are derived from the DEM grid, not a surveyed trace. Invalid, empty, non-finite or out-of-range WGS84 AOIs/profile geometries and a DEM with no valid clipped elevation cells are rejected rather than becoming an empty terrain conclusion.
 A requested profile must be wholly inside the supplied AOI: Ribeira rejects an outside segment rather than silently clipping it or attributing neighbouring terrain to the property.
 
 This is not yet a configured customer-facing terrain layer. A future ingest
 increment must use an approved, allowlisted DEM provider and persist its
 dataset/version, source reference, acquisition/publication time, checksum,
-resolution, CRS, processing version and limitations before a result is exposed
+resolution, horizontal CRS, elevation value/vertical unit, processing version and limitations before a result is exposed
 or stored. Derived terrain is neither a field survey nor legal boundary,
 drainage, soil, coverage or agronomic conclusion.
 
