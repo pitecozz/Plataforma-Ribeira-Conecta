@@ -741,7 +741,53 @@ def create_app(
         except Exception:
             return None
 
+    def property_spatial_summary(item: Property) -> dict[str, Any]:
+        if item.geometry_geojson is None or item.geometry_crs is None:
+            return {
+                "area_hectares": None,
+                "perimeter_metres": None,
+                "centroid": None,
+                "bbox": None,
+                "vertex_count": None,
+            }
+        try:
+            geometry, _, _ = GeometryService.to_wgs84(item)
+            parsed = shape(geometry)
+            area, perimeter = Geod(ellps="WGS84").geometry_area_perimeter(parsed)
+            centroid = parsed.representative_point()
+            coordinates = geometry.get("coordinates", [])
+            vertex_count = sum(
+                len(ring)
+                for polygon in (
+                    coordinates
+                    if geometry.get("type") == "MultiPolygon"
+                    else [coordinates]
+                )
+                for ring in polygon
+            )
+            return {
+                "area_hectares": format(
+                    abs(Decimal(str(area))) / Decimal("10000"), "f"
+                ),
+                "perimeter_metres": format(abs(Decimal(str(perimeter))), "f"),
+                "centroid": {
+                    "longitude": float(centroid.x),
+                    "latitude": float(centroid.y),
+                },
+                "bbox": [float(value) for value in parsed.bounds],
+                "vertex_count": vertex_count,
+            }
+        except Exception:
+            return {
+                "area_hectares": None,
+                "perimeter_metres": None,
+                "centroid": None,
+                "bbox": None,
+                "vertex_count": None,
+            }
+
     def safe_property(item: Property, status: str | None = None) -> dict[str, Any]:
+        spatial = property_spatial_summary(item)
         return {
             "id": item.id,
             "name": item.name,
@@ -750,7 +796,11 @@ def create_app(
             "geometry_crs": item.geometry_crs,
             "boundary_source": item.boundary_source,
             "boundary_checksum": item.boundary_checksum,
-            "area_hectares": property_area_hectares(item),
+            "area_hectares": spatial["area_hectares"],
+            "perimeter_metres": spatial["perimeter_metres"],
+            "centroid": spatial["centroid"],
+            "bbox": spatial["bbox"],
+            "boundary_vertex_count": spatial["vertex_count"],
             "classification": item.classification.value,
             "created_at": item.created_at,
             "updated_at": item.updated_at,

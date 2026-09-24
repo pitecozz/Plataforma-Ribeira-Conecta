@@ -20,6 +20,7 @@ interface Props {
   ndviEnabled: boolean;
   deltaEnabled: boolean;
   token: string;
+  onMapClick?: (coordinates: [number, number]) => void;
 }
 
 const sourceId = "property-aoi";
@@ -133,6 +134,7 @@ export function MapCanvas({
   ndviEnabled,
   deltaEnabled,
   token,
+  onMapClick,
 }: Props) {
   const externalBasemapConfigured = Boolean(
     import.meta.env.VITE_RIBEIRA_BASEMAP_STYLE_URL ||
@@ -143,6 +145,7 @@ export function MapCanvas({
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<maplibregl.Marker[]>([]);
   const onAssetSelectedRef = useRef(onAssetSelected);
+  const onMapClickRef = useRef(onMapClick);
   const fitPropertyRef = useRef<(() => void) | null>(null);
   const assetClickAttached = useRef(false);
   const [markerLayoutVersion, setMarkerLayoutVersion] = useState(0);
@@ -150,6 +153,7 @@ export function MapCanvas({
   useEffect(() => {
     onAssetSelectedRef.current = onAssetSelected;
   }, [onAssetSelected]);
+  useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
 
   useEffect(() => {
     if (!element.current || map.current) return;
@@ -170,6 +174,7 @@ export function MapCanvas({
       element.current?.setAttribute("data-map-style-loaded", "true");
     });
     active.on("moveend", () => setMarkerLayoutVersion((value) => value + 1));
+    active.on("click", (event) => onMapClickRef.current?.([event.lngLat.lng, event.lngLat.lat]));
     map.current = active;
 
     return () => {

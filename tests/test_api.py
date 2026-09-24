@@ -129,6 +129,9 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(body["classification"], "MANUAL_CONFIRMED")
         self.assertEqual(body["geometry_crs"], "EPSG:4326")
         self.assertIsNotNone(body["area_hectares"])
+        self.assertGreater(float(body["perimeter_metres"]), 0)
+        self.assertIsNotNone(body["centroid"])
+        self.assertEqual(len(body["bbox"]), 4)
         self.assertEqual(body["data_status"], "UNKNOWN")
 
     def test_vale_do_ribeira_situation_is_authenticated_and_read_only(self) -> None:

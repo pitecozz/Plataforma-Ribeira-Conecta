@@ -12,6 +12,10 @@ export interface PropertyRecord {
   boundary_source: string | null;
   boundary_checksum?: string | null;
   area_hectares: string | null;
+  perimeter_metres?: string | null;
+  centroid?: { longitude: number; latitude: number } | null;
+  bbox?: number[] | null;
+  boundary_vertex_count?: number | null;
   classification: string;
   created_at: string;
   updated_at?: string | null;
