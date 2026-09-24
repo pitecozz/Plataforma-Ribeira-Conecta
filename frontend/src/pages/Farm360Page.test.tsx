@@ -77,7 +77,9 @@ describe("Farm360Page", () => {
     expect(screen.getByRole("heading", { name: "Disponibilidade de dados" })).toBeInTheDocument();
     expect(screen.getByText("1 ativo(s) confirmado(s)")).toBeInTheDocument();
     expect(screen.getByText("Nenhuma cena ou produto disponível")).toBeInTheDocument();
-    expect(screen.getByText("Limite cadastrado; visualização do mapa é verificada separadamente")).toBeInTheDocument();
+    expect(screen.getByText("Limite cadastrado e visível no mapa")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Centralizar propriedade" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ver ativos" })).toBeInTheDocument();
     expect(screen.queryByText(/não foi possível carregar os dados persistidos/)).not.toBeInTheDocument();
   });
 
@@ -85,7 +87,7 @@ describe("Farm360Page", () => {
     const api = apiFor({ assets: vi.fn().mockRejectedValue(new Error("asset request failed")) } as Partial<Farm360Api>);
     render(<Farm360Page api={api} apiBaseUrl="/api" tenantId="tenant-hamilton" propertyId="property-hamilton" token="test" />);
     await act(async () => { await Promise.resolve(); });
-    expect(await screen.findByText("Sítio Hamilton")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sítio Hamilton" })).toBeInTheDocument();
     expect(screen.getByTestId("property-map")).toHaveTextContent("boundary-ready");
     expect(screen.getByRole("alert")).toHaveTextContent("Não foi possível atualizar os ativos");
     expect(screen.queryByText(/não foi possível carregar os dados persistidos/)).not.toBeInTheDocument();

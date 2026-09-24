@@ -59,6 +59,13 @@ classification and context. An empty inventory remains
 `DADO_INSUFICIENTE`; visualizing an asset never asserts unrecorded equipment,
 calibration, connectivity or condition.
 
+At the current zoom, very close real asset locations may be represented by one
+temporary overlap marker. Selecting it opens the names of every corresponding
+persisted asset; selecting an asset from the list recentres and highlights its
+real location. This is a screen-space interaction aid, not a coordinate edit,
+derived position or asset relationship. Zooming can separate the original
+positions where their actual geometries permit it.
+
 ## Read endpoints
 
 - `GET /v1/tenants/{tenant_id}/properties`

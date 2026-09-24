@@ -35,7 +35,7 @@ export function DataAvailabilityPanel({
       label: "Limite da propriedade",
       state: property.geometry_geojson ? "available" : "awaiting",
       detail: property.geometry_geojson
-        ? "Limite cadastrado; visualização do mapa é verificada separadamente"
+        ? "Limite cadastrado e visível no mapa"
         : "Nenhum limite cadastrado",
     },
     {

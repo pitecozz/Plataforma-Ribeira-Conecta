@@ -1,19 +1,11 @@
 import { useEffect, useState } from "react";
 
 import type { Farm360Api } from "../api/client";
-import { Status } from "../components/Status";
 import { HomePage } from "./HomePage";
 import { PropertyWorkspace } from "./PropertyWorkspace";
 import "./PilotShell.css";
 
 type View = "HOME" | "FARM360" | "HELP";
-
-const moduleStates = [
-  ["Farm360", "BETA"], ["Maps", "BETA"], ["Assets", "BETA"],
-  ["Flood", "FOUNDATION"], ["Agro", "COMING_SOON"], ["Soil", "COMING_SOON"],
-  ["IoT", "COMING_SOON"], ["Connect", "COMING_SOON"], ["Energy", "COMING_SOON"],
-  ["Reports", "BETA"], ["Prospect", "COMING_SOON"], ["AI", "DEFERRED"],
-] as const;
 
 export function PilotShell({
   api,
@@ -49,5 +41,19 @@ export function PilotShell({
     setSelectedPropertyId(propertyId);
     setView("FARM360");
   };
-  return <div className="pilot-shell"><header className="pilot-header"><div><p className="eyebrow">Ribeira Conecta</p><strong>piloto beta</strong></div><nav aria-label="Navegação principal"><button type="button" className={view === "HOME" ? "selected" : ""} onClick={() => setView("HOME")}>Home</button><button type="button" className={view === "FARM360" ? "selected" : ""} onClick={() => setView("FARM360")}>Farm360</button><button type="button" className={view === "HELP" ? "selected" : ""} onClick={() => setView("HELP")}>Ajuda</button></nav></header><aside className="module-status" aria-label="Estado dos módulos"><span>Estado da plataforma:</span>{moduleStates.map(([module, state]) => <span key={module}>{module} <Status value={state} /></span>)}</aside>{view === "HOME" && <HomePage api={api} tenantId={tenantId} onOpenFarm360={openFarm360} />}{view === "FARM360" && <PropertyWorkspace key={selectedPropertyId ?? "portfolio"} api={api} apiBaseUrl={apiBaseUrl} tenantId={tenantId} initialPropertyId={selectedPropertyId} token={token} canManageProperties={canManageProperties} canManageBoundary={canManageBoundary} canRunSatelliteOperations={canRunSatelliteOperations} />}{view === "HELP" && <main className="state"><h1>Ajuda do piloto</h1><p>Use Home para abrir uma propriedade e Farm360 para consultar limite, ativos e evidências disponíveis.</p><p>Quando uma análise ainda não está disponível, a tela explica o que falta. Nenhuma conclusão é criada por suposição.</p><p>Envie feedback pela propriedade no Farm360. Telemetria, adequação agrícola e automações ainda não estão disponíveis neste beta.</p></main>}</div>;
+  return (
+    <div className="pilot-shell">
+      <header className="pilot-header">
+        <div><p className="eyebrow">Ribeira Conecta</p><strong>piloto beta</strong></div>
+        <nav aria-label="Navegação principal">
+          <button type="button" className={view === "HOME" ? "selected" : ""} onClick={() => setView("HOME")}>Visão geral</button>
+          <button type="button" className={view === "FARM360" ? "selected" : ""} onClick={() => setView("FARM360")}>Farm360</button>
+          <button type="button" className={view === "HELP" ? "selected" : ""} onClick={() => setView("HELP")}>Ajuda</button>
+        </nav>
+      </header>
+      {view === "HOME" && <HomePage api={api} tenantId={tenantId} onOpenFarm360={openFarm360} />}
+      {view === "FARM360" && <PropertyWorkspace key={selectedPropertyId ?? "portfolio"} api={api} apiBaseUrl={apiBaseUrl} tenantId={tenantId} initialPropertyId={selectedPropertyId} token={token} canManageProperties={canManageProperties} canManageBoundary={canManageBoundary} canRunSatelliteOperations={canRunSatelliteOperations} />}
+      {view === "HELP" && <main className="state"><h1>Ajuda do piloto</h1><p>Use a Visão geral para abrir uma propriedade e o Farm360 para consultar limite, ativos e evidências disponíveis.</p><p>Quando uma análise ainda não está disponível, a tela explica o que falta. Nenhuma conclusão é criada por suposição.</p><p>Envie feedback pela propriedade no Farm360. Telemetria, adequação agrícola e automações ainda não estão disponíveis neste beta.</p></main>}
+    </div>
+  );
 }

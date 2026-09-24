@@ -31,3 +31,49 @@
 .empty-state {
   color: #92400e;
 }
+
+.property-summary {
+  background: linear-gradient(135deg, #f0fdf4, #ffffff);
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.property-summary h1 {
+  color: #14532d;
+  font-size: 21px;
+  margin: 0;
+}
+
+.property-summary .eyebrow {
+  color: #166534;
+  margin: 0 0 5px;
+}
+
+.property-summary-facts {
+  color: #365344;
+  font-size: 13px;
+  margin: 6px 0 12px;
+}
+
+.property-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.property-summary-actions button {
+  background: #fff;
+  border: 1px solid #86a58d;
+  border-radius: 4px;
+  color: #14532d;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 8px;
+}
+
+.property-summary-actions button:hover,
+.property-summary-actions button:focus-visible {
+  background: #dcfce7;
+}

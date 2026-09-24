@@ -27,8 +27,8 @@ export function AssetPanel({
   const selected = assets.find((asset) => asset.id === selectedAssetId) ?? null;
   return (
     <section className="asset-panel">
-      <h2>Ativos e contexto</h2>
-      <p>Ativos confirmados vinculados a esta propriedade.</p>
+      <h2>Ativos confirmados{assets.length > 0 ? ` — ${assets.length}` : ""}</h2>
+      <p>Selecione um ativo para localizá-lo no mapa e consultar seus dados confirmados.</p>
       {loadError ? (
         <p role="alert">
           Não foi possível atualizar os ativos confirmados agora.
@@ -65,14 +65,18 @@ export function AssetPanel({
             <dd>
               <Status value={selected.status} />
             </dd>
-            <dt>Classificação</dt>
+            <dt>Localização</dt>
+            <dd>{selected.geometry_geojson ? "Posição registrada no mapa" : "Localização ainda não registrada"}</dd>
+            <dt>Confirmação</dt>
             <dd>
               <Status value={selected.classification} />
             </dd>
-            <dt>Observado em</dt>
+            <dt>Última observação</dt>
             <dd>{customerDateLabel(selected.observed_at)}</dd>
             <dt>Fonte</dt>
             <dd>{customerSourceLabel(selected.source_reference)}</dd>
+            <dt>Contexto</dt>
+            <dd>{contextEntries(selected.context).length > 0 ? "Informações complementares registradas" : "Ainda não disponível"}</dd>
           </dl>
           <details>
             <summary>Detalhes técnicos e proveniência</summary>

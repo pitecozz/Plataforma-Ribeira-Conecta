@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Farm360Api } from "../api/client";
 import type {
   DigitalTwinAsset,
@@ -24,6 +24,7 @@ import { TemporalPanel } from "../features/temporal/TemporalPanel";
 import { SceneOperationsPanel } from "../features/operations/SceneOperationsPanel";
 import { BoundaryImportPanel } from "../features/property/BoundaryImportPanel";
 import { DataAvailabilityPanel } from "../features/context/DataAvailabilityPanel";
+import { formatHectares } from "../formatting";
 
 interface Props {
   api: Farm360Api;
@@ -93,6 +94,9 @@ export function Farm360Page({
   const [partialLoadIssues, setPartialLoadIssues] =
     useState<PartialLoadIssues>(noPartialLoadIssues);
   const [optionalDataLoading, setOptionalDataLoading] = useState(true);
+  const [recenterRequest, setRecenterRequest] = useState(0);
+  const [reportOpen, setReportOpen] = useState(false);
+  const assetPanelAnchor = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     setState("loading");
@@ -237,6 +241,12 @@ export function Farm360Page({
       </main>
     );
 
+  const area = formatHectares(property.area_hectares);
+  const showAssets = () => {
+    assetPanelAnchor.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (assets[0]) setSelectedAssetId(assets[0].id);
+  };
+
   return (
     <main className="farm360">
       <div className="map-column">
@@ -251,6 +261,7 @@ export function Farm360Page({
           ndviEnabled={ndviEnabled}
           deltaEnabled={deltaEnabled}
           token={token}
+          recenterRequest={recenterRequest}
         />
         <div className="map-tools">
           {product ? <label><input type="checkbox" checked={ndviEnabled} onChange={(event) => setNdviEnabled(event.target.checked)} /> NDVI</label> : <span>NDVI: sem dados disponíveis</span>}
@@ -277,21 +288,40 @@ export function Farm360Page({
         </div>
       </div>
       <aside>
+        <section className="property-summary">
+          <p className="eyebrow">Farm360</p>
+          <h1>{property.name}</h1>
+          <p className="property-summary-facts">
+            {area ? `${area} ha` : "Área ainda não disponível"} · {assets.length} ativo(s) confirmado(s)
+          </p>
+          <dl>
+            <dt>Limite</dt><dd>{property.geometry_geojson ? "Disponível e visível no mapa" : "Ainda não disponível"}</dd>
+            <dt>Contexto ambiental</dt><dd>Em enriquecimento</dd>
+            <dt>Satélite</dt><dd>{scenes.length > 0 ? "Cenas catalogadas" : "Aguardando dados"}</dd>
+          </dl>
+          <div className="property-summary-actions">
+            <button type="button" onClick={() => setRecenterRequest((value) => value + 1)}>Centralizar propriedade</button>
+            <button type="button" onClick={showAssets}>Ver ativos</button>
+            <button type="button" onClick={() => setReportOpen(true)}>Abrir relatório</button>
+          </div>
+        </section>
         <section className="context-availability">
           <h2>Contexto e evidências</h2>
           {optionalDataLoading ? <p>Carregando contexto disponível…</p> : partialLoadIssues.context || partialLoadIssues.provenance ? <p>Não foi possível atualizar parte do contexto agora. Propriedade, limite e ativos disponíveis continuam acessíveis.</p> : scenes.length === 0 && timeline.length === 0 ? <p>Contexto ainda não disponível. Isso não altera os dados confirmados da propriedade.</p> : <p>Contexto persistido disponível para consulta.</p>}
         </section>
         <DataAvailabilityPanel property={property} assets={assets} scenes={scenes} timeline={timeline} />
-        <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} decisions={decisions} />
+        <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} decisions={decisions} open={reportOpen} onOpenChange={setReportOpen} />
         <PilotFeedbackPanel api={api} tenantId={tenantId} propertyId={propertyId} />
         {partialLoadIssues.decisions && <section><h2>Riscos e decisões</h2><p>Não foi possível atualizar decisões agora. Isso não confirma ausência de risco ou oportunidade.</p></section>}
         {!partialLoadIssues.decisions && <RiskDecisionPanel decisions={decisions} />}
-        <AssetPanel
-          assets={assets}
-          selectedAssetId={selectedAssetId}
-          onSelect={setSelectedAssetId}
-          loadError={partialLoadIssues.assets}
-        />
+        <div ref={assetPanelAnchor}>
+          <AssetPanel
+            assets={assets}
+            selectedAssetId={selectedAssetId}
+            onSelect={setSelectedAssetId}
+            loadError={partialLoadIssues.assets}
+          />
+        </div>
         {canRunSatelliteOperations && <SceneOperationsPanel
           api={api}
           tenantId={tenantId}

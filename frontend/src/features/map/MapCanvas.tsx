@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Geometry } from "geojson";
 import * as maplibregl from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
@@ -13,6 +13,7 @@ interface Props {
   assets?: DigitalTwinAsset[];
   selectedAssetId?: string | null;
   onAssetSelected?: (assetId: string) => void;
+  recenterRequest?: number;
   apiBaseUrl: string;
   tileUrl: string | null;
   deltaTileUrl: string | null;
@@ -61,11 +62,71 @@ function pointCoordinates(asset: DigitalTwinAsset): [number, number] | null {
   return bounds ? [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2] : null;
 }
 
+type PositionedAsset = {
+  asset: DigitalTwinAsset;
+  coordinates: [number, number];
+  point: maplibregl.Point;
+};
+
+type MarkerGroup = {
+  coordinates: [number, number];
+  assets: PositionedAsset[];
+};
+
+// This is a display-only grouping threshold.  It never adjusts persisted
+// coordinates: when points resolve at the current zoom they become separate
+// markers again.
+const overlapDistancePixels = 22;
+
+function groupVisibleAssets(
+  active: maplibregl.Map,
+  assets: DigitalTwinAsset[],
+): MarkerGroup[] {
+  const positioned: PositionedAsset[] = assets.flatMap((asset) => {
+    const coordinates = pointCoordinates(asset);
+    return coordinates ? [{ asset, coordinates, point: active.project(coordinates) }] : [];
+  });
+  const groups: MarkerGroup[] = [];
+  for (const item of positioned) {
+    const existing = groups.find((group) => {
+      const anchor = group.assets[0]?.point;
+      return anchor ? anchor.dist(item.point) <= overlapDistancePixels : false;
+    });
+    if (existing) existing.assets.push(item);
+    else groups.push({ coordinates: item.coordinates, assets: [item] });
+  }
+  return groups;
+}
+
+function overlapPopup(
+  assets: PositionedAsset[],
+  onSelect: (assetId: string) => void,
+): HTMLElement {
+  const content = document.createElement("div");
+  content.className = "asset-overlap-popup";
+  const title = document.createElement("strong");
+  title.textContent = `${assets.length} ativos nesta localização`;
+  content.append(title);
+  const list = document.createElement("ul");
+  for (const { asset } of assets) {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = asset.name;
+    button.addEventListener("click", () => onSelect(asset.id));
+    item.append(button);
+    list.append(item);
+  }
+  content.append(list);
+  return content;
+}
+
 export function MapCanvas({
   aoi,
   assets = [],
   selectedAssetId,
   onAssetSelected,
+  recenterRequest = 0,
   apiBaseUrl,
   tileUrl,
   deltaTileUrl,
@@ -84,6 +145,7 @@ export function MapCanvas({
   const onAssetSelectedRef = useRef(onAssetSelected);
   const fitPropertyRef = useRef<(() => void) | null>(null);
   const assetClickAttached = useRef(false);
+  const [markerLayoutVersion, setMarkerLayoutVersion] = useState(0);
 
   useEffect(() => {
     onAssetSelectedRef.current = onAssetSelected;
@@ -107,6 +169,7 @@ export function MapCanvas({
     active.on("style.load", () => {
       element.current?.setAttribute("data-map-style-loaded", "true");
     });
+    active.on("moveend", () => setMarkerLayoutVersion((value) => value + 1));
     map.current = active;
 
     return () => {
@@ -253,29 +316,58 @@ export function MapCanvas({
   useEffect(() => {
     const active = map.current;
     if (!active) return;
-    const created = assets.flatMap((asset) => {
-      const coordinates = pointCoordinates(asset);
-      if (!coordinates) return [];
+    const created = groupVisibleAssets(active, assets).map((group) => {
+      const grouped = group.assets.length > 1;
+      const selected = group.assets.some(({ asset }) => selectedAssetId === asset.id);
       const markerElement = document.createElement("button");
       markerElement.type = "button";
-      markerElement.className = `property-asset-marker${selectedAssetId === asset.id ? " selected" : ""}`;
-      markerElement.setAttribute("aria-label", `Abrir ativo: ${asset.name}`);
-      markerElement.setAttribute("data-asset-id", asset.id);
-      markerElement.title = asset.name;
-      markerElement.textContent = assetMarkerSymbol(asset.asset_type);
-      markerElement.addEventListener("click", () => onAssetSelectedRef.current?.(asset.id));
-      const marker = new maplibregl.Marker({ element: markerElement, anchor: "bottom" })
-        .setLngLat(coordinates)
-        .setPopup(new maplibregl.Popup({ offset: 20 }).setText(asset.name))
+      markerElement.className = `property-asset-marker${grouped ? " asset-overlap-marker" : ""}${selected ? " selected" : ""}`;
+      markerElement.setAttribute(
+        "aria-label",
+        grouped
+          ? `Abrir ${group.assets.length} ativos próximos`
+          : `Abrir ativo: ${group.assets[0]?.asset.name ?? ""}`,
+      );
+      markerElement.setAttribute("data-asset-ids", group.assets.map(({ asset }) => asset.id).join(","));
+      markerElement.title = grouped
+        ? `${group.assets.length} ativos próximos — clique para ver a lista`
+        : group.assets[0]?.asset.name ?? "";
+      markerElement.textContent = grouped
+        ? String(group.assets.length)
+        : assetMarkerSymbol(group.assets[0]?.asset.asset_type ?? "");
+      const popup = new maplibregl.Popup({ offset: 20 });
+      if (grouped) {
+        markerElement.addEventListener("click", () => {
+          popup.setDOMContent(overlapPopup(group.assets, (assetId) => onAssetSelectedRef.current?.(assetId)));
+        });
+      } else {
+        const asset = group.assets[0]?.asset;
+        markerElement.addEventListener("click", () => asset && onAssetSelectedRef.current?.(asset.id));
+        popup.setText(asset?.name ?? "Ativo");
+      }
+      return new maplibregl.Marker({ element: markerElement, anchor: "bottom" })
+        .setLngLat(group.coordinates)
+        .setPopup(popup)
         .addTo(active);
-      return [marker];
     });
     markers.current = created;
     return () => {
       created.forEach((marker) => marker.remove());
       if (markers.current === created) markers.current = [];
     };
+  }, [assets, markerLayoutVersion, selectedAssetId]);
+
+  useEffect(() => {
+    const active = map.current;
+    const asset = assets.find((item) => item.id === selectedAssetId);
+    const coordinates = asset ? pointCoordinates(asset) : null;
+    if (!active || !coordinates) return;
+    active.easeTo({ center: coordinates, zoom: Math.max(active.getZoom(), 18), duration: 450 });
   }, [assets, selectedAssetId]);
+
+  useEffect(() => {
+    if (recenterRequest > 0) fitPropertyRef.current?.();
+  }, [recenterRequest]);
 
   useEffect(() => {
     const active = map.current;
