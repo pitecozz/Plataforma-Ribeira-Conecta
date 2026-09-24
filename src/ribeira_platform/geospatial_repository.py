@@ -95,6 +95,29 @@ CREATE TABLE IF NOT EXISTS derived_product_dependency (
   PRIMARY KEY(tenant_id, derived_product_id, relationship),
   UNIQUE(tenant_id, derived_product_id, upstream_product_id)
 );
+CREATE TABLE IF NOT EXISTS property_refresh_policy (
+  tenant_id TEXT NOT NULL, property_id TEXT NOT NULL, provider_id TEXT NOT NULL,
+  collection_id TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+  frequency_seconds INTEGER NOT NULL, search_window_days INTEGER NOT NULL,
+  cloud_cover_limit TEXT, auto_process INTEGER NOT NULL DEFAULT 1,
+  last_search_at TEXT, next_search_at TEXT, last_success_at TEXT,
+  last_failure_at TEXT, latest_available_scene_id TEXT,
+  latest_usable_scene_id TEXT, latest_processed_scene_id TEXT,
+  retry_count INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL,
+  failure_code TEXT, failure_reason TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  PRIMARY KEY(tenant_id, property_id, provider_id, collection_id)
+);
+CREATE TABLE IF NOT EXISTS property_refresh_run (
+  id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, property_id TEXT NOT NULL,
+  provider_id TEXT NOT NULL, collection_id TEXT NOT NULL, trigger_type TEXT NOT NULL,
+  status TEXT NOT NULL, idempotency_key TEXT NOT NULL, scheduled_at TEXT NOT NULL,
+  started_at TEXT, finished_at TEXT, next_attempt_at TEXT, attempt INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3, search_id TEXT, processing_job_id TEXT,
+  failure_code TEXT, failure_reason TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  UNIQUE(tenant_id, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS property_refresh_due_idx
+  ON property_refresh_run(status, next_attempt_at, scheduled_at);
 """
 
 

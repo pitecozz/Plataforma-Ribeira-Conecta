@@ -148,6 +148,16 @@ class GeospatialJobWorker:
                 worker_id=self.worker_id,
             )
             final = result.job
+            if (
+                final.status == ProcessingJobStatus.SUCCEEDED
+                and final.output_product_id
+            ):
+                self.application.property_refresh.record_processed_scene(
+                    final.tenant_id,
+                    final.property_id,
+                    final.scene_id,
+                    platform_admin=True,
+                )
         except Exception as exc:
             # Never serialize provider exception text: it can contain an endpoint or token.
             with self.application.store.tenant_transaction(job.tenant_id, True):

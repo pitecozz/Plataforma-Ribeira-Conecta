@@ -12,7 +12,7 @@ approved property AOI
   -> provider-specific bounded search
   -> exact AOI coverage and quality policy
   -> persisted scene catalogue/history
-  -> durable processing job (when a product is authorized and inputs exist)
+  -> durable refresh run and processing job (when a product is authorized and inputs exist)
   -> derived product/context/report
 ```
 
@@ -34,20 +34,41 @@ availability or processing checks. Each search persists its time window,
 provider response reference, candidates, selection/rejection criteria, status,
 quality and failure. Products are a time series and are never overwritten.
 
-## Scheduling foundation
+## Implemented scheduling foundation
 
-The existing `satellite_search` history and PostgreSQL `processing_job` queue
-are the durable foundations. The next increment adds a tenant-isolated refresh
-policy/schedule record and private scheduler that creates bounded searches only
-when due; it must persist last attempt, retry state and the three freshness
-references above. Provider schedules are policy-driven, bounded and fail
-closed. It must not poll continuously or enqueue duplicate
-property/scene/product/version work.
+Migration 034 persists a tenant/property/provider/collection refresh policy and
+durable runs. The supported Sentinel-2 policy is enabled after a property is
+created with an approved geometry and immediately queues
+`INITIAL_PROPERTY_CONTEXT_REFRESH`. The private
+`ribeira-property-refresh-worker` claims due work atomically, runs a bounded
+CDSE search, catalogs item metadata/assets through the canonical pipeline, and
+queues NDVI only when the required protected asset credentials exist.
 
-Initial backfill after approved property creation uses recent scenes plus a
-bounded historical window where policy permits. Terrain and environmental
-providers follow their own configured refresh policies. No KML re-import is
-required for any of these data refreshes.
+Policy records retain `enabled`, frequency, window, cloud policy, last/next
+search, success/failure time, retry count, status and the three freshness
+references. Run records retain trigger, state (`QUEUED`, `RUNNING`,
+`SUCCEEDED`, `RETRYABLE`, `BLOCKED`, `FAILED`), bounded exponential retry,
+search/job references and a stable idempotency key. Scene and product
+idempotency remain enforced by the existing tenant/property/provider/item and
+processing-version uniqueness constraints.
+
+The worker is private and must be installed with the existing user-service
+installer after migration 034; it is not a public endpoint. `POST .../refreshes`
+is an authorized, debounced manual fallback into the same durable path, not the
+normal customer workflow. `GET .../refresh-status` supplies Farm360 freshness
+status without exposing provider credentials.
+
+Properties created before migration 034 are enrolled by the private, idempotent
+`python -m ribeira_platform.property_refresh_bootstrap --apply` command. Its
+default is dry run. It only creates policies/runs for existing non-null AOIs;
+it never reads, exports or changes boundary geometry.
+
+Initial backfill uses a bounded 90-day window with the configured cloud policy.
+The first provider is Sentinel-2/CDSE; Sentinel-1, Landsat, terrain and weather
+need their own approved adapter/policy before they are enabled. No KML re-import
+is required for data refresh. A future linked KML/KMZ/GeoJSON source may create
+a *candidate* boundary version and require human approval; no provider may
+silently replace the canonical boundary.
 
 ## Boundary safety and interpretation
 

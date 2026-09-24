@@ -254,6 +254,36 @@ class PostgresIntegrationTests(unittest.TestCase):
         finally:
             self.store.close()
 
+    def test_property_refresh_policy_is_durable_and_rls_scoped(self) -> None:
+        tenant_a = self.create_test_tenant("Refresh policy tenant A")
+        tenant_b = self.create_test_tenant("Refresh policy tenant B")
+        property_a = self.application.create_property(
+            tenant_a.id,
+            "Refresh AOI",
+            {
+                "type": "Polygon",
+                "coordinates": [
+                    [[-47.0, -24.0], [-46.99, -24.0], [-46.99, -24.01], [-47.0, -24.0]]
+                ],
+            },
+            "EPSG:4326",
+        )
+        with self.store.tenant_transaction(tenant_a.id):
+            policy = self.application.property_refresh.status(
+                tenant_a.id, property_a.id
+            )
+            runs = self.store.connection.execute(
+                "SELECT trigger_type,status FROM property_refresh_run WHERE tenant_id=%s AND property_id=%s",
+                (tenant_a.id, property_a.id),
+            ).fetchall()
+        assert policy is not None
+        self.assertEqual(policy["status"], "QUEUED")
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["trigger_type"], "INITIAL_PROPERTY_CONTEXT_REFRESH")
+        self.assertIsNone(
+            self.application.property_refresh.status(tenant_b.id, property_a.id)
+        )
+
     def test_postgis_round_trip_and_evidence_first_slice(self) -> None:
         tenant = self.create_test_tenant("PG integration tenant")
         with request_context("req-pg", "corr-pg"):

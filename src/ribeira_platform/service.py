@@ -13,6 +13,7 @@ from .epistemology import IngestionStatus
 from .epistemology import DataClassification
 from .geospatial_provider import CopernicusStacAdapter, default_copernicus_registry
 from .geospatial_service import GeospatialApplication
+from .property_refresh import PropertyRefreshService
 from .models import (
     BoundaryImport,
     FetchResult,
@@ -70,6 +71,7 @@ class RibeiraApplication:
         self.geospatial = GeospatialApplication(
             self.store, self.geospatial_provider, self.object_storage
         )
+        self.property_refresh = PropertyRefreshService(self)
 
     def create_tenant(
         self, name: str, *, tenant_id: str | None = None, actor: str = "system"
@@ -125,6 +127,13 @@ class RibeiraApplication:
                 {"classification": property.classification.value},
                 new_id(),
                 now_utc(),
+            )
+        # A persisted approved AOI begins unattended context discovery.  This
+        # deliberately enqueues work; it never performs provider I/O in the
+        # property creation request or mutates the imported boundary.
+        if property.geometry_geojson is not None:
+            self.property_refresh.register_property(
+                tenant_id, property.id, actor=actor, platform_admin=platform_admin
             )
         return property
 
@@ -199,6 +208,12 @@ class RibeiraApplication:
                 new_id(),
                 now_utc(),
             )
+        # A boundary change is a new approved AOI version, not a provider
+        # mutation. Ensure its automatic context policy exists; the stable
+        # initial run remains idempotent across approval retries.
+        self.property_refresh.register_property(
+            tenant_id, property_id, actor=actor, platform_admin=platform_admin
+        )
         return item
 
     def create_boundary_import(

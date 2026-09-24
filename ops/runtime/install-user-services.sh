@@ -23,8 +23,8 @@ install -d -m 700 "$unit_target"
 install -m 644 "$unit_source"/ribeira-*.service "$unit_target/"
 install -m 644 "$unit_source"/ribeira-*.timer "$unit_target/"
 systemctl --user daemon-reload
-systemctl --user enable ribeira-api.service ribeira-geospatial-worker.service ribeira-frontend.service ribeira-wis2-reconcile.timer
-printf '%s\n' 'installed and enabled user services and WIS2 timer; use systemctl --user start ribeira-api ribeira-geospatial-worker ribeira-frontend'
+systemctl --user enable ribeira-api.service ribeira-geospatial-worker.service ribeira-property-refresh-worker.service ribeira-frontend.service ribeira-wis2-reconcile.timer
+printf '%s\n' 'installed and enabled user services, automatic property refresh worker and WIS2 timer; use systemctl --user start ribeira-api ribeira-geospatial-worker ribeira-property-refresh-worker ribeira-frontend'
 if [[ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null || true)" != "yes" ]]; then
   printf '%s\n' 'WARNING: user lingering is disabled; enable it before relying on reboot persistence.' >&2
 fi

@@ -1010,6 +1010,39 @@ def create_app(
         scenes = application.geospatial.list_scenes(tenant_id, property_id)
         return safe_property(item, data_status(products, scenes))
 
+    @app.get(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/refresh-status",
+        tags=["farm-360"],
+    )
+    async def property_refresh_status(
+        tenant_id: str, property_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "property:read", tenant_id)
+        status = application.property_refresh.status(
+            tenant_id, property_id, platform_admin=ctx.is_platform_admin
+        )
+        if status is None:
+            raise LookupError("property automatic refresh policy not found in tenant")
+        return to_jsonable(status)
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/refreshes",
+        status_code=202,
+        tags=["farm-360"],
+    )
+    async def request_property_refresh(
+        tenant_id: str, property_id: str, ctx: AuthContext = Depends(context)
+    ):
+        authorize(ctx, "geospatial:search", tenant_id)
+        return to_jsonable(
+            application.property_refresh.enqueue_manual(
+                tenant_id,
+                property_id,
+                actor=ctx.subject,
+                platform_admin=ctx.is_platform_admin,
+            )
+        )
+
     @app.put(
         "/v1/tenants/{tenant_id}/properties/{property_id}/boundary", tags=["properties"]
     )

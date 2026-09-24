@@ -1,0 +1,23 @@
+[Unit]
+Description=Ribeira private automatic property refresh worker
+After=network-online.target ribeira-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ribeira/Plataforma-Ribeira-Conecta
+EnvironmentFile=/home/ribeira/.config/ribeira/runtime.env
+EnvironmentFile=/home/ribeira/.config/ribeira/cdse.env
+Environment=PYTHONPATH=/home/ribeira/Plataforma-Ribeira-Conecta/src
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ribeira/Plataforma-Ribeira-Conecta/.venv/bin/python -m ribeira_platform.property_refresh_worker
+Restart=on-failure
+RestartSec=30
+UMask=0077
+NoNewPrivileges=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ribeira-property-refresh-worker
+
+[Install]
+WantedBy=default.target
