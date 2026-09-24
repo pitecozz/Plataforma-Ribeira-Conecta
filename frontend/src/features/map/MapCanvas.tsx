@@ -6,6 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "./MapCanvas.css";
 import { assetMarkerSymbol, boundsForGeometry } from "./mapPresentation";
 import { transformMapRequest } from "./tileAuth";
+import { areaSquareMetres, distanceMetres, type Coordinate } from "./measurements";
 import type { DigitalTwinAsset } from "../../types/farm360";
 
 interface Props {
@@ -149,6 +150,8 @@ export function MapCanvas({
   const fitPropertyRef = useRef<(() => void) | null>(null);
   const assetClickAttached = useRef(false);
   const [markerLayoutVersion, setMarkerLayoutVersion] = useState(0);
+  const [measurementMode, setMeasurementMode] = useState<"none" | "distance" | "area" | "coordinates">("none");
+  const [measurementPoints, setMeasurementPoints] = useState<Coordinate[]>([]);
 
   useEffect(() => {
     onAssetSelectedRef.current = onAssetSelected;
@@ -174,7 +177,7 @@ export function MapCanvas({
       element.current?.setAttribute("data-map-style-loaded", "true");
     });
     active.on("moveend", () => setMarkerLayoutVersion((value) => value + 1));
-    active.on("click", (event) => onMapClickRef.current?.([event.lngLat.lng, event.lngLat.lat]));
+    active.on("click", (event) => { const point: Coordinate = [event.lngLat.lng, event.lngLat.lat]; onMapClickRef.current?.(point); if (measurementMode !== "none") setMeasurementPoints(points => [...points, point]); });
     map.current = active;
 
     return () => {
@@ -183,7 +186,7 @@ export function MapCanvas({
       active.remove();
       map.current = null;
     };
-  }, [apiBaseUrl, token]);
+  }, [apiBaseUrl, token, measurementMode]);
 
   useEffect(() => {
     const active = map.current;
@@ -417,6 +420,7 @@ export function MapCanvas({
       <button className="map-recenter" type="button" onClick={() => fitPropertyRef.current?.()}>
         Centralizar sítio
       </button>
+      <div className="map-measure-tools"><button type="button" onClick={() => { setMeasurementMode("distance"); setMeasurementPoints([]); }}>Medir distância</button><button type="button" onClick={() => { setMeasurementMode("area"); setMeasurementPoints([]); }}>Medir área</button><button type="button" onClick={() => { setMeasurementMode("coordinates"); setMeasurementPoints([]); }}>Coordenadas</button>{measurementMode !== "none" && <><button type="button" onClick={() => setMeasurementPoints(points => points.slice(0, -1))}>Desfazer</button><button type="button" onClick={() => { setMeasurementMode("none"); setMeasurementPoints([]); }}>Limpar</button><p>{measurementMode === "distance" ? `${(distanceMetres(measurementPoints) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km` : measurementMode === "area" ? `${(areaSquareMetres(measurementPoints) / 10000).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ha` : measurementPoints.at(-1) ? `${measurementPoints.at(-1)![1].toFixed(5)}, ${measurementPoints.at(-1)![0].toFixed(5)}` : "Clique no mapa"}</p></>}</div>
     </div>
   );
 }

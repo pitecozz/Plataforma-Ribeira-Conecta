@@ -25,6 +25,9 @@
 .map-recenter:hover {
   background: #f0fdf4;
 }
+.map-measure-tools { background: rgba(255,255,255,.94); border: 1px solid #d1ddd4; border-radius: 5px; bottom: 10px; display: flex; gap: 4px; padding: 6px; position: absolute; right: 10px; z-index: 2; }
+.map-measure-tools button { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; color: #14532d; font-size: 11px; padding: 4px 6px; }
+.map-measure-tools p { align-self: center; font-size: 11px; margin: 0 2px; }
 
 .map-basemap-unavailable {
   background: rgba(255, 255, 255, 0.94);
