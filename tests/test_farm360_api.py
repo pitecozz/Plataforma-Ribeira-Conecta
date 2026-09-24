@@ -196,6 +196,45 @@ class Farm360ApiTests(unittest.TestCase):
         )
         self.assertEqual(denied.status_code, 403)
 
+    def test_asset_registration_requires_factual_source_and_observation_time(
+        self,
+    ) -> None:
+        payload = {
+            "asset_type": "RAIN_GAUGE",
+            "name": "Gauge registered through API",
+            "status": "ACTIVE",
+            "property_id": self.property.id,
+            "geometry": {"type": "Point", "coordinates": [0.5, 0.5]},
+            "geometry_crs": "EPSG:4326",
+            "source_reference": "synthetic_test_data installation record",
+            "observed_at": "2026-09-24T12:00:00+00:00",
+            "classification": "MANUAL_CONFIRMED",
+        }
+        created = self.client.post(
+            f"/v1/tenants/{self.tenant.id}/assets",
+            headers={"Authorization": "Bearer admin"},
+            json=payload,
+        )
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(
+            created.json()["source_reference"], payload["source_reference"]
+        )
+        self.assertEqual(created.json()["observed_at"], payload["observed_at"])
+        self.assertIsNotNone(created.json()["evidence_id"])
+
+        for missing_field in ("source_reference", "observed_at"):
+            incomplete = {
+                key: value for key, value in payload.items() if key != missing_field
+            }
+            rejected = self.client.post(
+                f"/v1/tenants/{self.tenant.id}/assets",
+                headers={"Authorization": "Bearer admin"},
+                json=incomplete,
+            )
+            self.assertEqual(rejected.status_code, 422)
+            self.assertEqual(rejected.json()["error"]["code"], "VALIDATION_ERROR")
+            self.assertIn(missing_field, str(rejected.json()["error"]["fields"]))
+
     def test_property_asset_inventory_is_tenant_scoped_and_preserves_context(
         self,
     ) -> None:

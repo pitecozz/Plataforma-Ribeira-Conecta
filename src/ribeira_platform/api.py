@@ -313,8 +313,11 @@ class AssetRequest(BaseModel):
     site_id: str | None = None
     geometry: dict[str, Any] | None = None
     geometry_crs: str | None = Field(default=None, max_length=32)
-    source_reference: str | None = Field(default=None, max_length=2000)
-    observed_at: str | None = None
+    # A public asset-registration request is evidence, not a draft. Internal
+    # reconciliation paths retain historical unknowns, but an operator cannot
+    # create a new API record without saying where and when facts were confirmed.
+    source_reference: str = Field(min_length=1, max_length=2000)
+    observed_at: str
     context: dict[str, Any] = Field(default_factory=dict)
     classification: CommercialClassification = CommercialClassification.CONFIRMED
 

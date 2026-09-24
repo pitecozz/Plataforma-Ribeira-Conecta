@@ -99,8 +99,10 @@ A user holding the tenant-scoped `asset:manage` permission can register a
 manually confirmed asset directly in Farm360. The form requires name, technical
 type, reported operational status, confirmation source and observation time; an
 optional point is accepted only when both WGS84 longitude and latitude are
-valid. Missing location remains missing rather than being derived from the
-property, map centre or another asset. The browser sends the property ID only
+valid. The authenticated registration API enforces that source reference and
+observation time too, so a caller cannot bypass the form and create an
+unprovenanced new asset record. Missing location remains missing rather than
+being derived from the property, map centre or another asset. The browser sends the property ID only
 through the authenticated tenant endpoint; the service independently verifies
 that property, applies RLS and records the existing `ASSET_REGISTERED` audit
 event. The registration creates immutable, tenant-local `ASSET_REGISTRATION` evidence with the submitted source reference, observation time, classification and explicit limitations. Farm360 exposes its opaque identifier in the technical provenance details so an operator may explicitly attach it to a later action outcome. Where the persisted property boundary is available, the same authenticated map lets the operator choose an optional coordinate: the provisional marker only copies the selected WGS84 point into the form and is not saved until the required source and confirmation are submitted. It never derives a location from the property, map centre or basemap. It does not make the asset a measurement or independent verification, and does not assert ownership, calibration, connectivity, service availability or condition beyond the submitted factual fields.
