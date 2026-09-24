@@ -683,6 +683,87 @@ inside source code or browser bundles.
 
 ---
 
+# Canonical Application URL and Production Testing
+
+The canonical public application and pilot URL for Ribeira Conecta is:
+
+https://app.ribeiraconecta.com.br
+
+This domain is the authoritative user-facing application origin unless a newer
+explicit operator decision changes it.
+
+The autonomous agent IS AUTHORIZED to test the deployed application directly
+at:
+
+https://app.ribeiraconecta.com.br
+
+Direct production/pilot validation is encouraged when it helps verify a
+deployment, integration, frontend workflow, API behavior, routing, TLS,
+Cloudflare access, smoke test or user-visible capability.
+
+Production validation may include, where applicable:
+
+- HTTP/HTTPS reachability
+- TLS availability
+- redirects
+- public frontend loading
+- static assets
+- documented health endpoints
+- documented API endpoints
+- authentication entry points
+- frontend/backend connectivity
+- CORS behavior
+- deployment smoke tests
+- user-visible navigation
+- map loading
+- geospatial views
+- non-destructive application workflows
+- post-deployment health verification
+
+Prefer testing the real deployed URL when validating behavior that can differ
+between local development and the deployed application.
+
+Production testing rules:
+
+- Do not replace the canonical domain with temporary Cloudflare Quick Tunnel
+  URLs.
+- Do not treat localhost URLs as production URLs.
+- Development and isolated tests may continue to use localhost/private origins.
+- Production-facing links, callbacks, smoke checks and deployment documentation
+  should use https://app.ribeiraconecta.com.br when the public origin is
+  required.
+- Do not hardcode the public domain deep inside application logic when runtime
+  configuration is the correct architectural mechanism.
+- Historical Quick Tunnel URLs remain obsolete.
+- Never expose credentials, tokens, cookies or private headers in logs or
+  commits.
+- Prefer read-only and non-destructive production checks.
+- Tests that create or modify data must use clearly designated test data or a
+  test tenant when available and must be safely reversible.
+- Never delete, corrupt or mutate real customer data merely to validate a
+  feature.
+- Never weaken authentication, authorization, tenant isolation, RLS or other
+  security controls to make a production test pass.
+- A local test passing does not prove production works.
+- A production smoke test passing does not replace unit, integration, security
+  or build validation.
+
+For production-facing releases, the preferred validation sequence is:
+
+1. run relevant local/unit/integration validation;
+2. build the production candidate;
+3. perform an isolated candidate smoke test when applicable;
+4. deploy/promote according to repository policy;
+5. test https://app.ribeiraconecta.com.br directly;
+6. verify critical user-visible behavior;
+7. retain or restore the known-good release if post-deployment validation
+   fails.
+
+The agent may use the canonical URL directly without requesting human approval
+for normal non-destructive validation covered by these rules.
+
+---
+
 # 19. Current Operational Restrictions
 
 Do not bypass explicit operator decisions.
