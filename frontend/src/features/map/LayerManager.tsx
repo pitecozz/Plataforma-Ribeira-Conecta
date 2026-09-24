@@ -1,3 +1,38 @@
-export function LayerManager({ ndviAvailable, ndviEnabled, onNdviEnabled, deltaAvailable, deltaEnabled, onDeltaEnabled }: { ndviAvailable: boolean; ndviEnabled: boolean; onNdviEnabled: (value: boolean) => void; deltaAvailable: boolean; deltaEnabled: boolean; onDeltaEnabled: (value: boolean) => void }) {
-  return <section className="layer-manager"><h2>Camadas</h2><h3>Mapa base</h3><p>OpenFreeMap · ativo</p><h3>Propriedade</h3><p>Limite e ativos confirmados são exibidos no mapa.</p><h3>Satélite</h3><label><input type="checkbox" checked={ndviEnabled} disabled={!ndviAvailable} onChange={event => onNdviEnabled(event.target.checked)} /> NDVI {ndviAvailable ? "" : "— sem produto processado"}</label><label><input type="checkbox" checked={deltaEnabled} disabled={!deltaAvailable} onChange={event => onDeltaEnabled(event.target.checked)} /> Comparação NDVI {deltaAvailable ? "" : "— sem dados disponíveis"}</label><h3>Terreno</h3><p>Elevação e declividade: aguardando fonte DEM configurada.</p><h3>Ambiental</h3><p>Inundação e água: sem camada aplicável persistida.</p></section>;
+import type { BasemapStatus } from "./basemapStatus";
+
+type Props = {
+  basemap: BasemapStatus;
+  ndviAvailable: boolean;
+  ndviEnabled: boolean;
+  onNdviEnabled: (value: boolean) => void;
+  deltaAvailable: boolean;
+  deltaEnabled: boolean;
+  onDeltaEnabled: (value: boolean) => void;
+};
+
+export function LayerManager({
+  basemap,
+  ndviAvailable,
+  ndviEnabled,
+  onNdviEnabled,
+  deltaAvailable,
+  deltaEnabled,
+  onDeltaEnabled,
+}: Props) {
+  return (
+    <section className="layer-manager">
+      <h2>Camadas</h2>
+      <h3>Mapa base</h3>
+      <p>{basemap.label}</p>
+      <h3>Propriedade</h3>
+      <p>Limite e ativos confirmados são exibidos no mapa.</p>
+      <h3>Satélite</h3>
+      <label><input type="checkbox" checked={ndviEnabled} disabled={!ndviAvailable} onChange={(event) => onNdviEnabled(event.target.checked)} /> NDVI {ndviAvailable ? "" : "— sem produto processado"}</label>
+      <label><input type="checkbox" checked={deltaEnabled} disabled={!deltaAvailable} onChange={(event) => onDeltaEnabled(event.target.checked)} /> Comparação NDVI {deltaAvailable ? "" : "— sem dados disponíveis"}</label>
+      <h3>Terreno</h3>
+      <p>Elevação e declividade: aguardando fonte DEM configurada.</p>
+      <h3>Ambiental</h3>
+      <p>Inundação e água: sem camada aplicável persistida.</p>
+    </section>
+  );
 }

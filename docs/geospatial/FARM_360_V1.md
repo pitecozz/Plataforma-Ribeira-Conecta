@@ -161,6 +161,11 @@ agronomic data. Map requests never forward Ribeira bearer tokens to that
 provider. Property boundaries and asset geometries always come from the
 tenant-scoped Ribeira API and retain their own provenance.
 
+The Farm360 layer manager reads this same runtime configuration. It labels the
+selected provider only when its style/key is configured, calls it visual
+reference only, and reports the local neutral background as unavailable rather
+than claiming OpenFreeMap is active.
+
 Current CARTO raster access requires a key. Set
 `VITE_RIBEIRA_CARTO_BASEMAP_API_KEY` only in protected build/runtime
 configuration when CARTO is the selected provider. Since a browser retrieves

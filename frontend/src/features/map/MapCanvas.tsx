@@ -5,6 +5,7 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./MapCanvas.css";
 import { assetMarkerSymbol, boundsForGeometry } from "./mapPresentation";
+import { runtimeBasemapStatus } from "./basemapStatus";
 import { transformMapRequest } from "./tileAuth";
 import { areaSquareMetres, distanceMetres, type Coordinate } from "./measurements";
 import { parseCoordinates } from "./locationSearch";
@@ -138,11 +139,7 @@ export function MapCanvas({
   token,
   onMapClick,
 }: Props) {
-  const externalBasemapConfigured = Boolean(
-    import.meta.env.VITE_RIBEIRA_BASEMAP_STYLE_URL ||
-      import.meta.env.VITE_MAP_STYLE_URL ||
-      import.meta.env.VITE_RIBEIRA_CARTO_BASEMAP_API_KEY,
-  );
+  const basemapStatus = runtimeBasemapStatus();
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<maplibregl.Marker[]>([]);
@@ -442,7 +439,7 @@ export function MapCanvas({
   return (
     <div className="map-frame">
       <div className="map-canvas" ref={element} aria-label="Mapa da propriedade" />
-      {!externalBasemapConfigured && <p className="map-basemap-unavailable">Mapa base não configurado. O limite e os ativos cadastrados continuam disponíveis neste mapa.</p>}
+      {!basemapStatus.isConfigured && <p className="map-basemap-unavailable">Mapa base não configurado. O limite e os ativos cadastrados continuam disponíveis neste mapa.</p>}
       <button className="map-recenter" type="button" onClick={() => fitPropertyRef.current?.()}>
         Centralizar sítio
       </button>

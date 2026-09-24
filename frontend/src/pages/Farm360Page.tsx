@@ -17,6 +17,7 @@ import { IntelligenceReportPanel } from "../features/report/IntelligenceReportPa
 import { PilotFeedbackPanel } from "../features/feedback/PilotFeedbackPanel";
 import { RiskDecisionPanel } from "../features/decisions/RiskDecisionPanel";
 import { canRenderNdvi } from "../features/map/layerState";
+import { runtimeBasemapStatus } from "../features/map/basemapStatus";
 import { PropertyPanel } from "../features/property/PropertyPanel";
 import { SatellitePanel } from "../features/satellite/SatellitePanel";
 import { NdviPanel } from "../features/ndvi/NdviPanel";
@@ -244,6 +245,7 @@ export function Farm360Page({
     );
 
   const area = formatHectares(property.area_hectares);
+  const basemap = runtimeBasemapStatus();
   const showAssets = () => {
     assetPanelAnchor.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     if (assets[0]) setSelectedAssetId(assets[0].id);
@@ -311,7 +313,7 @@ export function Farm360Page({
           <h2>Contexto e evidências</h2>
           {optionalDataLoading ? <p>Carregando contexto disponível…</p> : partialLoadIssues.context || partialLoadIssues.provenance ? <p>Não foi possível atualizar parte do contexto agora. Propriedade, limite e ativos disponíveis continuam acessíveis.</p> : scenes.length === 0 && timeline.length === 0 ? <p>Contexto ainda não disponível. Isso não altera os dados confirmados da propriedade.</p> : <p>Contexto persistido disponível para consulta.</p>}
         </section>
-        <LayerManager ndviAvailable={Boolean(product && product.processing_status === "SUCCEEDED")} ndviEnabled={ndviEnabled} onNdviEnabled={setNdviEnabled} deltaAvailable={Boolean(comparison?.comparison.delta_product_id)} deltaEnabled={deltaEnabled} onDeltaEnabled={setDeltaEnabled} />
+        <LayerManager basemap={basemap} ndviAvailable={Boolean(product && product.processing_status === "SUCCEEDED")} ndviEnabled={ndviEnabled} onNdviEnabled={setNdviEnabled} deltaAvailable={Boolean(comparison?.comparison.delta_product_id)} deltaEnabled={deltaEnabled} onDeltaEnabled={setDeltaEnabled} />
         <DataAvailabilityPanel property={property} assets={assets} scenes={scenes} timeline={timeline} />
         <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} decisions={decisions} open={reportOpen} onOpenChange={setReportOpen} />
         <PilotFeedbackPanel api={api} tenantId={tenantId} propertyId={propertyId} />
