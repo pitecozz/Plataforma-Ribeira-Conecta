@@ -121,8 +121,9 @@ ops/runtime/promote-frontend-candidate.sh /absolute/candidate/dist
 
 Promotion retains the former `frontend/dist`, restarts only the private static
 frontend service, checks private health and the configured public origin, then
-removes the backup only after success. On a failed post-promotion check it
-restores the prior artifact and restarts the static service again. It does not
+retains the former artifact as the explicit rollback target after success. On a
+failed post-promotion check it restores the prior artifact and restarts the
+static service again. It does not
 restart Cloudflare, API, PostgreSQL or workers. The static ingress is the only
 Cloudflare Tunnel origin; its `/api/*` proxy forwards only to the private API at
 `127.0.0.1:8080`. A real interactive OIDC/session flow remains required before

@@ -105,7 +105,7 @@ if ! grep -qi '^content-type:.*javascript' <<<"$worker_headers"; then
   false
 fi
 
-rm -rf -- "$backup_dir"
 promoted=0
 trap - ERR
 printf 'FRONTEND_PROMOTION=PASS\n'
+printf 'ROLLBACK_TARGET=%s\n' "$backup_dir"
