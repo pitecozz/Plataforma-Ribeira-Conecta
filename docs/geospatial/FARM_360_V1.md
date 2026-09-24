@@ -74,6 +74,22 @@ positions where their actual geometries permit it.
 
 The map also accepts an explicit coordinate pair for local navigation while drawing or inspecting a property. It uses no geocoder or external provider: a temporary marker and viewport change are purely a screen interaction. The lookup is not persisted, does not change a boundary or asset coordinate, and is not evidence of an address, ownership, coverage or condition.
 
+## Terrain foundation
+
+`terrain.py` provides the bounded, provider-neutral calculation core for an
+explicitly supplied DEM: clipped elevation, slope, downslope aspect, hillshade and an
+optional line-profile sample. Its input AOI is transformed from WGS84 to a
+projected metre-based DEM CRS; geographic or rotated grids are rejected rather
+than producing misleading slope values. Border cells and cells with missing
+neighbours remain unavailable, and profile samples over nodata remain `NULL`.
+
+This is not yet a configured customer-facing terrain layer. A future ingest
+increment must use an approved, allowlisted DEM provider and persist its
+dataset/version, source reference, acquisition/publication time, checksum,
+resolution, CRS, processing version and limitations before a result is exposed
+or stored. Derived terrain is neither a field survey nor legal boundary,
+drainage, soil, coverage or agronomic conclusion.
+
 ## Read endpoints
 
 - `GET /v1/tenants/{tenant_id}/properties`
