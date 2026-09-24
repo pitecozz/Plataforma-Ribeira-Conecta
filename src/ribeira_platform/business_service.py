@@ -40,7 +40,8 @@ from .business import (
     ProspectScoreResult,
 )
 from .business_repository import BusinessRepository
-from .models import new_id, now_utc
+from .epistemology import DataClassification
+from .models import Evidence, new_id, now_utc
 from .time_utils import parse_aware
 
 
@@ -77,6 +78,44 @@ class BusinessApplication:
             payload,
             new_id(),
             now_utc(),
+        )
+
+    @staticmethod
+    def _asset_evidence_classification(
+        classification: CommercialClassification,
+    ) -> DataClassification:
+        """Translate the business-record classification without inventing facts."""
+        mapping = {
+            CommercialClassification.CONFIRMED: DataClassification.MANUAL_CONFIRMED,
+            CommercialClassification.OBSERVED: DataClassification.OBSERVED,
+            CommercialClassification.MANUAL_CONFIRMED: DataClassification.MANUAL_CONFIRMED,
+            CommercialClassification.CALCULATED: DataClassification.CALCULATED,
+            CommercialClassification.ASSUMPTION: DataClassification.ASSUMPTION,
+            CommercialClassification.SIMULATION: DataClassification.SIMULATED,
+            CommercialClassification.UNKNOWN: DataClassification.UNKNOWN,
+        }
+        return mapping[classification]
+
+    def _evidence_for_registered_asset(self, item: Asset) -> Evidence:
+        """Persist factual asset-record evidence without inferring operational state."""
+        existing = self.store.evidence_for_reference(item.tenant_id, item.id)
+        if existing is not None:
+            return existing
+        return self.store.create_evidence(
+            Evidence(
+                id=new_id(),
+                tenant_id=item.tenant_id,
+                evidence_type="ASSET_REGISTRATION",
+                reference_id=item.id,
+                classification=self._asset_evidence_classification(item.classification),
+                source_id=None,
+                observed_at=item.observed_at,
+                transformation="asset registration retained as submitted; no location, condition, ownership, calibration, connectivity, or service availability was inferred",
+                limitations=[
+                    "the record establishes only the submitted asset facts and their stated source reference",
+                    "it is not a measurement, independent verification, diagnosis, coverage assessment, or service-availability claim",
+                ],
+            )
         )
 
     def create_customer(
@@ -299,6 +338,7 @@ class BusinessApplication:
             ):
                 raise LookupError("asset property is unavailable in tenant")
             self.repository.create_asset(item)
+            evidence = self._evidence_for_registered_asset(item)
             self._audit(
                 item.tenant_id,
                 actor,
@@ -308,6 +348,9 @@ class BusinessApplication:
                 {
                     "asset_type": item.asset_type,
                     "classification": item.classification.value,
+                    "evidence_id": evidence.id,
+                    "source_reference_recorded": item.source_reference is not None,
+                    "observed_at": item.observed_at,
                 },
             )
         return item

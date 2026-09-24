@@ -890,6 +890,13 @@ def create_app(
             ],
         }
 
+    def safe_asset(item: Asset) -> dict[str, Any]:
+        """Expose asset facts with its tenant-local evidence reference only."""
+        payload = to_jsonable(item)
+        evidence = application.store.evidence_for_reference(item.tenant_id, item.id)
+        payload["evidence_id"] = evidence.id if evidence is not None else None
+        return payload
+
     def safe_product(item: Any) -> dict[str, Any]:
         stats = item.statistics
         return {
@@ -1281,7 +1288,10 @@ def create_app(
         items = application.business.list_assets_for_property(
             tenant_id, property_id, platform_admin=ctx.is_platform_admin
         )
-        return {"property_id": property_id, "items": to_jsonable(items)}
+        return {
+            "property_id": property_id,
+            "items": [safe_asset(item) for item in items],
+        }
 
     @app.post("/v1/tenants/{tenant_id}/sources", status_code=201, tags=["sources"])
     async def create_source(
@@ -1661,11 +1671,10 @@ def create_app(
             payload.observed_at,
             payload.context,
         )
-        return to_jsonable(
-            application.business.register_asset(
-                item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
-            )
+        registered = application.business.register_asset(
+            item, actor=ctx.subject, platform_admin=ctx.is_platform_admin
         )
+        return safe_asset(registered)
 
     @app.post(
         "/v1/tenants/{tenant_id}/assets/{asset_id}/ownership",

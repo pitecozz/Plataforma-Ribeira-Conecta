@@ -36,6 +36,7 @@ export interface DigitalTwinAsset {
   source_reference: string | null;
   observed_at: string | null;
   context: Record<string, unknown>;
+  evidence_id?: string | null;
 }
 
 export interface AssetCreate {

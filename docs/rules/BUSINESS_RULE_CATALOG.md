@@ -15,7 +15,7 @@ evidence returns `UNKNOWN` or `INCONCLUSIVE`; it does not default to false.
 
 | Rule family | Current state | Scope / constraints | Canonical detail |
 |---|---|---|---|
-| Versioned decision rules | `IMPLEMENTED` | `TENANT` and `PROPERTY`; property precedence is explicit. | `engine.py`, `service.py`, migration 031. |
+| Versioned decision rules | `IMPLEMENTED` | `TENANT` and `PROPERTY`; property precedence is explicit. Asset registration evidence can be attached explicitly to a human outcome, but asset applicability is not yet implemented. | `engine.py`, `service.py`, migration 031. |
 | Action outcome closure | `IMPLEMENTED` | Tenant-authorized `OPEN` action; explicit result, classification, timestamp, optional tenant evidence and responsible actor retained. Farm360 exposes it only with `action:write`. | migration 029; `test_vertical_slice.py`, `RiskDecisionPanel.test.tsx`. |
 | Commercial opportunity qualification | `IMPLEMENTED` | Valid tenant evidence required; unknown does not create opportunity. | [Business rules](../business/RIBEIRA_BUSINESS_RULES.md), `business.py`. |
 | Flood exposure assessment | `FOUNDATION` | Only verified flood extent and tenant geometry can calculate exposure. | migration 030; H1–H4 are hypotheses, not causal arrows. |

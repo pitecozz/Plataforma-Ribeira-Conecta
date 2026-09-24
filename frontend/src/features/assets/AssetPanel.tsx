@@ -92,7 +92,7 @@ export function AssetPanel({
           </dl>
           <details>
             <summary>Detalhes técnicos e proveniência</summary>
-            <dl><dt>Identificador do ativo</dt><dd>{selected.id}</dd><dt>Tipo técnico</dt><dd>{selected.asset_type}</dd><dt>Fonte técnica</dt><dd>{selected.source_reference ?? "Não informada"}</dd><dt>Geometria</dt><dd>{selected.geometry_geojson ? selected.geometry_geojson.type : "Não disponível"}</dd><dt>CRS</dt><dd>{selected.geometry_crs ?? "Não informado"}</dd></dl>
+            <dl><dt>Identificador do ativo</dt><dd>{selected.id}</dd><dt>Identificador de evidência</dt><dd>{selected.evidence_id ?? "Ainda não disponível para este registro"}</dd><dt>Tipo técnico</dt><dd>{selected.asset_type}</dd><dt>Fonte técnica</dt><dd>{selected.source_reference ?? "Não informada"}</dd><dt>Geometria</dt><dd>{selected.geometry_geojson ? selected.geometry_geojson.type : "Não disponível"}</dd><dt>CRS</dt><dd>{selected.geometry_crs ?? "Não informado"}</dd></dl>
             {contextEntries(selected.context).length > 0 && <><h3>Contexto registrado</h3><dl>
                 {contextEntries(selected.context).map(([key, value]) => (
                   <Fragment key={key}>

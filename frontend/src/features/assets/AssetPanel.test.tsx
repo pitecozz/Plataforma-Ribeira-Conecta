@@ -19,6 +19,7 @@ const asset: DigitalTwinAsset = {
   source_reference: "installation survey",
   observed_at: "2026-09-22T12:00:00+00:00",
   context: { calibration_state: "UNKNOWN" },
+  evidence_id: "evidence-1",
 };
 
 describe("AssetPanel", () => {
@@ -47,5 +48,6 @@ describe("AssetPanel", () => {
     expect(screen.getByText("Confirmado")).toBeInTheDocument();
     expect(screen.getByText("calibration_state")).toBeInTheDocument();
     expect(screen.getByText("UNKNOWN")).toBeInTheDocument();
+    expect(screen.getByText("evidence-1")).toBeInTheDocument();
   });
 });

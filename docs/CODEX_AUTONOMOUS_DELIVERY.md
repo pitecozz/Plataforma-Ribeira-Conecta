@@ -137,8 +137,7 @@ not hard-code a one-off municipal conclusion.
 - **Status:** persistence/API, tenant-scoped inventory/map rendering and an
   `asset:manage`-gated Farm360 registration form are implemented. The form
   requires factual source and observation time, and never derives a location
-  when coordinates are absent. Asset-specific scoped-rule consumption and
-  inheritance remain follow-on work.
+  when coordinates are absent. Each registration now also produces tenant-local `ASSET_REGISTRATION` evidence with its submitted source reference, observation timestamp, classification and explicit limitations; this does not make an asset a measurement or an asset-scoped rule. Asset-specific scoped-rule consumption and inheritance remain follow-on work.
 - **Objective:** add tenant-isolated, spatial physical assets and context links
   for installations, connectivity, energy, security, agricultural and
   operational assets.

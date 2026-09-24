@@ -63,6 +63,14 @@ class BusinessDomainTests(unittest.TestCase):
         self.assertEqual(row["geometry_crs"], "EPSG:4326")
         self.assertIn("irrigation", row["context"])
         self.assertEqual(row["source_reference"], "manual field survey 2026-09-21")
+        asset_evidence = store.evidence_for_reference(tenant.id, asset.id)
+        self.assertIsNotNone(asset_evidence)
+        assert asset_evidence is not None
+        self.assertEqual(asset_evidence.evidence_type, "ASSET_REGISTRATION")
+        self.assertEqual(asset_evidence.classification.value, "MANUAL_CONFIRMED")
+        self.assertEqual(asset_evidence.observed_at, "2026-09-21T12:00:00+00:00")
+        self.assertIsNone(asset_evidence.source_id)
+        self.assertIn("not a measurement", asset_evidence.limitations[1])
         property = app.create_property(tenant.id, "Asset property")
         property_asset = Asset(
             new_id(),

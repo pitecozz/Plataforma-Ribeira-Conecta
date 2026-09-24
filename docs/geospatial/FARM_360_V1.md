@@ -84,8 +84,7 @@ valid. Missing location remains missing rather than being derived from the
 property, map centre or another asset. The browser sends the property ID only
 through the authenticated tenant endpoint; the service independently verifies
 that property, applies RLS and records the existing `ASSET_REGISTERED` audit
-event. The registration does not assert ownership, calibration, connectivity,
-service availability or condition beyond the submitted factual fields.
+event. The registration creates immutable, tenant-local `ASSET_REGISTRATION` evidence with the submitted source reference, observation time, classification and explicit limitations. Farm360 exposes its opaque identifier in the technical provenance details so an operator may explicitly attach it to a later action outcome. It does not make the asset a measurement or independent verification, and does not assert ownership, calibration, connectivity, service availability or condition beyond the submitted factual fields.
 
 When a persisted property decision creates an `OPEN` human action, a user with
 `action:write` can record its result in Farm360. The user supplies the result

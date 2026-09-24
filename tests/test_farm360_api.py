@@ -224,6 +224,11 @@ class Farm360ApiTests(unittest.TestCase):
         item = response.json()["items"][0]
         self.assertEqual(item["id"], asset.id)
         self.assertEqual(item["classification"], "MANUAL_CONFIRMED")
+        self.assertIsNotNone(item["evidence_id"])
+        evidence = self.store.evidence_for_reference(self.tenant.id, asset.id)
+        self.assertIsNotNone(evidence)
+        assert evidence is not None
+        self.assertEqual(item["evidence_id"], evidence.id)
         self.assertEqual(item["context"]["calibration_state"], "UNKNOWN")
         denied = self.tenant_client.get(
             f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/assets",
