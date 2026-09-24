@@ -283,6 +283,9 @@ class PostgresIntegrationTests(unittest.TestCase):
         self.assertIsNone(
             self.application.property_refresh.status(tenant_b.id, property_a.id)
         )
+        claimed = self.application.property_refresh.claim_due(worker_id="test-refresh")
+        assert claimed is not None
+        self.assertIsInstance(claimed["tenant_id"], str)
 
     def test_postgis_round_trip_and_evidence_first_slice(self) -> None:
         tenant = self.create_test_tenant("PG integration tenant")

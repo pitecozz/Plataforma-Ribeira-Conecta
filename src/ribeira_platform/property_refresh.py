@@ -216,6 +216,19 @@ class PropertyRefreshService:
         """Atomically lease one due run; Postgres uses SKIP LOCKED for workers."""
         now = now_utc()
         with self.application.store.tenant_transaction(None, True):
+            stale_seconds = min(
+                max(
+                    int(os.getenv("RIBEIRA_PROPERTY_REFRESH_STALE_SECONDS", "900")), 60
+                ),
+                86400,
+            )
+            if self._postgres:
+                self.application.store.connection.execute(
+                    """UPDATE property_refresh_run SET status='RETRYABLE', next_attempt_at=now(),
+                    failure_code='STALE_WORKER_LEASE', failure_reason='STALE_WORKER_LEASE', updated_at=now()
+                    WHERE status='RUNNING' AND started_at < now() - (%s * interval '1 second')""",
+                    [stale_seconds],
+                )
             if self._postgres:
                 row = self.application.store.connection.execute(
                     """WITH candidate AS (
@@ -240,7 +253,22 @@ class PropertyRefreshService:
                     row = self.application.store.connection.execute(
                         "SELECT * FROM property_refresh_run WHERE id=?", [row["id"]]
                     ).fetchone()
-            return dict(row) if row else None
+            if row is None:
+                return None
+            result = dict(row)
+            # psycopg returns uuid objects; tenant_transaction configures a
+            # PostgreSQL text setting and therefore must receive text, never a
+            # UUID parameter. Keep this conversion at the queue boundary.
+            for key in (
+                "id",
+                "tenant_id",
+                "property_id",
+                "search_id",
+                "processing_job_id",
+            ):
+                if result.get(key) is not None:
+                    result[key] = str(result[key])
+            return result
 
     def run_one(self, *, worker_id: str = "property-refresh") -> dict[str, Any] | None:
         run = self.claim_due(worker_id=worker_id)
