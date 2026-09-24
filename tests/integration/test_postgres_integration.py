@@ -156,6 +156,79 @@ class PostgresIntegrationTests(unittest.TestCase):
                 "DELETE FROM flood_event_exposure_zone WHERE id=%s", (zone_id,)
             )
 
+    def test_asset_scoped_rule_persists_context_and_postgis_integrity(self) -> None:
+        tenant = self.create_test_tenant("Asset-scoped rule PG tenant")
+        property_item = self.application.create_property(
+            tenant.id, "Rule asset property"
+        )
+        other_property = self.application.create_property(tenant.id, "Other property")
+        asset = Asset(
+            new_id(),
+            tenant.id,
+            "IRRIGATION_PUMP",
+            "Pump rule target",
+            None,
+            "ACTIVE",
+            property_item.id,
+            None,
+            CommercialClassification.MANUAL_CONFIRMED,
+            None,
+            None,
+            "synthetic integration inventory",
+            "2026-09-24T12:00:00+00:00",
+            {"condition": "UNKNOWN"},
+        )
+        self.application.business.register_asset(asset, actor="integration-operator")
+        with self.store.tenant_transaction(tenant.id):
+            evidence = self.store.evidence_for_reference(tenant.id, asset.id)
+            self.assertIsNotNone(evidence)
+            assert evidence is not None
+            self.assertEqual(evidence.evidence_type, "ASSET_REGISTRATION")
+        self.application.create_rule(
+            RuleDefinition(
+                new_id(),
+                tenant.id,
+                1,
+                "asset moisture rule",
+                RuleAuthority.REGRA_AGRONOMICA,
+                "soil_moisture",
+                "<",
+                30,
+                "%",
+                "HIGH",
+                "ACTIVE",
+                "distinct-approver",
+                "2026-09-16T00:00:00+00:00",
+                scope_type="ASSET",
+                scope_asset_id=asset.id,
+            )
+        )
+        source = self.application.create_source(tenant.id, "Fixture", "TEST", "fixture")
+        self.application.adapters[source.id] = SyntheticFixtureAdapter(
+            [
+                {
+                    "metric": "soil_moisture",
+                    "value": 27.0,
+                    "unit": "%",
+                    "observation_timestamp": "2026-09-24T13:42:11+00:00",
+                    "quality_flag": "VALID",
+                }
+            ]
+        )
+        self.application.ingest(tenant.id, property_item.id, source.id)
+        self.assertIsNone(
+            self.application.evaluate(tenant.id, property_item.id).decision.rule_id
+        )
+        result = self.application.evaluate_asset(tenant.id, asset.id)
+        self.assertEqual(result.decision.subject_asset_id, asset.id)
+        self.assertIn(evidence.id, result.decision.evidence_ids)
+        with self.store.tenant_transaction(tenant.id):
+            with self.assertRaises(psycopg.Error):
+                self.store.connection.execute(
+                    "UPDATE decision SET property_id=%s WHERE id=%s",
+                    (other_property.id, result.decision.id),
+                )
+
     def test_spatial_asset_context_is_postgis_persisted_and_tenant_scoped(self) -> None:
         tenant = self.create_test_tenant("Spatial asset PG tenant")
         property = self.application.create_property(tenant.id, "Asset context property")

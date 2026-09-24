@@ -355,6 +355,26 @@ class BusinessApplication:
             )
         return item
 
+    def asset_for_rule_evaluation(
+        self, tenant_id: str, asset_id: str, *, platform_admin: bool = False
+    ) -> Asset:
+        """Resolve only a tenant-local asset that is explicitly linked to a property.
+
+        Property observations may be evaluated with this asset as declared
+        context, but the asset itself is never treated as a measurement.
+        """
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            item = self.repository.get_asset(tenant_id, asset_id)
+            if item is None:
+                raise LookupError("asset not found in tenant")
+            if item.property_id is None:
+                raise ValueError(
+                    "asset rule evaluation requires an associated property"
+                )
+            if self.store.get_property(tenant_id, item.property_id) is None:
+                raise LookupError("asset property is unavailable in tenant")
+            return item
+
     def list_assets_for_property(
         self, tenant_id: str, property_id: str, *, platform_admin: bool = False
     ) -> list[Asset]:

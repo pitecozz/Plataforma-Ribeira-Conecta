@@ -1660,14 +1660,20 @@ class PostgresStore:
         )
 
     def active_rule(
-        self, tenant_id: str, metric: str, property_id: str | None = None
+        self,
+        tenant_id: str,
+        metric: str,
+        property_id: str | None = None,
+        asset_id: str | None = None,
     ) -> RuleDefinition | None:
         row = self._one(
             """SELECT * FROM rule_definition WHERE tenant_id=%s AND metric=%s AND status='ACTIVE'
                AND valid_from <= now() AND (valid_until IS NULL OR now() < valid_until)
-               AND (scope_type='TENANT' OR (scope_type='PROPERTY' AND scope_property_id=%s))
-               ORDER BY CASE scope_type WHEN 'PROPERTY' THEN 0 ELSE 1 END, version DESC LIMIT 1""",
-            (tenant_id, metric, property_id),
+               AND (scope_type='TENANT'
+                    OR (scope_type='PROPERTY' AND scope_property_id=%s)
+                    OR (scope_type='ASSET' AND scope_asset_id=%s))
+               ORDER BY CASE scope_type WHEN 'ASSET' THEN 0 WHEN 'PROPERTY' THEN 1 ELSE 2 END, version DESC LIMIT 1""",
+            (tenant_id, metric, property_id, asset_id),
         )
         if row is None:
             return None
@@ -1689,11 +1695,12 @@ class PostgresStore:
             row["created_at"].isoformat(),
             row["scope_type"],
             self._id(row["scope_property_id"]) if row["scope_property_id"] else None,
+            self._id(row["scope_asset_id"]) if row["scope_asset_id"] else None,
         )
 
     def create_rule(self, item: RuleDefinition) -> RuleDefinition:
         self.connection.execute(
-            "INSERT INTO rule_definition(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "INSERT INTO rule_definition(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id,scope_asset_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (
                 item.id,
                 item.tenant_id,
@@ -1712,14 +1719,15 @@ class PostgresStore:
                 item.created_at,
                 item.scope_type,
                 item.scope_property_id,
+                item.scope_asset_id,
             ),
         )
         return item
 
     def create_decision(self, item: Decision) -> Decision:
         self.connection.execute(
-            """INSERT INTO decision(id,tenant_id,property_id,conclusion,data_classification,status,evidence_ids,rule_id,rule_version,model_id,model_version,confidence,limitations,missing_data,conflicts,recommended_action,created_at)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            """INSERT INTO decision(id,tenant_id,property_id,conclusion,data_classification,status,evidence_ids,rule_id,rule_version,model_id,model_version,confidence,limitations,missing_data,conflicts,recommended_action,subject_asset_id,created_at)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 item.id,
                 item.tenant_id,
@@ -1739,6 +1747,7 @@ class PostgresStore:
                 json.dumps(item.recommended_action)
                 if item.recommended_action is not None
                 else None,
+                item.subject_asset_id,
                 item.created_at,
             ),
         )
@@ -1760,6 +1769,11 @@ class PostgresStore:
             {
                 "id": self._id(row["id"]),
                 "property_id": self._id(row["property_id"]),
+                "subject_asset_id": (
+                    self._id(row["subject_asset_id"])
+                    if row["subject_asset_id"]
+                    else None
+                ),
                 "conclusion": row["conclusion"],
                 "classification": row["data_classification"],
                 "status": row["status"],

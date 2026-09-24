@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from typing import Any
 
 from .epistemology import DataClassification, DecisionStatus, QualityFlag
@@ -68,7 +69,13 @@ class DecisionEngine:
         raise ValueError(f"unsupported operator: {rule.operator}")
 
     def evaluate(
-        self, tenant_id: str, property: Property, actor: str = "system"
+        self,
+        tenant_id: str,
+        property: Property,
+        actor: str = "system",
+        *,
+        asset_id: str | None = None,
+        asset_evidence_id: str | None = None,
     ) -> DecisionResult:
         observations = [
             item
@@ -80,11 +87,38 @@ class DecisionEngine:
             metrics[observation.metric].append(observation)
 
         metric = "soil_moisture"
-        rule = self.store.active_rule(tenant_id, metric, property.id)
         evidence_ids: list[str] = []
         for observation in metrics.get(metric, []):
             evidence_ids.append(self.evidence.evidence_for_observation(observation).id)
 
+        if asset_id is not None and asset_evidence_id is None:
+            decision = Decision(
+                id=new_id(),
+                tenant_id=tenant_id,
+                property_id=property.id,
+                conclusion="Não há evidência de registro disponível para usar o ativo como contexto da regra.",
+                classification=DataClassification.UNKNOWN,
+                status=DecisionStatus.INCONCLUSIVE,
+                evidence_ids=evidence_ids,
+                rule_id=None,
+                rule_version=None,
+                model_id=None,
+                model_version=None,
+                confidence=None,
+                limitations=[
+                    "um ativo sem proveniência registrada não pode restringir a aplicabilidade de uma regra"
+                ],
+                missing_data=["asset_registration_evidence"],
+                conflicts=[],
+                recommended_action=None,
+            )
+            decision = self._persist_decision(decision, asset_id)
+            self._audit(tenant_id, actor, decision, "asset_context_evidence_missing")
+            return DecisionResult(decision, None, None)
+        if asset_evidence_id is not None:
+            evidence_ids.append(asset_evidence_id)
+
+        rule = self.store.active_rule(tenant_id, metric, property.id, asset_id)
         if rule is None:
             decision = Decision(
                 id=new_id(),
@@ -106,7 +140,7 @@ class DecisionEngine:
                 conflicts=[],
                 recommended_action=None,
             )
-            self.store.create_decision(decision)
+            decision = self._persist_decision(decision, asset_id)
             self._audit(tenant_id, actor, decision, "rule_missing")
             return DecisionResult(decision, None, None)
 
@@ -119,7 +153,7 @@ class DecisionEngine:
                 conclusion="Não há evidência suficiente para avaliar a umidade do solo.",
                 classification=DataClassification.UNKNOWN,
                 status=DecisionStatus.INCONCLUSIVE,
-                evidence_ids=[],
+                evidence_ids=evidence_ids,
                 rule_id=rule.id,
                 rule_version=rule.version,
                 model_id=None,
@@ -130,7 +164,7 @@ class DecisionEngine:
                 conflicts=[],
                 recommended_action=None,
             )
-            self.store.create_decision(decision)
+            decision = self._persist_decision(decision, asset_id)
             self._audit(tenant_id, actor, decision, "missing_observation")
             return DecisionResult(decision, None, None)
 
@@ -174,7 +208,7 @@ class DecisionEngine:
                     "responsible_user_id": None,
                 },
             )
-            self.store.create_decision(decision)
+            decision = self._persist_decision(decision, asset_id)
             alert = Alert(
                 new_id(),
                 tenant_id,
@@ -230,7 +264,7 @@ class DecisionEngine:
                     "deadline": None,
                 },
             )
-            self.store.create_decision(decision)
+            decision = self._persist_decision(decision, asset_id)
             alert = Alert(
                 new_id(),
                 tenant_id,
@@ -273,9 +307,23 @@ class DecisionEngine:
             conflicts=[],
             recommended_action=None,
         )
-        self.store.create_decision(decision)
+        decision = self._persist_decision(decision, asset_id)
         self._audit(tenant_id, actor, decision, "rule_not_triggered")
         return DecisionResult(decision, None, None)
+
+    def _persist_decision(self, decision: Decision, asset_id: str | None) -> Decision:
+        """Persist an immutable decision with declared asset context, if any."""
+        if asset_id is not None:
+            decision = replace(
+                decision,
+                subject_asset_id=asset_id,
+                limitations=[
+                    *decision.limitations,
+                    "o ativo é contexto factual de aplicabilidade; não é uma medição",
+                ],
+            )
+        self.store.create_decision(decision)
+        return decision
 
     def _audit(
         self,
@@ -297,6 +345,7 @@ class DecisionEngine:
                 "input_evidence_ids": decision.evidence_ids,
                 "rule_id": decision.rule_id,
                 "rule_version": decision.rule_version,
+                "subject_asset_id": decision.subject_asset_id,
                 "model_id": decision.model_id,
                 "model_version": decision.model_version,
                 "result": decision.conclusion,

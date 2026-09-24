@@ -86,6 +86,8 @@ through the authenticated tenant endpoint; the service independently verifies
 that property, applies RLS and records the existing `ASSET_REGISTERED` audit
 event. The registration creates immutable, tenant-local `ASSET_REGISTRATION` evidence with the submitted source reference, observation time, classification and explicit limitations. Farm360 exposes its opaque identifier in the technical provenance details so an operator may explicitly attach it to a later action outcome. It does not make the asset a measurement or independent verification, and does not assert ownership, calibration, connectivity, service availability or condition beyond the submitted factual fields.
 
+An approved operator can evaluate a rule for one persisted property-linked asset through `POST /v1/tenants/{tenant_id}/assets/{asset_id}/evaluate`. This is an API foundation while a dedicated Farm360 control is deferred. It requires both `asset:read` and `decision:read`; the server resolves the asset and its property inside the tenant/RLS context. Only an `ASSET`-scoped rule naming that asset can take precedence in that explicit request. The resulting decision records `subject_asset_id`, the factual `ASSET_REGISTRATION` evidence ID and the property observations separately. An asset registration is not a measurement, condition assessment, diagnostic or automatic action. If its evidence is absent, the response is explicitly inconclusive.
+
 When a persisted property decision creates an `OPEN` human action, a user with
 `action:write` can record its result in Farm360. The user supplies the result
 text, an explicit classification, the recorded-at time and any tenant-local
@@ -137,6 +139,7 @@ drainage, soil, coverage or agronomic conclusion.
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/geospatial`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/assets`
+- `POST /v1/tenants/{tenant_id}/assets/{asset_id}/evaluate` (requires `asset:read` and `decision:read`; writes an immutable decision)
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/scenes`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/derived-products`
 - `GET /v1/tenants/{tenant_id}/properties/{property_id}/timeline`

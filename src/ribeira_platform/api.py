@@ -194,8 +194,9 @@ class RuleRequest(BaseModel):
     approved_by: str | None = None
     valid_from: str = Field(default_factory=now_utc)
     valid_until: str | None = None
-    scope_type: str = Field(default="TENANT", pattern=r"^(TENANT|PROPERTY)$")
+    scope_type: str = Field(default="TENANT", pattern=r"^(TENANT|PROPERTY|ASSET)$")
     scope_property_id: str | None = Field(default=None, min_length=1, max_length=200)
+    scope_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class ActorRequest(BaseModel):
@@ -1336,6 +1337,7 @@ def create_app(
             valid_until=payload.valid_until,
             scope_type=payload.scope_type,
             scope_property_id=payload.scope_property_id,
+            scope_asset_id=payload.scope_asset_id,
         )
         return to_jsonable(application.create_rule(rule))
 
@@ -1373,6 +1375,26 @@ def create_app(
         result = application.evaluate(
             tenant_id,
             property_id,
+            (payload.actor if payload and payload.actor else ctx.subject),
+            ctx.is_platform_admin,
+        )
+        return to_jsonable(result)
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/assets/{asset_id}/evaluate",
+        tags=["decisions", "assets"],
+    )
+    async def evaluate_asset(
+        tenant_id: str,
+        asset_id: str,
+        payload: ActorRequest | None = None,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "asset:read", tenant_id)
+        authorize(ctx, "decision:read", tenant_id)
+        result = application.evaluate_asset(
+            tenant_id,
+            asset_id,
             (payload.actor if payload and payload.actor else ctx.subject),
             ctx.is_platform_admin,
         )

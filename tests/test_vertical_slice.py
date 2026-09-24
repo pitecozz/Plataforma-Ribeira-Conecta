@@ -9,6 +9,7 @@ from ribeira_platform.epistemology import (
     IngestionStatus,
     RuleAuthority,
 )
+from ribeira_platform.business import Asset, CommercialClassification
 from ribeira_platform.models import RuleDefinition, new_id
 from ribeira_platform.service import RibeiraApplication
 from ribeira_platform.sources import SyntheticFixtureAdapter
@@ -244,6 +245,108 @@ class VerticalSliceTests(unittest.TestCase):
         self.assertEqual(decision.status, DecisionStatus.INCONCLUSIVE)
         self.assertIsNone(decision.rule_id)
         self.assertIn("active_rule:soil_moisture", decision.missing_data)
+
+    def test_asset_scoped_rule_requires_factual_context_and_never_leaks_to_property(
+        self,
+    ) -> None:
+        asset = Asset(
+            new_id(),
+            self.tenant.id,
+            "IRRIGATION_PUMP",
+            "Pump A",
+            None,
+            "ACTIVE",
+            self.property.id,
+            None,
+            CommercialClassification.MANUAL_CONFIRMED,
+            None,
+            None,
+            "operator inventory 2026-09-24",
+            "2026-09-24T12:00:00+00:00",
+            {"condition": "UNKNOWN"},
+        )
+        self.app.business.register_asset(asset, actor="operator")
+        asset_evidence = self.store.evidence_for_reference(self.tenant.id, asset.id)
+        assert asset_evidence is not None
+        self.app.create_rule(
+            RuleDefinition(
+                id=new_id(),
+                tenant_id=self.tenant.id,
+                version=1,
+                name="Pump-specific moisture threshold",
+                authority=RuleAuthority.REGRA_AGRONOMICA,
+                metric="soil_moisture",
+                operator="<",
+                threshold=30,
+                unit="%",
+                severity="HIGH",
+                status="ACTIVE",
+                approved_by="agronomist-test",
+                valid_from="2026-09-16T00:00:00+00:00",
+                scope_type="ASSET",
+                scope_asset_id=asset.id,
+            )
+        )
+        self.app.adapters[self.source.id] = SyntheticFixtureAdapter(
+            [
+                {
+                    "metric": "soil_moisture",
+                    "value": 27.0,
+                    "unit": "%",
+                    "observation_timestamp": "2026-09-24T13:42:11+00:00",
+                    "quality_flag": "VALID",
+                }
+            ]
+        )
+        self.app.ingest(self.tenant.id, self.property.id, self.source.id)
+
+        property_decision = self.app.evaluate(self.tenant.id, self.property.id).decision
+        self.assertIsNone(property_decision.rule_id)
+        self.assertIsNone(property_decision.subject_asset_id)
+
+        result = self.app.evaluate_asset(self.tenant.id, asset.id, actor="operator")
+        self.assertEqual(result.decision.status, DecisionStatus.ACTIONABLE)
+        self.assertEqual(result.decision.rule_id is not None, True)
+        self.assertEqual(result.decision.subject_asset_id, asset.id)
+        self.assertIn(asset_evidence.id, result.decision.evidence_ids)
+        self.assertIn("não é uma medição", result.decision.limitations[-1])
+        history = self.app.decision_history_for_property(
+            self.tenant.id, self.property.id
+        )
+        self.assertEqual(history[0]["subject_asset_id"], asset.id)
+
+        unlinked_asset = Asset(
+            new_id(),
+            self.tenant.id,
+            "PORTABLE_SENSOR",
+            "Unlinked asset",
+            None,
+            "ACTIVE",
+            None,
+            None,
+            CommercialClassification.MANUAL_CONFIRMED,
+        )
+        self.app.business.register_asset(unlinked_asset, actor="operator")
+        with self.assertRaises(ValueError):
+            self.app.create_rule(
+                RuleDefinition(
+                    id=new_id(),
+                    tenant_id=self.tenant.id,
+                    version=1,
+                    name="Unlinked asset rule",
+                    authority=RuleAuthority.REGRA_AGRONOMICA,
+                    metric="soil_moisture",
+                    operator="<",
+                    threshold=30,
+                    unit="%",
+                    severity="HIGH",
+                    status="ACTIVE",
+                    approved_by="agronomist-test",
+                    valid_from="2026-09-16T00:00:00+00:00",
+                    scope_type="ASSET",
+                    scope_asset_id=unlinked_asset.id,
+                )
+            )
 
 
 if __name__ == "__main__":

@@ -535,10 +535,27 @@ class RibeiraApplication:
             parse_aware(rule.valid_until)
         if rule.status == "ACTIVE" and not rule.approved_by:
             raise ValueError("active rule requires approved_by")
-        if rule.scope_type not in {"TENANT", "PROPERTY"}:
-            raise ValueError("rule scope_type must be TENANT or PROPERTY")
-        if (rule.scope_type == "TENANT") != (rule.scope_property_id is None):
-            raise ValueError("rule scope_property_id must match scope_type")
+        if rule.scope_type not in {"TENANT", "PROPERTY", "ASSET"}:
+            raise ValueError("rule scope_type must be TENANT, PROPERTY or ASSET")
+        scope_is_valid = (
+            (
+                rule.scope_type == "TENANT"
+                and rule.scope_property_id is None
+                and rule.scope_asset_id is None
+            )
+            or (
+                rule.scope_type == "PROPERTY"
+                and rule.scope_property_id is not None
+                and rule.scope_asset_id is None
+            )
+            or (
+                rule.scope_type == "ASSET"
+                and rule.scope_property_id is None
+                and rule.scope_asset_id is not None
+            )
+        )
+        if not scope_is_valid:
+            raise ValueError("rule scope identifiers must match scope_type")
         with self.store.tenant_transaction(rule.tenant_id, platform_admin=False):
             if (
                 rule.scope_property_id is not None
@@ -546,6 +563,10 @@ class RibeiraApplication:
                 is None
             ):
                 raise LookupError("rule scope property is unavailable in tenant")
+            if rule.scope_asset_id is not None:
+                self.business.asset_for_rule_evaluation(
+                    rule.tenant_id, rule.scope_asset_id
+                )
             self.store.create_rule(rule)
             self.store.audit(
                 rule.tenant_id,
@@ -559,6 +580,7 @@ class RibeiraApplication:
                     "authority": rule.authority.value,
                     "scope_type": rule.scope_type,
                     "scope_property_id": rule.scope_property_id,
+                    "scope_asset_id": rule.scope_asset_id,
                 },
                 new_id(),
                 now_utc(),
@@ -662,6 +684,46 @@ class RibeiraApplication:
             raise LookupError("property not found in tenant")
         with self.store.transaction():
             return self.decisions.evaluate(tenant_id, property, actor)
+
+    def evaluate_asset(
+        self,
+        tenant_id: str,
+        asset_id: str,
+        actor: str = "system",
+        platform_admin: bool = False,
+    ):
+        """Evaluate a rule selected for one property-linked Digital Twin asset.
+
+        The current observations stay property-scoped.  The asset registration
+        evidence makes the asset's applicability explicit and is never treated
+        as an observed metric.
+        """
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            asset = self.business.asset_for_rule_evaluation(tenant_id, asset_id)
+            evidence = self.store.evidence_for_reference(tenant_id, asset.id)
+            evidence_id = (
+                evidence.id
+                if evidence is not None
+                and evidence.evidence_type == "ASSET_REGISTRATION"
+                else None
+            )
+            # asset_for_rule_evaluation enforces this relation; retain the guard
+            # here so the type contract remains explicit at the decision boundary.
+            if asset.property_id is None:
+                raise ValueError(
+                    "asset rule evaluation requires an associated property"
+                )
+            property_item = self.store.get_property(tenant_id, asset.property_id)
+            if property_item is None:
+                raise LookupError("asset property is unavailable in tenant")
+            with self.store.transaction():
+                return self.decisions.evaluate(
+                    tenant_id,
+                    property_item,
+                    actor,
+                    asset_id=asset.id,
+                    asset_evidence_id=evidence_id,
+                )
 
     def decision_history_for_property(
         self,

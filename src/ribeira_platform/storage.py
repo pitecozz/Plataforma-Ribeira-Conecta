@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS rules (
   threshold REAL NOT NULL, unit TEXT NOT NULL, severity TEXT NOT NULL, status TEXT NOT NULL,
   approved_by TEXT, valid_from TEXT NOT NULL, valid_until TEXT, created_at TEXT NOT NULL,
   scope_type TEXT NOT NULL DEFAULT 'TENANT', scope_property_id TEXT REFERENCES properties(id),
+  scope_asset_id TEXT,
   PRIMARY KEY (id, version)
 );
 CREATE INDEX IF NOT EXISTS idx_rules_active ON rules(tenant_id, metric, status, version);
@@ -76,7 +77,8 @@ CREATE TABLE IF NOT EXISTS decisions (
   classification TEXT NOT NULL, status TEXT NOT NULL, evidence_ids_json TEXT NOT NULL,
   rule_id TEXT, rule_version INTEGER, model_id TEXT, model_version TEXT,
   confidence REAL, limitations_json TEXT NOT NULL, missing_data_json TEXT NOT NULL,
-  conflicts_json TEXT NOT NULL, recommended_action_json TEXT, created_at TEXT NOT NULL
+  conflicts_json TEXT NOT NULL, recommended_action_json TEXT, subject_asset_id TEXT,
+  created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_property ON decisions(tenant_id, property_id, created_at);
 CREATE TABLE IF NOT EXISTS alerts (
@@ -390,13 +392,19 @@ class SQLiteStore:
         )
 
     def active_rule(
-        self, tenant_id: str, metric: str, property_id: str | None = None
+        self,
+        tenant_id: str,
+        metric: str,
+        property_id: str | None = None,
+        asset_id: str | None = None,
     ) -> RuleDefinition | None:
         rows = self.connection.execute(
             """SELECT * FROM rules WHERE tenant_id = ? AND metric = ? AND status = 'ACTIVE'
-               AND (scope_type='TENANT' OR (scope_type='PROPERTY' AND scope_property_id=?))
-               ORDER BY CASE scope_type WHEN 'PROPERTY' THEN 0 ELSE 1 END, version DESC""",
-            (tenant_id, metric, property_id),
+               AND (scope_type='TENANT'
+                    OR (scope_type='PROPERTY' AND scope_property_id=?)
+                    OR (scope_type='ASSET' AND scope_asset_id=?))
+               ORDER BY CASE scope_type WHEN 'ASSET' THEN 0 WHEN 'PROPERTY' THEN 1 ELSE 2 END, version DESC""",
+            (tenant_id, metric, property_id, asset_id),
         ).fetchall()
         now = datetime.now(timezone.utc)
         row = None
@@ -438,11 +446,12 @@ class SQLiteStore:
             row["created_at"],
             row["scope_type"],
             row["scope_property_id"],
+            row["scope_asset_id"],
         )
 
     def create_rule(self, item: RuleDefinition) -> RuleDefinition:
         self._insert(
-            "INSERT INTO rules(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO rules(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id,scope_asset_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 item.id,
                 item.tenant_id,
@@ -461,6 +470,7 @@ class SQLiteStore:
                 item.created_at,
                 item.scope_type,
                 item.scope_property_id,
+                item.scope_asset_id,
             ),
         )
         return item
@@ -468,8 +478,8 @@ class SQLiteStore:
     def create_decision(self, item: Decision) -> Decision:
         self._insert(
             """INSERT INTO decisions(id,tenant_id,property_id,conclusion,classification,status,evidence_ids_json,rule_id,rule_version,
-               model_id,model_version,confidence,limitations_json,missing_data_json,conflicts_json,recommended_action_json,created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               model_id,model_version,confidence,limitations_json,missing_data_json,conflicts_json,recommended_action_json,subject_asset_id,created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 item.id,
                 item.tenant_id,
@@ -489,6 +499,7 @@ class SQLiteStore:
                 json.dumps(item.recommended_action)
                 if item.recommended_action is not None
                 else None,
+                item.subject_asset_id,
                 item.created_at,
             ),
         )
@@ -510,6 +521,7 @@ class SQLiteStore:
             {
                 "id": row["id"],
                 "property_id": row["property_id"],
+                "subject_asset_id": row["subject_asset_id"],
                 "conclusion": row["conclusion"],
                 "classification": row["classification"],
                 "status": row["status"],

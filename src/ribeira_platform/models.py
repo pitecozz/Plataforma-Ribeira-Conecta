@@ -142,6 +142,7 @@ class RuleDefinition:
     created_at: str = field(default_factory=now_utc)
     scope_type: str = "TENANT"
     scope_property_id: str | None = None
+    scope_asset_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -207,6 +208,9 @@ class Decision:
     missing_data: list[str]
     conflicts: list[dict[str, Any]]
     recommended_action: dict[str, Any] | None
+    # An asset is explicit operational context, never a substitute for a
+    # property-scoped measurement in this first rule slice.
+    subject_asset_id: str | None = None
     created_at: str = field(default_factory=now_utc)
 
 

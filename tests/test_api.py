@@ -5,6 +5,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from ribeira_platform.api import Settings, create_app
+from ribeira_platform.business import Asset, CommercialClassification
 from ribeira_platform.epistemology import RuleAuthority
 from ribeira_platform.iam import AuthContext, DevelopmentIdentityProvider
 from ribeira_platform.models import RuleDefinition, new_id
@@ -224,6 +225,70 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(history.status_code, 200)
         self.assertEqual(len(history.json()["items"]), 1)
         self.assertEqual(history.json()["items"][0]["action"]["status"], "COMPLETED")
+
+    def test_asset_evaluation_requires_authorized_asset_context(self) -> None:
+        tenant = self.application.create_tenant("Asset decision API tenant")
+        property_item = self.application.create_property(tenant.id, "Rule property")
+        asset = Asset(
+            new_id(),
+            tenant.id,
+            "IRRIGATION_PUMP",
+            "API pump",
+            None,
+            "ACTIVE",
+            property_item.id,
+            None,
+            CommercialClassification.MANUAL_CONFIRMED,
+            None,
+            None,
+            "operator inventory",
+            "2026-09-24T12:00:00+00:00",
+            {},
+        )
+        self.application.business.register_asset(asset, actor="operator")
+        self.application.create_rule(
+            RuleDefinition(
+                new_id(),
+                tenant.id,
+                1,
+                "Pump moisture threshold",
+                RuleAuthority.REGRA_AGRONOMICA,
+                "soil_moisture",
+                "<",
+                30,
+                "%",
+                "HIGH",
+                "ACTIVE",
+                "reviewer",
+                "2026-09-16T00:00:00+00:00",
+                scope_type="ASSET",
+                scope_asset_id=asset.id,
+            )
+        )
+        source = self.application.create_source(tenant.id, "Fixture", "TEST", "fixture")
+        self.application.adapters[source.id] = SyntheticFixtureAdapter(
+            [
+                {
+                    "metric": "soil_moisture",
+                    "value": 27.0,
+                    "unit": "%",
+                    "observation_timestamp": "2026-09-24T13:42:11+00:00",
+                    "quality_flag": "VALID",
+                }
+            ]
+        )
+        self.application.ingest(tenant.id, property_item.id, source.id)
+        missing = self.client.post(
+            f"/v1/tenants/{tenant.id}/assets/{asset.id}/evaluate"
+        )
+        self.assertEqual(missing.status_code, 401)
+        response = self.client.post(
+            f"/v1/tenants/{tenant.id}/assets/{asset.id}/evaluate",
+            headers={"Authorization": "Bearer platform-secret-dev-only"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["decision"]["subject_asset_id"], asset.id)
+        self.assertIn("action", response.json())
 
     def test_pilot_feedback_is_authenticated_audited_and_property_scoped(self) -> None:
         tenant = self.application.create_tenant("Pilot feedback API tenant")
