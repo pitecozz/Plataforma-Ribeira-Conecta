@@ -70,10 +70,10 @@ class TerrainProcessorTests(unittest.TestCase):
         result = TerrainProcessor().analyze(self.path, self.aoi(), profile_geojson=profile)
         self.assertGreater(result.statistics.nodata_cell_count, 0)
         self.assertTrue(result.slope_degrees.mask[2, 2])
-        self.assertEqual(len(result.profile), 3)
+        self.assertEqual(len(result.profile), 5)
         self.assertEqual(result.profile[0].distance_metres, 0.0)
         self.assertGreater(result.profile[-1].distance_metres, 0)
-        self.assertIsNone(result.profile[1].elevation_metres)
+        self.assertIsNone(result.profile[2].elevation_metres)
 
     def test_rejects_geographic_dem_before_calculating_slope(self) -> None:
         self.write_dem(np.ones((5, 5)), crs="EPSG:4326")

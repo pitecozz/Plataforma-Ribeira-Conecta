@@ -110,15 +110,17 @@ def _derivatives(
     return np.ma.masked_invalid(dzdx), np.ma.masked_invalid(dzdy)
 
 
-def _profile_distances(line: LineString) -> Iterable[tuple[float, tuple[float, float]]]:
-    coordinates = list(line.coords)
-    if len(coordinates) < 2:
+def _profile_distances(
+    line: LineString, spacing_metres: float
+) -> Iterable[tuple[float, tuple[float, float]]]:
+    if len(line.coords) < 2:
         raise TerrainProcessingError("terrain profile requires at least two coordinates")
-    distance = 0.0
-    yield distance, (coordinates[0][0], coordinates[0][1])
-    for previous, current in zip(coordinates, coordinates[1:]):
-        distance += float(np.hypot(current[0] - previous[0], current[1] - previous[1]))
-        yield distance, (current[0], current[1])
+    if spacing_metres <= 0:
+        raise TerrainProcessingError("terrain profile spacing must be positive")
+    sample_count = max(1, int(np.ceil(line.length / spacing_metres)))
+    for distance in np.linspace(0, line.length, num=sample_count + 1):
+        point = line.interpolate(float(distance))
+        yield float(distance), (float(point.x), float(point.y))
 
 
 class TerrainProcessor:
@@ -187,7 +189,7 @@ class TerrainProcessor:
         line = _transform_to_crs(profile_geojson, _require_projected_metre_crs(dataset.crs))
         if not isinstance(line, LineString):
             raise TerrainProcessingError("terrain profile must be a LineString")
-        points = list(_profile_distances(line))
+        points = list(_profile_distances(line, min(_cell_size(dataset.transform))))
         samples = dataset.sample([coordinate for _, coordinate in points], masked=True)
         return [
             TerrainProfilePoint(distance, None if np.ma.is_masked(sample[0]) else float(sample[0]))

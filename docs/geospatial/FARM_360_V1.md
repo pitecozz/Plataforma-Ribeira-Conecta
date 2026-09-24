@@ -78,10 +78,10 @@ The map also accepts an explicit coordinate pair for local navigation while draw
 
 `terrain.py` provides the bounded, provider-neutral calculation core for an
 explicitly supplied DEM: clipped elevation, slope, downslope aspect, hillshade and an
-optional line-profile sample. Its input AOI is transformed from WGS84 to a
+optional line-profile sample at DEM-resolution intervals. Its input AOI is transformed from WGS84 to a
 projected metre-based DEM CRS; geographic or rotated grids are rejected rather
 than producing misleading slope values. Border cells and cells with missing
-neighbours remain unavailable, and profile samples over nodata remain `NULL`.
+neighbours remain unavailable, and profile samples over nodata remain `NULL`; intermediate profile samples are derived from the DEM grid, not a surveyed trace.
 
 This is not yet a configured customer-facing terrain layer. A future ingest
 increment must use an approved, allowlisted DEM provider and persist its
