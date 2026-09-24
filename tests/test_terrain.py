@@ -53,6 +53,7 @@ class TerrainProcessorTests(unittest.TestCase):
         self.write_dem(np.tile(np.arange(5) * 10, (5, 1)))
         result = TerrainProcessor().analyze(self.path, self.aoi(), elevation_unit="m")
         self.assertEqual(result.statistics.valid_cell_count, 25)
+        self.assertEqual(TerrainProcessor.algorithm_version, "1.1.0")
         self.assertEqual(result.statistics.elevation_minimum_metres, 0.0)
         self.assertEqual(result.statistics.elevation_maximum_metres, 40.0)
         self.assertAlmostEqual(

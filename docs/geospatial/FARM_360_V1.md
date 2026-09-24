@@ -148,6 +148,8 @@ horizontal CRS alone cannot establish that vertical/value unit. Its input AOI is
 projected metre-based DEM CRS; geographic or rotated grids are rejected rather
 than producing misleading slope values. Border cells and cells with missing
 neighbours remain unavailable, and profile samples over nodata or non-finite values remain `NULL`; intermediate profile samples are derived from the DEM grid, not a surveyed trace. Invalid, empty, non-finite or out-of-range WGS84 AOIs/profile geometries and a DEM with no valid clipped elevation cells are rejected rather than becoming an empty terrain conclusion.
+The current processor identifier/version is `TERRAIN_DERIVATIVES` `1.1.0`; it changed from
+`1.0.0` when explicit elevation-unit attestation became mandatory.
 A requested profile must be wholly inside the supplied AOI: Ribeira rejects an outside segment rather than silently clipping it or attributing neighbouring terrain to the property.
 
 This is not yet a configured customer-facing terrain layer. A future ingest

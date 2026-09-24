@@ -167,7 +167,7 @@ class TerrainProcessor:
     """Calculate elevation, slope, aspect, hillshade and an optional line profile."""
 
     algorithm_id = "TERRAIN_DERIVATIVES"
-    algorithm_version = "1.0.0"
+    algorithm_version = "1.1.0"
     hillshade_azimuth_degrees = 315.0
     hillshade_altitude_degrees = 45.0
 
