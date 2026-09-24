@@ -222,6 +222,15 @@ class Farm360ApiTests(unittest.TestCase):
         self.assertEqual(created.json()["observed_at"], payload["observed_at"])
         self.assertIsNotNone(created.json()["evidence_id"])
 
+        blank_source = {**payload, "source_reference": "   "}
+        blank_rejected = self.client.post(
+            f"/v1/tenants/{self.tenant.id}/assets",
+            headers={"Authorization": "Bearer admin"},
+            json=blank_source,
+        )
+        self.assertEqual(blank_rejected.status_code, 422)
+        self.assertEqual(blank_rejected.json()["error"]["code"], "VALIDATION_ERROR")
+
         for missing_field in ("source_reference", "observed_at"):
             incomplete = {
                 key: value for key, value in payload.items() if key != missing_field

@@ -99,7 +99,7 @@ A user holding the tenant-scoped `asset:manage` permission can register a
 manually confirmed asset directly in Farm360. The form requires name, technical
 type, reported operational status, confirmation source and observation time; an
 optional point is accepted only when both WGS84 longitude and latitude are
-valid. The authenticated registration API enforces that source reference and
+valid. The authenticated registration API enforces that non-blank source reference and
 observation time too, so a caller cannot bypass the form and create an
 unprovenanced new asset record. Missing location remains missing rather than
 being derived from the property, map centre or another asset. The browser sends the property ID only

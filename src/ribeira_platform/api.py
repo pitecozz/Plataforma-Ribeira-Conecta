@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pyproj import Geod
 from shapely.geometry import shape
@@ -321,6 +321,14 @@ class AssetRequest(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
     classification: CommercialClassification = CommercialClassification.CONFIRMED
 
+    @field_validator("source_reference")
+    @classmethod
+    def source_reference_must_be_factual(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("asset source_reference must not be blank")
+        return normalized
+
 
 class AssetOwnershipRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -617,7 +625,10 @@ def create_app(
                 "error": {
                     "code": "VALIDATION_ERROR",
                     "message": "request validation failed",
-                    "fields": exc.errors(),
+                    "fields": [
+                        {key: value for key, value in error.items() if key != "ctx"}
+                        for error in exc.errors()
+                    ],
                 }
             },
         )
