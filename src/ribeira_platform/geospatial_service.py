@@ -1077,6 +1077,18 @@ class GeospatialApplication:
     ) -> bool:
         alignment = delta.parameters.get("alignment")
         policies = delta.parameters.get("quality_mask_policies")
+        valid_alignment = alignment in (
+            {
+                "status": "IDENTICAL_GRID",
+                "target_grid": "baseline",
+                "resampling": None,
+            },
+            {
+                "status": "REPROJECTED_TO_BASELINE",
+                "target_grid": "baseline",
+                "resampling": "bilinear",
+            },
+        )
         return (
             delta.product_type == "NDVI_DELTA"
             and delta.algorithm_id == TemporalDeltaProcessor.algorithm_id
@@ -1084,9 +1096,7 @@ class GeospatialApplication:
             and delta.formula == TemporalDeltaProcessor.formula
             and bool(delta.output_reference)
             and bool(delta.output_checksum)
-            and isinstance(alignment, dict)
-            and alignment.get("status") in {"IDENTICAL_GRID", "REPROJECTED_TO_BASELINE"}
-            and alignment.get("target_grid") == "baseline"
+            and valid_alignment
             and isinstance(policies, list)
             and policies
             == [
@@ -1367,7 +1377,9 @@ class GeospatialApplication:
             delta = self.repository.find_temporal_delta(
                 tenant_id, baseline.id, target.id
             )
-        if delta is not None and delta.output_reference:
+        if delta is not None and self._has_valid_temporal_delta_provenance(
+            delta, baseline, target
+        ):
             return {
                 "status": "READY",
                 "baseline": baseline,

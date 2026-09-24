@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from dataclasses import replace
@@ -613,10 +614,7 @@ class Farm360ApiTests(unittest.TestCase):
                     "target_grid": "baseline",
                     "resampling": None,
                 },
-                "quality_mask_policies": {
-                    "baseline": quality_mask,
-                    "target": quality_mask,
-                },
+                "quality_mask_policies": [quality_mask, quality_mask],
             },
         )
         repository.create_job(baseline_job)
@@ -673,6 +671,39 @@ class Farm360ApiTests(unittest.TestCase):
         )
         self.assertEqual(tile.status_code, 200)
         self.assertEqual(tile.headers["content-type"], "image/png")
+
+        malformed_parameters = dict(delta.parameters)
+        malformed_parameters["alignment"] = {"status": "IDENTICAL_GRID"}
+        self.application.store.connection.execute(
+            "UPDATE derived_product SET parameters=? WHERE tenant_id=? AND id=?",
+            (
+                json.dumps(malformed_parameters),
+                self.tenant.id,
+                delta.id,
+            ),
+        )
+        malformed = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
+            params={
+                "baseline_product_id": baseline.id,
+                "target_product_id": target.id,
+            },
+            headers={"Authorization": "Bearer admin"},
+        )
+        self.assertEqual(malformed.status_code, 200)
+        self.assertEqual(malformed.json()["status"], "READY")
+        self.assertEqual(
+            malformed.json()["comparison"]["classification"], "DERIVED_AGGREGATE"
+        )
+        self.assertIsNone(malformed.json()["comparison"]["delta_product_id"])
+        self.assertIsNone(malformed.json()["comparison"]["comparable_valid_pixels"])
+        self.assertIsNone(
+            malformed.json()["comparison"]["comparable_coverage_percentage"]
+        )
+        self.assertEqual(
+            Decimal(malformed.json()["comparison"]["delta_mean"]),
+            target.statistics.mean - baseline.statistics.mean,
+        )
         denied = self.tenant_client.get(
             f"/v1/tenants/{self.tenant.id}/derived-products/{delta.id}/tiles/0/0/0",
             headers={"Authorization": "Bearer tenant-b"},
