@@ -217,9 +217,7 @@ class PropertyRefreshService:
         now = now_utc()
         with self.application.store.tenant_transaction(None, True):
             stale_seconds = min(
-                max(
-                    int(os.getenv("RIBEIRA_PROPERTY_REFRESH_STALE_SECONDS", "900")), 60
-                ),
+                max(int(os.getenv("RIBEIRA_PROPERTY_REFRESH_STALE_SECONDS", "60")), 60),
                 86400,
             )
             if self._postgres:
