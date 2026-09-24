@@ -23,6 +23,7 @@ import { ProvenancePanel } from "../features/provenance/ProvenancePanel";
 import { TemporalPanel } from "../features/temporal/TemporalPanel";
 import { SceneOperationsPanel } from "../features/operations/SceneOperationsPanel";
 import { BoundaryImportPanel } from "../features/property/BoundaryImportPanel";
+import { BoundaryEditorPanel } from "../features/property/BoundaryEditorPanel";
 import { DataAvailabilityPanel } from "../features/context/DataAvailabilityPanel";
 import { formatHectares } from "../formatting";
 
@@ -334,6 +335,12 @@ export function Farm360Page({
           tenantId={tenantId}
           property={property}
           onBoundaryChanged={refresh}
+        />}
+        {canManageBoundary && <BoundaryEditorPanel
+          api={api}
+          tenantId={tenantId}
+          property={property}
+          onChanged={refresh}
         />}
         <TemporalPanel
           items={timeline}

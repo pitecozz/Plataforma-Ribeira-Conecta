@@ -59,6 +59,15 @@ export class Farm360Api {
       );
     return response.json() as Promise<T>;
   }
+  private async put<T>(path: string, body: unknown): Promise<T> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new ApiError(response.status, `Request failed (${response.status})`);
+    return response.json() as Promise<T>;
+  }
   private async rawPost<T>(
     path: string,
     body: Blob,
@@ -96,6 +105,15 @@ export class Farm360Api {
     return this.post<PropertyRecord>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/properties`,
       payload,
+    );
+  }
+  updateBoundary(
+    tenantId: string,
+    propertyId: string,
+    payload: { geometry_geojson: import("geojson").Geometry; geometry_crs: string; boundary_source: string; classification: "MANUAL_CONFIRMED"; reason: string; expected_checksum: string },
+  ) {
+    return this.put<PropertyRecord>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/boundary`, payload,
     );
   }
   property(tenantId: string, propertyId: string) {
