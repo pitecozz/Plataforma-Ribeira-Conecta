@@ -174,16 +174,25 @@ not hard-code a one-off municipal conclusion.
 
 ### 2. Scoped rule-to-outcome extension
 
-- **Status:** the first property-evaluation-to-human-result slice is implemented:
-  The customer/field inheritance follow-on now has an explicit acceptance contract in [Scoped rule inheritance](rules/SCOPED_RULE_INHERITANCE.md): it must preserve temporal customer-property links, resolve equally-specific rule conflicts explicitly and prove RLS before any API/UI exposure.
+- **Status:** the property-evaluation-to-human-result slice is implemented:
   an action created from a property decision can be completed once with an
   explicit Evidence First classification, supporting evidence references,
   timestamp, responsible actor and audit event. The original decision and its
-  recommendation remain immutable. Rules are now explicitly `TENANT` or
-  `PROPERTY` scoped, with property scope taking precedence and never applying
-  to another property. Customer, field/talhão and asset inheritance/precedence
-  remains pending; this slice does not claim those broader scopes.
-  Farm360 now exposes outcome capture only to `action:write` users; the user supplies an explicit result, classification, timestamp and optional tenant-local evidence identifiers, while the decision and recommendation remain immutable. `ASSET` scope is explicit and takes precedence only in an evaluation requested for that property-linked asset; it never silently applies during property evaluation or turns the registration into a metric. Farm360 exposes that evaluation only to users who hold both `asset:read` and `decision:read`; it requires a persisted asset-registration evidence identifier, is initiated explicitly, and refreshes the immutable property decision history. Customer, field/talhão and broader inheritance remain pending.
+  recommendation remain immutable. Rules are explicitly `TENANT`, `PROPERTY`,
+  `ASSET` or `CUSTOMER` scoped. Asset scope applies only to explicit evaluation
+  of a property-linked asset with persisted registration provenance. Customer
+  scope applies only through an active, tenant-local temporal
+  `customer_property` link; it never proves ownership, service availability or
+  a business need. Precedence is `ASSET -> PROPERTY -> CUSTOMER -> TENANT`.
+  Equally specific active rules return an explicit `CONFLICTING` decision rather
+  than selecting by insertion order/version. The decision and audit event
+  snapshot selected scope and linked customer context. PostgreSQL migration 038
+  adds composite tenant FKs and a decision-context guard. Field/talhão and
+  broader inheritance remain pending because a versioned non-legal field model
+  is still a dependency. Farm360 exposes outcome capture only to `action:write`
+  users; the user supplies an explicit result, classification, timestamp and
+  optional tenant-local evidence identifiers, while the decision and
+  recommendation remain immutable.
 - **Objective:** explicit rule applicability across sector, customer, property,
   field/talhão and asset, with versioning, conflict handling and feedback.
 - **Business value:** safely turns asset/context data into recommendations,

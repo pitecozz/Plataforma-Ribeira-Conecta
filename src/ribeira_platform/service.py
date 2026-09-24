@@ -535,23 +535,34 @@ class RibeiraApplication:
             parse_aware(rule.valid_until)
         if rule.status == "ACTIVE" and not rule.approved_by:
             raise ValueError("active rule requires approved_by")
-        if rule.scope_type not in {"TENANT", "PROPERTY", "ASSET"}:
-            raise ValueError("rule scope_type must be TENANT, PROPERTY or ASSET")
+        if rule.scope_type not in {"TENANT", "PROPERTY", "ASSET", "CUSTOMER"}:
+            raise ValueError(
+                "rule scope_type must be TENANT, PROPERTY, ASSET or CUSTOMER"
+            )
         scope_is_valid = (
             (
                 rule.scope_type == "TENANT"
                 and rule.scope_property_id is None
                 and rule.scope_asset_id is None
+                and rule.scope_customer_id is None
             )
             or (
                 rule.scope_type == "PROPERTY"
                 and rule.scope_property_id is not None
                 and rule.scope_asset_id is None
+                and rule.scope_customer_id is None
             )
             or (
                 rule.scope_type == "ASSET"
                 and rule.scope_property_id is None
                 and rule.scope_asset_id is not None
+                and rule.scope_customer_id is None
+            )
+            or (
+                rule.scope_type == "CUSTOMER"
+                and rule.scope_property_id is None
+                and rule.scope_asset_id is None
+                and rule.scope_customer_id is not None
             )
         )
         if not scope_is_valid:
@@ -567,6 +578,14 @@ class RibeiraApplication:
                 self.business.asset_for_rule_evaluation(
                     rule.tenant_id, rule.scope_asset_id
                 )
+            if (
+                rule.scope_customer_id is not None
+                and self.business.repository.get_customer(
+                    rule.tenant_id, rule.scope_customer_id
+                )
+                is None
+            ):
+                raise LookupError("rule scope customer is unavailable in tenant")
             self.store.create_rule(rule)
             self.store.audit(
                 rule.tenant_id,
@@ -581,6 +600,7 @@ class RibeiraApplication:
                     "scope_type": rule.scope_type,
                     "scope_property_id": rule.scope_property_id,
                     "scope_asset_id": rule.scope_asset_id,
+                    "scope_customer_id": rule.scope_customer_id,
                 },
                 new_id(),
                 now_utc(),

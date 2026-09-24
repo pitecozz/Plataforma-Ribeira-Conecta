@@ -220,6 +220,150 @@ class VerticalSliceTests(unittest.TestCase):
         self.assertEqual(self.store.count("observations", self.tenant.id), 1)
         self.assertEqual(self.store.count("evidence", self.tenant.id), 1)
 
+    def test_customer_scoped_rule_requires_active_link_and_snapshots_context(
+        self,
+    ) -> None:
+        customer = self.app.business.create_customer(
+            self.tenant.id, "Customer context", actor="commercial"
+        )
+        self.app.business.link_customer_property(
+            self.tenant.id,
+            customer.id,
+            self.property.id,
+            "OWNER",
+            "2026-09-16T00:00:00+00:00",
+            None,
+            actor="commercial",
+        )
+        self.app.create_rule(
+            RuleDefinition(
+                id=new_id(),
+                tenant_id=self.tenant.id,
+                version=1,
+                name="Customer moisture threshold",
+                authority=RuleAuthority.REGRA_AGRONOMICA,
+                metric="soil_moisture",
+                operator="<",
+                threshold=30,
+                unit="%",
+                severity="HIGH",
+                status="ACTIVE",
+                approved_by="agronomist-test",
+                valid_from="2026-09-16T00:00:00+00:00",
+                scope_type="CUSTOMER",
+                scope_customer_id=customer.id,
+            )
+        )
+        self.app.adapters[self.source.id] = SyntheticFixtureAdapter(
+            [
+                {
+                    "metric": "soil_moisture",
+                    "value": 27.0,
+                    "unit": "%",
+                    "observation_timestamp": "2026-09-24T13:42:11+00:00",
+                    "quality_flag": "VALID",
+                }
+            ]
+        )
+        self.app.ingest(self.tenant.id, self.property.id, self.source.id)
+        result = self.app.evaluate(self.tenant.id, self.property.id)
+        self.assertEqual(result.decision.status, DecisionStatus.ACTIONABLE)
+        self.assertEqual(result.decision.selected_rule_scope_type, "CUSTOMER")
+        self.assertEqual(result.decision.subject_customer_id, customer.id)
+        history = self.app.decision_history_for_property(
+            self.tenant.id, self.property.id
+        )
+        self.assertEqual(history[0]["selected_rule_scope_type"], "CUSTOMER")
+        self.assertEqual(history[0]["subject_customer_id"], customer.id)
+        audit = self.store.connection.execute(
+            "SELECT payload_json FROM audit_log WHERE tenant_id=? AND entity_id=?",
+            (self.tenant.id, result.decision.id),
+        ).fetchone()
+        self.assertEqual(
+            json.loads(audit["payload_json"])["subject_customer_id"], customer.id
+        )
+
+    def test_expired_customer_property_link_does_not_apply_rule(self) -> None:
+        customer = self.app.business.create_customer(
+            self.tenant.id, "Former customer", actor="commercial"
+        )
+        self.app.business.link_customer_property(
+            self.tenant.id,
+            customer.id,
+            self.property.id,
+            "FORMER_OPERATOR",
+            "2020-01-01T00:00:00+00:00",
+            "2021-01-01T00:00:00+00:00",
+            actor="commercial",
+        )
+        self.app.create_rule(
+            RuleDefinition(
+                id=new_id(),
+                tenant_id=self.tenant.id,
+                version=1,
+                name="Former customer moisture threshold",
+                authority=RuleAuthority.REGRA_AGRONOMICA,
+                metric="soil_moisture",
+                operator="<",
+                threshold=30,
+                unit="%",
+                severity="HIGH",
+                status="ACTIVE",
+                approved_by="agronomist-test",
+                valid_from="2026-09-16T00:00:00+00:00",
+                scope_type="CUSTOMER",
+                scope_customer_id=customer.id,
+            )
+        )
+        decision = self.app.evaluate(self.tenant.id, self.property.id).decision
+        self.assertEqual(decision.status, DecisionStatus.INCONCLUSIVE)
+        self.assertIsNone(decision.rule_id)
+        self.assertIn("active_rule:soil_moisture", decision.missing_data)
+
+    def test_equally_specific_customer_rules_are_conflicting_not_version_selected(
+        self,
+    ) -> None:
+        customer = self.app.business.create_customer(
+            self.tenant.id, "Customer context", actor="commercial"
+        )
+        self.app.business.link_customer_property(
+            self.tenant.id,
+            customer.id,
+            self.property.id,
+            "OWNER",
+            "2026-09-16T00:00:00+00:00",
+            None,
+            actor="commercial",
+        )
+        for name, version in (("Customer threshold A", 1), ("Customer threshold B", 2)):
+            self.app.create_rule(
+                RuleDefinition(
+                    id=new_id(),
+                    tenant_id=self.tenant.id,
+                    version=version,
+                    name=name,
+                    authority=RuleAuthority.REGRA_AGRONOMICA,
+                    metric="soil_moisture",
+                    operator="<",
+                    threshold=30,
+                    unit="%",
+                    severity="HIGH",
+                    status="ACTIVE",
+                    approved_by="agronomist-test",
+                    valid_from="2026-09-16T00:00:00+00:00",
+                    scope_type="CUSTOMER",
+                    scope_customer_id=customer.id,
+                )
+            )
+        result = self.app.evaluate(self.tenant.id, self.property.id)
+        self.assertEqual(result.decision.status, DecisionStatus.CONFLICTING)
+        self.assertIsNone(result.decision.rule_id)
+        self.assertEqual(result.decision.selected_rule_scope_type, "CUSTOMER")
+        self.assertEqual(result.decision.subject_customer_id, customer.id)
+        self.assertEqual(
+            result.decision.conflicts[0]["type"], "equally_specific_active_rules"
+        )
+
     def test_property_scoped_rule_is_not_applied_to_another_property(self) -> None:
         other_property = self.app.create_property(self.tenant.id, "Other property")
         self.app.create_rule(

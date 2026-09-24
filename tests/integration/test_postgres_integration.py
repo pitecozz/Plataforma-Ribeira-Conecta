@@ -467,6 +467,98 @@ class PostgresIntegrationTests(unittest.TestCase):
             self.assertEqual(audit["request_id"], "req-pg")
             self.assertEqual(audit["correlation_id"], "corr-pg")
 
+    def test_customer_scoped_rule_requires_temporal_link_and_persists_context(
+        self,
+    ) -> None:
+        tenant = self.create_test_tenant("Customer-scoped rule PG tenant")
+        other_tenant = self.create_test_tenant("Other customer-rule PG tenant")
+        property_item = self.application.create_property(
+            tenant.id, "Customer rule property"
+        )
+        other_property = self.application.create_property(
+            tenant.id, "Unlinked property"
+        )
+        customer = self.application.business.create_customer(
+            tenant.id, "Linked customer", actor="commercial"
+        )
+        other_customer = self.application.business.create_customer(
+            other_tenant.id, "Other tenant customer", actor="commercial"
+        )
+        self.application.business.link_customer_property(
+            tenant.id,
+            customer.id,
+            property_item.id,
+            "OWNER",
+            "2026-09-16T00:00:00+00:00",
+            None,
+            actor="commercial",
+        )
+        rule = RuleDefinition(
+            new_id(),
+            tenant.id,
+            1,
+            "Customer moisture rule",
+            RuleAuthority.REGRA_AGRONOMICA,
+            "soil_moisture",
+            "<",
+            30,
+            "%",
+            "HIGH",
+            "ACTIVE",
+            "distinct-approver",
+            "2026-09-16T00:00:00+00:00",
+            scope_type="CUSTOMER",
+            scope_customer_id=customer.id,
+        )
+        self.application.create_rule(rule)
+        with self.assertRaises(LookupError):
+            self.application.create_rule(
+                RuleDefinition(
+                    new_id(),
+                    tenant.id,
+                    1,
+                    "Cross tenant customer rule",
+                    RuleAuthority.REGRA_AGRONOMICA,
+                    "soil_moisture",
+                    "<",
+                    30,
+                    "%",
+                    "HIGH",
+                    "ACTIVE",
+                    "distinct-approver",
+                    "2026-09-16T00:00:00+00:00",
+                    scope_type="CUSTOMER",
+                    scope_customer_id=other_customer.id,
+                )
+            )
+        source = self.application.create_source(tenant.id, "Fixture", "TEST", "fixture")
+        self.application.adapters[source.id] = SyntheticFixtureAdapter(
+            [
+                {
+                    "metric": "soil_moisture",
+                    "value": 27.0,
+                    "unit": "%",
+                    "observation_timestamp": "2026-09-24T13:42:11+00:00",
+                    "quality_flag": "VALID",
+                }
+            ]
+        )
+        self.application.ingest(tenant.id, property_item.id, source.id)
+        result = self.application.evaluate(tenant.id, property_item.id)
+        self.assertEqual(result.decision.status, DecisionStatus.ACTIONABLE)
+        self.assertEqual(result.decision.selected_rule_scope_type, "CUSTOMER")
+        self.assertEqual(result.decision.subject_customer_id, customer.id)
+        self.assertIsNone(
+            self.application.evaluate(tenant.id, other_property.id).decision.rule_id
+        )
+        with self.store.tenant_transaction(tenant.id):
+            stored = self.store.connection.execute(
+                "SELECT selected_rule_scope_type,subject_customer_id FROM decision WHERE id=%s",
+                (result.decision.id,),
+            ).fetchone()
+            self.assertEqual(stored["selected_rule_scope_type"], "CUSTOMER")
+            self.assertEqual(str(stored["subject_customer_id"]), customer.id)
+
     def test_ready_closes_its_read_transaction(self) -> None:
         for _ in range(5):
             self.assertTrue(self.store.ready())

@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS rules (
   approved_by TEXT, valid_from TEXT NOT NULL, valid_until TEXT, created_at TEXT NOT NULL,
   scope_type TEXT NOT NULL DEFAULT 'TENANT', scope_property_id TEXT REFERENCES properties(id),
   scope_asset_id TEXT,
+  scope_customer_id TEXT,
   PRIMARY KEY (id, version)
 );
 CREATE INDEX IF NOT EXISTS idx_rules_active ON rules(tenant_id, metric, status, version);
@@ -77,7 +78,7 @@ CREATE TABLE IF NOT EXISTS decisions (
   classification TEXT NOT NULL, status TEXT NOT NULL, evidence_ids_json TEXT NOT NULL,
   rule_id TEXT, rule_version INTEGER, model_id TEXT, model_version TEXT,
   confidence REAL, limitations_json TEXT NOT NULL, missing_data_json TEXT NOT NULL,
-  conflicts_json TEXT NOT NULL, recommended_action_json TEXT, subject_asset_id TEXT,
+  conflicts_json TEXT NOT NULL, recommended_action_json TEXT, subject_asset_id TEXT, selected_rule_scope_type TEXT, subject_customer_id TEXT,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_property ON decisions(tenant_id, property_id, created_at);
@@ -391,6 +392,101 @@ class SQLiteStore:
             row["created_at"],
         )
 
+    def active_rules(
+        self,
+        tenant_id: str,
+        metric: str,
+        property_id: str | None = None,
+        asset_id: str | None = None,
+    ) -> list[RuleDefinition]:
+        """Return every currently applicable rule; callers handle precedence.
+
+        Customer applicability is intentionally derived from the temporal link,
+        never from a customer ID supplied by an evaluation request.
+        """
+        now = datetime.now(timezone.utc)
+        customer_ids: set[str] = set()
+        if property_id is not None:
+            links = self.connection.execute(
+                "SELECT customer_id,valid_from,valid_until FROM customer_property "
+                "WHERE tenant_id=? AND property_id=?",
+                (tenant_id, property_id),
+            ).fetchall()
+            for link in links:
+                try:
+                    starts = datetime.fromisoformat(link["valid_from"])
+                    ends = (
+                        datetime.fromisoformat(link["valid_until"])
+                        if link["valid_until"]
+                        else None
+                    )
+                except ValueError:
+                    continue
+                if (
+                    starts.tzinfo is not None
+                    and (ends is None or ends.tzinfo is not None)
+                    and starts <= now
+                    and (ends is None or now < ends)
+                ):
+                    customer_ids.add(str(link["customer_id"]))
+
+        rows = self.connection.execute(
+            "SELECT * FROM rules WHERE tenant_id=? AND metric=? AND status='ACTIVE' "
+            "ORDER BY version DESC",
+            (tenant_id, metric),
+        ).fetchall()
+        result: list[RuleDefinition] = []
+        for row in rows:
+            try:
+                starts = datetime.fromisoformat(row["valid_from"])
+                ends = (
+                    datetime.fromisoformat(row["valid_until"])
+                    if row["valid_until"]
+                    else None
+                )
+            except ValueError:
+                continue
+            if not (
+                starts.tzinfo is not None
+                and (ends is None or ends.tzinfo is not None)
+                and starts <= now
+                and (ends is None or now < ends)
+            ):
+                continue
+            scope = row["scope_type"]
+            applicable = (
+                scope == "TENANT"
+                or (scope == "PROPERTY" and row["scope_property_id"] == property_id)
+                or (scope == "ASSET" and row["scope_asset_id"] == asset_id)
+                or (scope == "CUSTOMER" and row["scope_customer_id"] in customer_ids)
+            )
+            if not applicable:
+                continue
+            result.append(
+                RuleDefinition(
+                    row["id"],
+                    row["tenant_id"],
+                    row["version"],
+                    row["name"],
+                    RuleAuthority(row["authority"]),
+                    row["metric"],
+                    row["operator"],
+                    row["threshold"],
+                    row["unit"],
+                    row["severity"],
+                    row["status"],
+                    row["approved_by"],
+                    row["valid_from"],
+                    row["valid_until"],
+                    row["created_at"],
+                    row["scope_type"],
+                    row["scope_property_id"],
+                    row["scope_asset_id"],
+                    row["scope_customer_id"],
+                )
+            )
+        return result
+
     def active_rule(
         self,
         tenant_id: str,
@@ -398,60 +494,17 @@ class SQLiteStore:
         property_id: str | None = None,
         asset_id: str | None = None,
     ) -> RuleDefinition | None:
-        rows = self.connection.execute(
-            """SELECT * FROM rules WHERE tenant_id = ? AND metric = ? AND status = 'ACTIVE'
-               AND (scope_type='TENANT'
-                    OR (scope_type='PROPERTY' AND scope_property_id=?)
-                    OR (scope_type='ASSET' AND scope_asset_id=?))
-               ORDER BY CASE scope_type WHEN 'ASSET' THEN 0 WHEN 'PROPERTY' THEN 1 ELSE 2 END, version DESC""",
-            (tenant_id, metric, property_id, asset_id),
-        ).fetchall()
-        now = datetime.now(timezone.utc)
-        row = None
-        for candidate in rows:
-            try:
-                valid_from = datetime.fromisoformat(candidate["valid_from"])
-                valid_until = (
-                    datetime.fromisoformat(candidate["valid_until"])
-                    if candidate["valid_until"]
-                    else None
-                )
-            except ValueError:
-                continue
-            if (
-                valid_from.tzinfo is not None
-                and (valid_until is None or valid_until.tzinfo is not None)
-                and valid_from <= now
-                and (valid_until is None or now < valid_until)
-            ):
-                row = candidate
-                break
-        if row is None:
-            return None
-        return RuleDefinition(
-            row["id"],
-            row["tenant_id"],
-            row["version"],
-            row["name"],
-            RuleAuthority(row["authority"]),
-            row["metric"],
-            row["operator"],
-            row["threshold"],
-            row["unit"],
-            row["severity"],
-            row["status"],
-            row["approved_by"],
-            row["valid_from"],
-            row["valid_until"],
-            row["created_at"],
-            row["scope_type"],
-            row["scope_property_id"],
-            row["scope_asset_id"],
+        rules = self.active_rules(tenant_id, metric, property_id, asset_id)
+        priority = {"ASSET": 0, "PROPERTY": 1, "CUSTOMER": 2, "TENANT": 3}
+        return (
+            min(rules, key=lambda rule: (priority[rule.scope_type], -rule.version))
+            if rules
+            else None
         )
 
     def create_rule(self, item: RuleDefinition) -> RuleDefinition:
         self._insert(
-            "INSERT INTO rules(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id,scope_asset_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO rules(id,tenant_id,version,name,authority,metric,operator,threshold,unit,severity,status,approved_by,valid_from,valid_until,created_at,scope_type,scope_property_id,scope_asset_id,scope_customer_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 item.id,
                 item.tenant_id,
@@ -471,6 +524,7 @@ class SQLiteStore:
                 item.scope_type,
                 item.scope_property_id,
                 item.scope_asset_id,
+                item.scope_customer_id,
             ),
         )
         return item
@@ -478,8 +532,8 @@ class SQLiteStore:
     def create_decision(self, item: Decision) -> Decision:
         self._insert(
             """INSERT INTO decisions(id,tenant_id,property_id,conclusion,classification,status,evidence_ids_json,rule_id,rule_version,
-               model_id,model_version,confidence,limitations_json,missing_data_json,conflicts_json,recommended_action_json,subject_asset_id,created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               model_id,model_version,confidence,limitations_json,missing_data_json,conflicts_json,recommended_action_json,subject_asset_id,selected_rule_scope_type,subject_customer_id,created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 item.id,
                 item.tenant_id,
@@ -500,6 +554,8 @@ class SQLiteStore:
                 if item.recommended_action is not None
                 else None,
                 item.subject_asset_id,
+                item.selected_rule_scope_type,
+                item.subject_customer_id,
                 item.created_at,
             ),
         )
@@ -522,6 +578,8 @@ class SQLiteStore:
                 "id": row["id"],
                 "property_id": row["property_id"],
                 "subject_asset_id": row["subject_asset_id"],
+                "selected_rule_scope_type": row["selected_rule_scope_type"],
+                "subject_customer_id": row["subject_customer_id"],
                 "conclusion": row["conclusion"],
                 "classification": row["classification"],
                 "status": row["status"],

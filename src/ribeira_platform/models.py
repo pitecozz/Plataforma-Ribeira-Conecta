@@ -143,6 +143,9 @@ class RuleDefinition:
     scope_type: str = "TENANT"
     scope_property_id: str | None = None
     scope_asset_id: str | None = None
+    # Customer applicability is explicit and only becomes effective through a
+    # time-bounded customer_property relationship for the evaluated property.
+    scope_customer_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -211,6 +214,11 @@ class Decision:
     # An asset is explicit operational context, never a substitute for a
     # property-scoped measurement in this first rule slice.
     subject_asset_id: str | None = None
+    # These fields snapshot the applicability context selected at evaluation
+    # time. They do not assert ownership, service availability or a customer
+    # need, and keep later relationship changes from rewriting history.
+    selected_rule_scope_type: str | None = None
+    subject_customer_id: str | None = None
     created_at: str = field(default_factory=now_utc)
 
 

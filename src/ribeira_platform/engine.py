@@ -118,8 +118,10 @@ class DecisionEngine:
         if asset_evidence_id is not None:
             evidence_ids.append(asset_evidence_id)
 
-        rule = self.store.active_rule(tenant_id, metric, property.id, asset_id)
-        if rule is None:
+        applicable_rules = self.store.active_rules(
+            tenant_id, metric, property.id, asset_id
+        )
+        if not applicable_rules:
             decision = Decision(
                 id=new_id(),
                 tenant_id=tenant_id,
@@ -144,6 +146,63 @@ class DecisionEngine:
             self._audit(tenant_id, actor, decision, "rule_missing")
             return DecisionResult(decision, None, None)
 
+        priority = {"ASSET": 0, "PROPERTY": 1, "CUSTOMER": 2, "TENANT": 3}
+        selected_priority = min(priority[rule.scope_type] for rule in applicable_rules)
+        selected_rules = [
+            rule
+            for rule in applicable_rules
+            if priority[rule.scope_type] == selected_priority
+        ]
+        if len(selected_rules) != 1:
+            scope_type = selected_rules[0].scope_type
+            customer_ids = {
+                rule.scope_customer_id
+                for rule in selected_rules
+                if rule.scope_customer_id is not None
+            }
+            decision = Decision(
+                id=new_id(),
+                tenant_id=tenant_id,
+                property_id=property.id,
+                conclusion="Conclusão inconclusiva porque há regras ativas igualmente específicas.",
+                classification=DataClassification.CONFLICTING,
+                status=DecisionStatus.CONFLICTING,
+                evidence_ids=evidence_ids,
+                rule_id=None,
+                rule_version=None,
+                model_id=None,
+                model_version=None,
+                confidence=None,
+                limitations=[
+                    "a plataforma não escolhe uma regra por ordem de inserção ou versão quando a aplicabilidade é igualmente específica"
+                ],
+                missing_data=[],
+                conflicts=[
+                    {
+                        "type": "equally_specific_active_rules",
+                        "scope_type": scope_type,
+                        "rules": [
+                            {"id": rule.id, "version": rule.version}
+                            for rule in selected_rules
+                        ],
+                    }
+                ],
+                recommended_action={
+                    "type": "resolve_rule_conflict",
+                    "responsible_user_id": None,
+                },
+                selected_rule_scope_type=scope_type,
+                subject_customer_id=(
+                    next(iter(customer_ids))
+                    if scope_type == "CUSTOMER" and len(customer_ids) == 1
+                    else None
+                ),
+            )
+            decision = self._persist_decision(decision, asset_id)
+            self._audit(tenant_id, actor, decision, "rule_scope_conflict")
+            return DecisionResult(decision, None, None)
+        rule = selected_rules[0]
+
         current = metrics.get(metric, [])
         if not current:
             decision = Decision(
@@ -164,7 +223,7 @@ class DecisionEngine:
                 conflicts=[],
                 recommended_action=None,
             )
-            decision = self._persist_decision(decision, asset_id)
+            decision = self._persist_decision(decision, asset_id, rule)
             self._audit(tenant_id, actor, decision, "missing_observation")
             return DecisionResult(decision, None, None)
 
@@ -208,7 +267,7 @@ class DecisionEngine:
                     "responsible_user_id": None,
                 },
             )
-            decision = self._persist_decision(decision, asset_id)
+            decision = self._persist_decision(decision, asset_id, rule)
             alert = Alert(
                 new_id(),
                 tenant_id,
@@ -264,7 +323,7 @@ class DecisionEngine:
                     "deadline": None,
                 },
             )
-            decision = self._persist_decision(decision, asset_id)
+            decision = self._persist_decision(decision, asset_id, rule)
             alert = Alert(
                 new_id(),
                 tenant_id,
@@ -307,12 +366,25 @@ class DecisionEngine:
             conflicts=[],
             recommended_action=None,
         )
-        decision = self._persist_decision(decision, asset_id)
+        decision = self._persist_decision(decision, asset_id, rule)
         self._audit(tenant_id, actor, decision, "rule_not_triggered")
         return DecisionResult(decision, None, None)
 
-    def _persist_decision(self, decision: Decision, asset_id: str | None) -> Decision:
-        """Persist an immutable decision with declared asset context, if any."""
+    def _persist_decision(
+        self,
+        decision: Decision,
+        asset_id: str | None,
+        rule: RuleDefinition | None = None,
+    ) -> Decision:
+        """Persist immutable applicability context without inferring customer facts."""
+        if rule is not None:
+            decision = replace(
+                decision,
+                selected_rule_scope_type=rule.scope_type,
+                subject_customer_id=(
+                    rule.scope_customer_id if rule.scope_type == "CUSTOMER" else None
+                ),
+            )
         if asset_id is not None:
             decision = replace(
                 decision,
@@ -346,6 +418,8 @@ class DecisionEngine:
                 "rule_id": decision.rule_id,
                 "rule_version": decision.rule_version,
                 "subject_asset_id": decision.subject_asset_id,
+                "selected_rule_scope_type": decision.selected_rule_scope_type,
+                "subject_customer_id": decision.subject_customer_id,
                 "model_id": decision.model_id,
                 "model_version": decision.model_version,
                 "result": decision.conclusion,

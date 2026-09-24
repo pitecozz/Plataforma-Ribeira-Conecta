@@ -168,6 +168,10 @@ class BusinessApplication:
         if valid_until is not None:
             parse_aware(valid_until)
         with self.store.tenant_transaction(tenant_id):
+            if self.repository.get_customer(tenant_id, customer_id) is None:
+                raise LookupError("customer is unavailable in tenant")
+            if self.store.get_property(tenant_id, property_id) is None:
+                raise LookupError("property is unavailable in tenant")
             item_id = self.repository.create_customer_property(
                 tenant_id,
                 customer_id,

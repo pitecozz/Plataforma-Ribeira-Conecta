@@ -194,9 +194,12 @@ class RuleRequest(BaseModel):
     approved_by: str | None = None
     valid_from: str = Field(default_factory=now_utc)
     valid_until: str | None = None
-    scope_type: str = Field(default="TENANT", pattern=r"^(TENANT|PROPERTY|ASSET)$")
+    scope_type: str = Field(
+        default="TENANT", pattern=r"^(TENANT|PROPERTY|ASSET|CUSTOMER)$"
+    )
     scope_property_id: str | None = Field(default=None, min_length=1, max_length=200)
     scope_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    scope_customer_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class ActorRequest(BaseModel):
@@ -1338,6 +1341,7 @@ def create_app(
             scope_type=payload.scope_type,
             scope_property_id=payload.scope_property_id,
             scope_asset_id=payload.scope_asset_id,
+            scope_customer_id=payload.scope_customer_id,
         )
         return to_jsonable(application.create_rule(rule))
 
