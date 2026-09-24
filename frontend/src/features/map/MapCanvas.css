@@ -122,6 +122,11 @@
   height: 100%;
 }
 
+.boundary-editor-map .map-frame {
+  height: 360px;
+  margin: 10px 0;
+}
+
 @media (max-width: 900px) {
   .map-frame {
     height: 58vh;

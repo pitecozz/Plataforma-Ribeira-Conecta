@@ -370,8 +370,10 @@ export function Farm360Page({
         />}
         {canManageBoundary && <BoundaryEditorPanel
           api={api}
+          apiBaseUrl={apiBaseUrl}
           tenantId={tenantId}
           property={property}
+          token={token}
           onChanged={refresh}
         />}
         <TemporalPanel

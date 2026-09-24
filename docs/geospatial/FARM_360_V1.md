@@ -45,6 +45,15 @@ never repaired or re-labelled. KML altitude is discarded because the boundary is
 2D only. These uploaded/drawn geometries are operational AOIs, not legal title or
 survey evidence.
 
+An authorized boundary editor starts from the persisted polygon and works with a
+local draft. The map renders that draft and a click explicitly appends a vertex;
+coordinate fields remain available for correction and the draft can be undone or
+cancelled. A map click is not a boundary mutation, observation or confirmation.
+Only an explicit save creates a new version through the checksum-protected API,
+after the browser verifies each coordinate is finite and within WGS84 longitude
+and latitude bounds. Server-side geometry validation, audit and versioning remain
+the authority.
+
 ## Operations workspace
 
 The workspace lists tenant-scoped properties, keeps the map as the main view,
