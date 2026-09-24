@@ -62,7 +62,9 @@ class TerrainAnalysis:
 def _require_projected_metre_crs(crs: CRS | object | None) -> CRS:
     parsed = CRS.from_user_input(crs) if crs is not None else None
     if parsed is None or not parsed.is_projected:
-        raise TerrainProcessingError("DEM CRS must be projected before slope calculations")
+        raise TerrainProcessingError(
+            "DEM CRS must be projected before slope calculations"
+        )
     units = {axis.unit_name.lower() for axis in parsed.axis_info if axis.unit_name}
     if not any("metre" in unit or "meter" in unit for unit in units):
         raise TerrainProcessingError("DEM horizontal units must be metres")
@@ -79,7 +81,9 @@ def _transform_to_crs(geometry: dict, target_crs: CRS):
 
 def _cell_size(transform: Affine) -> tuple[float, float]:
     if transform.b != 0 or transform.d != 0:
-        raise TerrainProcessingError("rotated DEM grids are not supported by terrain analysis v1")
+        raise TerrainProcessingError(
+            "rotated DEM grids are not supported by terrain analysis v1"
+        )
     x_size, y_size = abs(transform.a), abs(transform.e)
     if x_size <= 0 or y_size <= 0:
         raise TerrainProcessingError("DEM has invalid pixel dimensions")
@@ -96,9 +100,15 @@ def _derivatives(
     dzdy = np.full(data.shape, np.nan, dtype=np.float64)
     if data.shape[0] >= 3 and data.shape[1] >= 3:
         neighbourhood = (
-            valid[:-2, :-2] & valid[:-2, 1:-1] & valid[:-2, 2:]
-            & valid[1:-1, :-2] & valid[1:-1, 1:-1] & valid[1:-1, 2:]
-            & valid[2:, :-2] & valid[2:, 1:-1] & valid[2:, 2:]
+            valid[:-2, :-2]
+            & valid[:-2, 1:-1]
+            & valid[:-2, 2:]
+            & valid[1:-1, :-2]
+            & valid[1:-1, 1:-1]
+            & valid[1:-1, 2:]
+            & valid[2:, :-2]
+            & valid[2:, 1:-1]
+            & valid[2:, 2:]
         )
         dzdx[1:-1, 1:-1] = np.where(
             neighbourhood, (data[1:-1, 2:] - data[1:-1, :-2]) / (2 * x_size), np.nan
@@ -114,7 +124,9 @@ def _profile_distances(
     line: LineString, spacing_metres: float
 ) -> Iterable[tuple[float, tuple[float, float]]]:
     if len(line.coords) < 2:
-        raise TerrainProcessingError("terrain profile requires at least two coordinates")
+        raise TerrainProcessingError(
+            "terrain profile requires at least two coordinates"
+        )
     if spacing_metres <= 0:
         raise TerrainProcessingError("terrain profile spacing must be positive")
     sample_count = max(1, int(np.ceil(line.length / spacing_metres)))
@@ -142,13 +154,21 @@ class TerrainProcessor:
             crs = _require_projected_metre_crs(dataset.crs)
             aoi = _transform_to_crs(aoi_geojson, crs)
             if aoi.geom_type not in {"Polygon", "MultiPolygon"}:
-                raise TerrainProcessingError("terrain AOI must be a Polygon or MultiPolygon")
+                raise TerrainProcessingError(
+                    "terrain AOI must be a Polygon or MultiPolygon"
+                )
             try:
-                clipped, transform = mask(dataset, [aoi.__geo_interface__], crop=True, filled=False)
+                clipped, transform = mask(
+                    dataset, [aoi.__geo_interface__], crop=True, filled=False
+                )
             except ValueError as exc:
-                raise TerrainProcessingError("terrain AOI does not intersect the DEM") from exc
+                raise TerrainProcessingError(
+                    "terrain AOI does not intersect the DEM"
+                ) from exc
             if clipped.shape[0] != 1:
-                raise TerrainProcessingError("terrain DEM must contain exactly one elevation band")
+                raise TerrainProcessingError(
+                    "terrain DEM must contain exactly one elevation band"
+                )
             elevation = np.ma.masked_invalid(clipped[0].astype(np.float64, copy=False))
             x_size, y_size = _cell_size(transform)
             dzdx, dzdy = _derivatives(elevation, x_size, y_size)
@@ -158,20 +178,33 @@ class TerrainProcessor:
             azimuth = np.deg2rad(self.hillshade_azimuth_degrees)
             hillshade = 255.0 * (
                 np.cos(zenith) * np.cos((slope * np.pi / 180.0))
-                + np.sin(zenith) * np.sin((slope * np.pi / 180.0))
+                + np.sin(zenith)
+                * np.sin((slope * np.pi / 180.0))
                 * np.cos(azimuth - (aspect * np.pi / 180.0))
             )
-            profile = self._profile(dataset, profile_geojson) if profile_geojson else ()
+            profile = (
+                self._profile(dataset, aoi, profile_geojson) if profile_geojson else ()
+            )
         statistics = self._statistics(elevation, slope)
         limitations = (
             "Terrain values are derived from the supplied DEM, not a field survey or legal boundary.",
             "Slope, aspect and hillshade require complete 3x3 elevation neighbourhoods; edges and nodata remain unavailable.",
             f"Hillshade uses azimuth {self.hillshade_azimuth_degrees:.0f}° and altitude {self.hillshade_altitude_degrees:.0f}°.",
         )
-        return TerrainAnalysis(elevation, slope, aspect, np.ma.clip(hillshade, 0, 255), statistics, limitations, tuple(profile))
+        return TerrainAnalysis(
+            elevation,
+            slope,
+            aspect,
+            np.ma.clip(hillshade, 0, 255),
+            statistics,
+            limitations,
+            tuple(profile),
+        )
 
     @staticmethod
-    def _statistics(elevation: np.ma.MaskedArray, slope: np.ma.MaskedArray) -> TerrainStatistics:
+    def _statistics(
+        elevation: np.ma.MaskedArray, slope: np.ma.MaskedArray
+    ) -> TerrainStatistics:
         valid, valid_slope = elevation.compressed(), slope.compressed()
         return TerrainStatistics(
             valid_cell_count=int(valid.size),
@@ -179,19 +212,33 @@ class TerrainProcessor:
             elevation_minimum_metres=float(valid.min()) if valid.size else None,
             elevation_maximum_metres=float(valid.max()) if valid.size else None,
             elevation_mean_metres=float(valid.mean()) if valid.size else None,
-            slope_minimum_degrees=float(valid_slope.min()) if valid_slope.size else None,
-            slope_maximum_degrees=float(valid_slope.max()) if valid_slope.size else None,
+            slope_minimum_degrees=float(valid_slope.min())
+            if valid_slope.size
+            else None,
+            slope_maximum_degrees=float(valid_slope.max())
+            if valid_slope.size
+            else None,
             slope_mean_degrees=float(valid_slope.mean()) if valid_slope.size else None,
         )
 
     @staticmethod
-    def _profile(dataset: rasterio.DatasetReader, profile_geojson: dict) -> list[TerrainProfilePoint]:
-        line = _transform_to_crs(profile_geojson, _require_projected_metre_crs(dataset.crs))
+    def _profile(
+        dataset: rasterio.DatasetReader, aoi, profile_geojson: dict
+    ) -> list[TerrainProfilePoint]:
+        line = _transform_to_crs(
+            profile_geojson, _require_projected_metre_crs(dataset.crs)
+        )
         if not isinstance(line, LineString):
             raise TerrainProcessingError("terrain profile must be a LineString")
+        if not aoi.covers(line):
+            raise TerrainProcessingError(
+                "terrain profile must be fully contained by the terrain AOI"
+            )
         points = list(_profile_distances(line, min(_cell_size(dataset.transform))))
         samples = dataset.sample([coordinate for _, coordinate in points], masked=True)
         return [
-            TerrainProfilePoint(distance, None if np.ma.is_masked(sample[0]) else float(sample[0]))
+            TerrainProfilePoint(
+                distance, None if np.ma.is_masked(sample[0]) else float(sample[0])
+            )
             for (distance, _), sample in zip(points, samples, strict=True)
         ]

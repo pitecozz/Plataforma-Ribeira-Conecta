@@ -41,9 +41,9 @@ class TerrainProcessorTests(unittest.TestCase):
         # This is deliberately WGS84 and transformed to the synthetic DEM CRS.
         return {
             "type": "Polygon",
-            "coordinates": [[
-                [0.0, 0.0], [0.0045, 0.0], [0.0045, 0.0045], [0.0, 0.0045], [0.0, 0.0]
-            ]],
+            "coordinates": [
+                [[0.0, 0.0], [0.0045, 0.0], [0.0045, 0.0045], [0.0, 0.0045], [0.0, 0.0]]
+            ],
         }
 
     def test_planar_dem_calculates_elevation_slope_aspect_and_hillshade(self) -> None:
@@ -53,8 +53,12 @@ class TerrainProcessorTests(unittest.TestCase):
         self.assertEqual(result.statistics.valid_cell_count, 25)
         self.assertEqual(result.statistics.elevation_minimum_metres, 0.0)
         self.assertEqual(result.statistics.elevation_maximum_metres, 40.0)
-        self.assertAlmostEqual(result.statistics.slope_mean_degrees or 0, 5.7106, places=3)
-        self.assertAlmostEqual(float(result.aspect_degrees_from_north[2, 2]), 270.0, places=4)
+        self.assertAlmostEqual(
+            result.statistics.slope_mean_degrees or 0, 5.7106, places=3
+        )
+        self.assertAlmostEqual(
+            float(result.aspect_degrees_from_north[2, 2]), 270.0, places=4
+        )
         self.assertGreater(float(result.hillshade[2, 2]), 0.0)
         self.assertTrue(result.slope_degrees.mask[0, 0])
         self.assertIn("not a field survey", result.limitations[0])
@@ -67,7 +71,9 @@ class TerrainProcessorTests(unittest.TestCase):
             "type": "LineString",
             "coordinates": [[0.0005, 0.0025], [0.0023, 0.0025], [0.0040, 0.0025]],
         }
-        result = TerrainProcessor().analyze(self.path, self.aoi(), profile_geojson=profile)
+        result = TerrainProcessor().analyze(
+            self.path, self.aoi(), profile_geojson=profile
+        )
         self.assertGreater(result.statistics.nodata_cell_count, 0)
         self.assertTrue(result.slope_degrees.mask[2, 2])
         self.assertEqual(len(result.profile), 5)
@@ -79,3 +85,13 @@ class TerrainProcessorTests(unittest.TestCase):
         self.write_dem(np.ones((5, 5)), crs="EPSG:4326")
         with self.assertRaisesRegex(TerrainProcessingError, "projected"):
             TerrainProcessor().analyze(self.path, self.aoi())
+
+    def test_rejects_profile_segments_outside_the_property_aoi(self) -> None:
+        self.write_dem(np.tile(np.arange(5) * 10, (5, 1)))
+        profile = {
+            "type": "LineString",
+            "coordinates": [[-0.0009, 0.0025], [0.0025, 0.0025]],
+        }
+
+        with self.assertRaisesRegex(TerrainProcessingError, "fully contained"):
+            TerrainProcessor().analyze(self.path, self.aoi(), profile_geojson=profile)
