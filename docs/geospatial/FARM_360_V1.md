@@ -72,6 +72,8 @@ real location. This is a screen-space interaction aid, not a coordinate edit,
 derived position or asset relationship. Zooming can separate the original
 positions where their actual geometries permit it.
 
+The map also accepts an explicit coordinate pair for local navigation while drawing or inspecting a property. It uses no geocoder or external provider: a temporary marker and viewport change are purely a screen interaction. The lookup is not persisted, does not change a boundary or asset coordinate, and is not evidence of an address, ownership, coverage or condition.
+
 ## Read endpoints
 
 - `GET /v1/tenants/{tenant_id}/properties`

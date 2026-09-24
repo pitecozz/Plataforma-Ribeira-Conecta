@@ -25,6 +25,10 @@
 .map-recenter:hover {
   background: #f0fdf4;
 }
+.map-location-search { background: rgba(255,255,255,.96); border: 1px solid #d1ddd4; border-radius: 5px; box-shadow: 0 1px 5px rgba(23,35,31,.22); left: 10px; padding: 7px; position: absolute; top: 52px; z-index: 2; }
+.map-location-search label { color: #14532d; display: block; font-size: 11px; font-weight: 700; margin-bottom: 4px; }.map-location-search div { display: flex; gap: 4px; }.map-location-search input, .map-location-search button { border: 1px solid #bbf7d0; border-radius: 4px; font-size: 12px; padding: 5px 6px; }.map-location-search input { max-width: 150px; }.map-location-search button { background: #f0fdf4; color: #14532d; font-weight: 700; }
+.map-location-search p { color: #52675a; font-size: 11px; line-height: 1.3; margin: 6px 0 0; max-width: 240px; }
+.map-location-marker { background: #0f766e; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 1px 5px rgba(23,35,31,.45); display: block; height: 16px; width: 16px; }
 .map-measure-tools { background: rgba(255,255,255,.94); border: 1px solid #d1ddd4; border-radius: 5px; bottom: 10px; display: flex; gap: 4px; padding: 6px; position: absolute; right: 10px; z-index: 2; }
 .map-measure-tools button { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; color: #14532d; font-size: 11px; padding: 4px 6px; }
 .map-measure-tools p { align-self: center; font-size: 11px; margin: 0 2px; }

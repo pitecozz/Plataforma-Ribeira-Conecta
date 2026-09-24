@@ -7,6 +7,7 @@ import "./MapCanvas.css";
 import { assetMarkerSymbol, boundsForGeometry } from "./mapPresentation";
 import { transformMapRequest } from "./tileAuth";
 import { areaSquareMetres, distanceMetres, type Coordinate } from "./measurements";
+import { parseCoordinates } from "./locationSearch";
 import type { DigitalTwinAsset } from "../../types/farm360";
 
 interface Props {
@@ -145,6 +146,7 @@ export function MapCanvas({
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<maplibregl.Marker[]>([]);
+  const locationMarker = useRef<maplibregl.Marker | null>(null);
   const onAssetSelectedRef = useRef(onAssetSelected);
   const onMapClickRef = useRef(onMapClick);
   const fitPropertyRef = useRef<(() => void) | null>(null);
@@ -152,6 +154,8 @@ export function MapCanvas({
   const [markerLayoutVersion, setMarkerLayoutVersion] = useState(0);
   const [measurementMode, setMeasurementMode] = useState<"none" | "distance" | "area" | "coordinates">("none");
   const [measurementPoints, setMeasurementPoints] = useState<Coordinate[]>([]);
+  const [locationQuery, setLocationQuery] = useState("");
+  const [locationMessage, setLocationMessage] = useState<string | null>(null);
 
   useEffect(() => {
     onAssetSelectedRef.current = onAssetSelected;
@@ -184,6 +188,8 @@ export function MapCanvas({
       markers.current.forEach((marker) => marker.remove());
       markers.current = [];
       active.remove();
+      locationMarker.current?.remove();
+      locationMarker.current = null;
       map.current = null;
     };
   }, [apiBaseUrl, token, measurementMode]);
@@ -413,6 +419,24 @@ export function MapCanvas({
     else active.once("load", update);
   }, [deltaTileUrl, deltaEnabled]);
 
+  const findCoordinates = () => {
+    const result = parseCoordinates(locationQuery);
+    const active = map.current;
+    if (!result || !active) {
+      setLocationMessage("Informe coordenadas válidas em longitude, latitude (por exemplo, -47.45, -24.49).");
+      return;
+    }
+    locationMarker.current?.remove();
+    const markerElement = document.createElement("span");
+    markerElement.className = "map-location-marker";
+    markerElement.setAttribute("aria-label", `Localização buscada: ${result.label}`);
+    locationMarker.current = new maplibregl.Marker({ element: markerElement, anchor: "center" })
+      .setLngLat([result.longitude, result.latitude])
+      .addTo(active);
+    active.easeTo({ center: [result.longitude, result.latitude], zoom: Math.max(active.getZoom(), 15), duration: 500 });
+    setLocationMessage(`Localização exibida: ${result.label}. Esta busca não altera o limite cadastrado.`);
+  };
+
   return (
     <div className="map-frame">
       <div className="map-canvas" ref={element} aria-label="Mapa da propriedade" />
@@ -420,6 +444,14 @@ export function MapCanvas({
       <button className="map-recenter" type="button" onClick={() => fitPropertyRef.current?.()}>
         Centralizar sítio
       </button>
+      <form className="map-location-search" onSubmit={(event) => { event.preventDefault(); findCoordinates(); }}>
+        <label htmlFor="map-location-query">Ir para coordenadas</label>
+        <div>
+          <input id="map-location-query" value={locationQuery} onChange={(event) => setLocationQuery(event.target.value)} placeholder="longitude, latitude" inputMode="decimal" />
+          <button type="submit">Buscar</button>
+        </div>
+        {locationMessage && <p role="status">{locationMessage}</p>}
+      </form>
       <div className="map-measure-tools"><button type="button" onClick={() => { setMeasurementMode("distance"); setMeasurementPoints([]); }}>Medir distância</button><button type="button" onClick={() => { setMeasurementMode("area"); setMeasurementPoints([]); }}>Medir área</button><button type="button" onClick={() => { setMeasurementMode("coordinates"); setMeasurementPoints([]); }}>Coordenadas</button>{measurementMode !== "none" && <><button type="button" onClick={() => setMeasurementPoints(points => points.slice(0, -1))}>Desfazer</button><button type="button" onClick={() => { setMeasurementMode("none"); setMeasurementPoints([]); }}>Limpar</button><p>{measurementMode === "distance" ? `${(distanceMetres(measurementPoints) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km` : measurementMode === "area" ? `${(areaSquareMetres(measurementPoints) / 10000).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ha` : measurementPoints.at(-1) ? `${measurementPoints.at(-1)![1].toFixed(5)}, ${measurementPoints.at(-1)![0].toFixed(5)}` : "Clique no mapa"}</p></>}</div>
     </div>
   );
