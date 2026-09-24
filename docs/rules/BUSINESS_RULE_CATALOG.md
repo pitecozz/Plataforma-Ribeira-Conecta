@@ -25,7 +25,7 @@ evidence returns `UNKNOWN` or `INCONCLUSIVE`; it does not default to false.
 
 An asset registration contributes only factual applicability context. The evaluation retains its opaque `ASSET_REGISTRATION` evidence ID and `subject_asset_id` in the immutable decision, alongside the property-scoped observation evidence. If that registration evidence is unavailable, the result is `UNKNOWN`/`INCONCLUSIVE`; Ribeira does not use an unproven asset record to select a rule. The asset is never converted into a sensor reading, health state, agronomic diagnosis or automatic action.
 
-The API requires both `asset:read` and `decision:read`; active-rule creation retains the existing `rule:create` and distinct-approver controls. PostgreSQL binds both rule and decision asset references to the same tenant, and a trigger requires the decision's asset to belong to its recorded property. Customer, field, management-zone and crop inheritance are not implied by this slice.
+The API requires both `asset:read` and `decision:read`; Farm360 renders the evaluation control only when both permissions are present and the selected asset retains its registration evidence. Evaluation is an explicit operator action, not background monitoring, and the resulting immutable decision is refreshed in the property history. Active-rule creation retains the existing `rule:create` and distinct-approver controls. PostgreSQL binds both rule and decision asset references to the same tenant, and a trigger requires the decision's asset to belong to its recorded property. Customer, field, management-zone and crop inheritance are not implied by this slice.
 
 ## Rule-to-outcome flow
 

@@ -43,6 +43,14 @@
 .asset-registration fieldset { border: 1px solid #d9e2da; display: grid; gap: 8px; }
 .asset-registration-note { color: #66756c; font-size: 12px; }
 
+.asset-rule-evaluation {
+  border-top: 1px solid #d9e2da;
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.asset-rule-evaluation p { color: #4b5d51; font-size: 12px; }
+
 .property-summary {
   background: linear-gradient(135deg, #f0fdf4, #ffffff);
   border: 1px solid #bbf7d0;

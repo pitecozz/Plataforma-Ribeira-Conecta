@@ -39,6 +39,7 @@ interface Props {
   canRunSatelliteOperations?: boolean;
   canManageAssets?: boolean;
   canCompleteActions?: boolean;
+  canEvaluateAssets?: boolean;
 }
 type LoadState = "loading" | "ready" | "empty" | "error";
 type PartialLoadIssues = {
@@ -74,6 +75,7 @@ export function Farm360Page({
   canRunSatelliteOperations = false,
   canManageAssets = false,
   canCompleteActions = false,
+  canEvaluateAssets = false,
 }: Props) {
   const [state, setState] = useState<LoadState>("loading");
   const [property, setProperty] = useState<PropertyRecord | null>(null);
@@ -342,6 +344,8 @@ export function Farm360Page({
             tenantId={tenantId}
             propertyId={propertyId}
             canManageAssets={canManageAssets}
+            canEvaluateAssets={canEvaluateAssets}
+            onEvaluated={refreshDecisions}
             onCreated={(asset) => {
               setAssets((current) => [...current, asset].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")));
               setSelectedAssetId(asset.id);

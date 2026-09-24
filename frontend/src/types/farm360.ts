@@ -81,6 +81,7 @@ export interface PilotFeedback {
 export interface PropertyDecision {
   id: string;
   property_id: string;
+  subject_asset_id?: string | null;
   conclusion: string;
   classification: string;
   status: string;

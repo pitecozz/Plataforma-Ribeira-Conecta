@@ -165,7 +165,7 @@ not hard-code a one-off municipal conclusion.
   `PROPERTY` scoped, with property scope taking precedence and never applying
   to another property. Customer, field/talhão and asset inheritance/precedence
   remains pending; this slice does not claim those broader scopes.
-  Farm360 now exposes outcome capture only to `action:write` users; the user supplies an explicit result, classification, timestamp and optional tenant-local evidence identifiers, while the decision and recommendation remain immutable. `ASSET` scope is explicit and takes precedence only in an evaluation requested for that property-linked asset; it never silently applies during property evaluation or turns the registration into a metric. Customer, field/talhão and broader inheritance remain pending.
+  Farm360 now exposes outcome capture only to `action:write` users; the user supplies an explicit result, classification, timestamp and optional tenant-local evidence identifiers, while the decision and recommendation remain immutable. `ASSET` scope is explicit and takes precedence only in an evaluation requested for that property-linked asset; it never silently applies during property evaluation or turns the registration into a metric. Farm360 exposes that evaluation only to users who hold both `asset:read` and `decision:read`; it requires a persisted asset-registration evidence identifier, is initiated explicitly, and refreshes the immutable property decision history. Customer, field/talhão and broader inheritance remain pending.
 - **Objective:** explicit rule applicability across sector, customer, property,
   field/talhão and asset, with versioning, conflict handling and feedback.
 - **Business value:** safely turns asset/context data into recommendations,

@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import type { DigitalTwinAsset } from "../../types/farm360";
 import { Status } from "../../components/Status";
 import { customerAssetTypeLabel, customerDateLabel, customerSourceLabel } from "../../presentation";
@@ -15,6 +15,31 @@ function contextEntries(
   ]);
 }
 
+function AssetRuleEvaluation({ api, tenantId, asset, onEvaluated }: {
+  api: Farm360Api;
+  tenantId: string;
+  asset: DigitalTwinAsset;
+  onEvaluated: () => Promise<void> | void;
+}) {
+  const [evaluating, setEvaluating] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const canEvaluate = Boolean(asset.evidence_id);
+  const evaluate = async () => {
+    setEvaluating(true);
+    setMessage(null);
+    try {
+      await api.evaluateAsset(tenantId, asset.id);
+      await onEvaluated();
+      setMessage("Avaliação registrada no histórico desta propriedade. Consulte a decisão e suas limitações em Riscos e decisões.");
+    } catch {
+      setMessage("Não foi possível registrar a avaliação agora. Confirme a permissão e tente novamente.");
+    } finally {
+      setEvaluating(false);
+    }
+  };
+  return <details className="asset-rule-evaluation"><summary>Avaliar regras para este ativo</summary><p>Esta ação usa o ativo somente como contexto de aplicabilidade. Ela não transforma o cadastro do ativo em medição, condição ou diagnóstico.</p>{!canEvaluate && <p>Não há evidência de cadastro disponível para este ativo. A avaliação permanece indisponível até que o registro tenha proveniência.</p>}<button type="button" onClick={() => void evaluate()} disabled={evaluating || !canEvaluate}>{evaluating ? "Avaliando…" : "Avaliar evidências e regras"}</button>{message && <p role="alert">{message}</p>}</details>;
+}
+
 export function AssetPanel({
   assets,
   selectedAssetId,
@@ -25,6 +50,8 @@ export function AssetPanel({
   propertyId,
   canManageAssets = false,
   onCreated,
+  canEvaluateAssets = false,
+  onEvaluated,
 }: {
   assets: DigitalTwinAsset[];
   selectedAssetId: string | null;
@@ -35,6 +62,8 @@ export function AssetPanel({
   propertyId?: string;
   canManageAssets?: boolean;
   onCreated?: (asset: DigitalTwinAsset) => void;
+  canEvaluateAssets?: boolean;
+  onEvaluated?: () => Promise<void> | void;
 }) {
   const selected = assets.find((asset) => asset.id === selectedAssetId) ?? null;
   return (
@@ -102,6 +131,7 @@ export function AssetPanel({
                 ))}
               </dl></>}
           </details>
+          {canEvaluateAssets && api && tenantId && onEvaluated && <AssetRuleEvaluation api={api} tenantId={tenantId} asset={selected} onEvaluated={onEvaluated} />}
         </div>
       )}
       {canManageAssets && api && tenantId && propertyId && onCreated && <AssetRegistrationPanel api={api} tenantId={tenantId} propertyId={propertyId} onCreated={onCreated} />}

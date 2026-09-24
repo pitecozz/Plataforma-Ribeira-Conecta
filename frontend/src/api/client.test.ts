@@ -48,6 +48,13 @@ describe("Farm360Api", () => {
     expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/properties/property%20%2F%20id/assets", { headers: { Authorization: "Bearer session-token" } });
   });
 
+  it("evaluates an asset only through the encoded authenticated tenant endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ decision: { id: "decision" } }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await new Farm360Api("https://api.example", "session-token").evaluateAsset("tenant / id", "asset / id");
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/assets/asset%20%2F%20id/evaluate", { method: "POST", headers: { Authorization: "Bearer session-token", "Content-Type": "application/json" }, body: undefined });
+  });
+
   it("uploads GeoJSON bytes through the tenant-scoped review endpoint without a storage path", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "import" }), { status: 201 }));
     vi.stubGlobal("fetch", fetchMock);

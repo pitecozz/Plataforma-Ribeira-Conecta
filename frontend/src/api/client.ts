@@ -134,6 +134,11 @@ export class Farm360Api {
       payload,
     );
   }
+  evaluateAsset(tenantId: string, assetId: string) {
+    return this.post<{ decision: PropertyDecision }>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/assets/${encodeURIComponent(assetId)}/evaluate`,
+    );
+  }
   submitPilotFeedback(
     tenantId: string,
     payload: {

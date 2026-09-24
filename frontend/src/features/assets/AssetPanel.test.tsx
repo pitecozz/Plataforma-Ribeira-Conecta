@@ -50,4 +50,20 @@ describe("AssetPanel", () => {
     expect(screen.getByText("UNKNOWN")).toBeInTheDocument();
     expect(screen.getByText("evidence-1")).toBeInTheDocument();
   });
+
+  it("keeps asset rule evaluation hidden without the two required read permissions", () => {
+    render(<AssetPanel assets={[asset]} selectedAssetId="asset-1" onSelect={vi.fn()} api={{} as never} tenantId="tenant" onEvaluated={vi.fn()} />);
+    expect(screen.queryByText("Avaliar regras para este ativo")).not.toBeInTheDocument();
+  });
+
+  it("evaluates an evidenced asset only after an explicit user action and refreshes decisions", async () => {
+    const evaluateAsset = vi.fn().mockResolvedValue({ decision: { id: "decision-1" } });
+    const onEvaluated = vi.fn().mockResolvedValue(undefined);
+    render(<AssetPanel assets={[asset]} selectedAssetId="asset-1" onSelect={vi.fn()} api={{ evaluateAsset } as never} tenantId="tenant" canEvaluateAssets onEvaluated={onEvaluated} />);
+    fireEvent.click(screen.getByText("Avaliar regras para este ativo"));
+    fireEvent.click(screen.getByRole("button", { name: "Avaliar evidências e regras" }));
+    expect(evaluateAsset).toHaveBeenCalledWith("tenant", "asset-1");
+    await screen.findByText(/Avaliação registrada no histórico/i);
+    expect(onEvaluated).toHaveBeenCalledTimes(1);
+  });
 });
