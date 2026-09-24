@@ -4,7 +4,13 @@ import type { Farm360Api } from "../api/client";
 import type { PortfolioProperty } from "../types/farm360";
 import { PropertyWorkspace } from "./PropertyWorkspace";
 
-vi.mock("../features/map/MapCanvas", () => ({ MapCanvas: () => <div data-testid="portfolio-map" /> }));
+vi.mock("../features/map/MapCanvas", () => ({
+  MapCanvas: ({ onMapClick }: { onMapClick?: (point: [number, number]) => void }) => (
+    <div data-testid="portfolio-map">
+      {onMapClick && <button type="button" onClick={() => onMapClick([-47.2, -24.1])}>Adicionar vértice de teste</button>}
+    </div>
+  ),
+}));
 vi.mock("./Farm360Page", () => ({ Farm360Page: ({ propertyId }: { propertyId: string }) => <div>Farm 360: {propertyId}</div> }));
 
 afterEach(cleanup);
@@ -67,4 +73,38 @@ describe("PropertyWorkspace portfolio flow", () => {
     expect(screen.getByText("Nenhuma propriedade corresponde ao nome informado.")).toBeInTheDocument();
   });
 
+
+  it("keeps a drawn boundary local until confirmation and lets the operator correct a vertex", async () => {
+    const created = property("created", "Sítio desenhado");
+    const api = {
+      portfolio: vi.fn().mockResolvedValue({ items: [] }),
+      createProperty: vi.fn().mockResolvedValue(created),
+    } as unknown as Farm360Api;
+    render(<PropertyWorkspace api={api} apiBaseUrl="http://api" tenantId="tenant" token="test" canManageProperties />);
+
+    await screen.findByText("Nenhuma propriedade disponível.");
+    fireEvent.click(screen.getByText("Nova propriedade"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nome" }), { target: { value: "Sítio desenhado" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar vértice de teste" }));
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar vértice de teste" }));
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar vértice de teste" }));
+    expect(api.createProperty).not.toHaveBeenCalled();
+    expect(screen.getByText("3 vértice(s) no rascunho.", { exact: false })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Longitude do vértice 1" }), { target: { value: "181" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar propriedade" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("três vértices válidos");
+    expect(api.createProperty).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Longitude do vértice 1" }), { target: { value: "-47.2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar propriedade" }));
+    await waitFor(() => expect(api.createProperty).toHaveBeenCalledWith("tenant", expect.objectContaining({
+      name: "Sítio desenhado",
+      geometry_geojson: {
+        type: "Polygon",
+        coordinates: [[[-47.2, -24.1], [-47.2, -24.1], [-47.2, -24.1], [-47.2, -24.1]]],
+      },
+      boundary_source: "CUSTOMER_DRAWN_IN_RIBEIRA_MAPS",
+    })));
+  });
 });

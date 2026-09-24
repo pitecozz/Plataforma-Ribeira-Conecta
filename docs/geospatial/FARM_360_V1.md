@@ -34,6 +34,16 @@ The persisted `boundary_source` and `MANUAL_CONFIRMED` classification are shown
 alongside the property. Legacy properties legitimately retain `UNKNOWN` for a
 missing boundary origin.
 
+An operator with `property:write` can create a property entirely in Ribeira
+Maps: map clicks form a local WGS84 polygon draft, whose individual vertices can
+be reviewed, corrected or removed before confirmation. The browser refuses a
+drawn draft with fewer than three vertices or coordinates outside WGS84, but it
+does not repair topology, calculate a legal area or replace server validation.
+No click or coordinate edit is persisted until the explicit create request;
+afterwards the API remains responsible for strict polygon validation, checksum,
+audit and automatic monitored-context registration. KML/KMZ/GeoJSON import
+remains optional and is never a prerequisite for this workflow.
+
 Optional boundary import accepts GeoJSON, KML and KMZ, but no import changes the
 canonical property boundary until a separately authorized human review records a
 reason and current-boundary checksum. The original bytes, SHA-256, filename,

@@ -19,3 +19,40 @@
   border-radius: 5px;
   height: 180px;
 }
+
+.property-form .map-frame {
+  height: 300px;
+}
+
+.property-draft-coordinates {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-left: 24px;
+}
+
+.property-draft-coordinates li {
+  align-items: end;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: 1fr 1fr auto;
+}
+
+.property-draft-coordinates label {
+  margin: 0;
+}
+
+.property-form .property-draft-remove,
+.property-form .property-draft-actions button {
+  background: #f8fbf8;
+  border-color: #b9c9bc;
+  color: #14532d;
+}
+
+.property-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
