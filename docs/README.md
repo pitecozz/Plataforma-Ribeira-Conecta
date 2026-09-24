@@ -15,7 +15,7 @@ input into a fact. `UNKNOWN` and `INCONCLUSIVE` are useful outcomes.
 | I am… | Start here |
 |---|---|
 | a developer | [architecture](architecture/ARCHITECTURE.md), [domain model](domain/DOMAIN_MODEL.md), [local development](operations/LOCAL_DEVELOPMENT.md), [delivery plan](CODEX_AUTONOMOUS_DELIVERY.md) |
-| an operator or support analyst | [runbook](operations/RUNBOOK.md), [data quality](data/DATA_QUALITY.md), [provenance](provenance/PROVENANCE.md), [provider catalogue](integrations/README.md) |
+| an operator or support analyst | [runbook](operations/RUNBOOK.md), [automatic property refresh](geospatial/AUTOMATIC_PROPERTY_REFRESH.md), [data quality](data/DATA_QUALITY.md), [provenance](provenance/PROVENANCE.md), [provider catalogue](integrations/README.md) |
 | a producer or customer | [module catalogue](product/MODULE_CATALOG.md), [service catalogue](product/SERVICE_CATALOG.md), [learning path](training/LEARNING_PATH.md) |
 | a consultant or agronomic partner | [Soil Intelligence](agro/SOIL_INTELLIGENCE.md), [agricultural suitability](agro/AGRICULTURAL_SUITABILITY.md), [smart sampling](agro/SMART_SOIL_SAMPLING.md), [Evidence First training](training/LEARNING_PATH.md#evidence-first) |
 | commercial | [service packaging](commercial/SERVICE_PACKAGING.md), [pricing model](commercial/PRICING_MODEL.md), [customer journey](commercial/SERVICE_PACKAGING.md#customer-journey-and-onboarding) |
