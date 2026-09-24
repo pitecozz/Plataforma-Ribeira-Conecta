@@ -153,6 +153,7 @@ export function MapCanvas({
   const assetClickAttached = useRef(false);
   const [markerLayoutVersion, setMarkerLayoutVersion] = useState(0);
   const [measurementMode, setMeasurementMode] = useState<"none" | "distance" | "area" | "coordinates">("none");
+  const measurementModeRef = useRef(measurementMode);
   const [measurementPoints, setMeasurementPoints] = useState<Coordinate[]>([]);
   const [locationQuery, setLocationQuery] = useState("");
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
@@ -161,6 +162,7 @@ export function MapCanvas({
     onAssetSelectedRef.current = onAssetSelected;
   }, [onAssetSelected]);
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
+  useEffect(() => { measurementModeRef.current = measurementMode; }, [measurementMode]);
 
   useEffect(() => {
     if (!element.current || map.current) return;
@@ -181,7 +183,7 @@ export function MapCanvas({
       element.current?.setAttribute("data-map-style-loaded", "true");
     });
     active.on("moveend", () => setMarkerLayoutVersion((value) => value + 1));
-    active.on("click", (event) => { const point: Coordinate = [event.lngLat.lng, event.lngLat.lat]; onMapClickRef.current?.(point); if (measurementMode !== "none") setMeasurementPoints(points => [...points, point]); });
+    active.on("click", (event) => { const point: Coordinate = [event.lngLat.lng, event.lngLat.lat]; onMapClickRef.current?.(point); if (measurementModeRef.current !== "none") setMeasurementPoints(points => [...points, point]); });
     map.current = active;
 
     return () => {
@@ -192,7 +194,7 @@ export function MapCanvas({
       locationMarker.current = null;
       map.current = null;
     };
-  }, [apiBaseUrl, token, measurementMode]);
+  }, [apiBaseUrl, token]);
 
   useEffect(() => {
     const active = map.current;
