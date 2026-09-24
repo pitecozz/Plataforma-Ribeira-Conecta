@@ -26,6 +26,7 @@ input into a fact. `UNKNOWN` and `INCONCLUSIVE` are useful outcomes.
 - [Feature catalogue](product/FEATURE_CATALOG.md): lifecycle, evidence, security,
   delivery and commercial status of capabilities.
 - [Module catalogue](product/MODULE_CATALOG.md): module purpose and boundaries.
+- [Scoped rule inheritance](rules/SCOPED_RULE_INHERITANCE.md): current scope precedence and gated customer/field expansion contract.
 - [Service catalogue](product/SERVICE_CATALOG.md): sellable-service hypotheses
   and automation/expert boundaries.
 - [Business rule catalogue](rules/BUSINESS_RULE_CATALOG.md): auditable rule

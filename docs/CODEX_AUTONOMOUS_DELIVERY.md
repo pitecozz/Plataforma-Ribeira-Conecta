@@ -161,6 +161,7 @@ not hard-code a one-off municipal conclusion.
 ### 2. Scoped rule-to-outcome extension
 
 - **Status:** the first property-evaluation-to-human-result slice is implemented:
+  The customer/field inheritance follow-on now has an explicit acceptance contract in [Scoped rule inheritance](rules/SCOPED_RULE_INHERITANCE.md): it must preserve temporal customer-property links, resolve equally-specific rule conflicts explicitly and prove RLS before any API/UI exposure.
   an action created from a property decision can be completed once with an
   explicit Evidence First classification, supporting evidence references,
   timestamp, responsible actor and audit event. The original decision and its
