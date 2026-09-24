@@ -4,6 +4,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Farm360Api } from "../../api/client";
 import { AssetRegistrationPanel } from "./AssetRegistrationPanel";
 
+vi.mock("../map/MapCanvas", () => ({
+  MapCanvas: ({ onMapClick }: { onMapClick?: (point: [number, number]) => void }) => (
+    <button
+      type="button"
+      onClick={() => onMapClick?.([-47.1234567, -24.7654321])}
+    >
+      Selecionar localização no mapa
+    </button>
+  ),
+}));
+
 const createdAsset = {
   id: "asset-1", tenant_id: "tenant", asset_type: "RAIN_GAUGE", name: "Gauge A",
   serial_number: null, status: "ACTIVE", property_id: "property", site_id: null,
@@ -42,5 +53,17 @@ describe("AssetRegistrationPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Registrar ativo" }));
     expect(registerAsset).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("DADO_INSUFICIENTE");
+  });
+
+  it("copies an operator-selected map point into the still-unsubmitted factual form", () => {
+    const registerAsset = vi.fn();
+    render(<AssetRegistrationPanel api={{ registerAsset } as unknown as Farm360Api} tenantId="tenant" propertyId="property" propertyGeometry={{ type: "Polygon", coordinates: [[[-47.2, -24.8], [-47, -24.8], [-47, -24.6], [-47.2, -24.8]]] }} apiBaseUrl="/api" token="session-token" onCreated={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Selecionar localização no mapa" }));
+
+    expect(screen.getByLabelText("Longitude do ativo")).toHaveValue(-47.123457);
+    expect(screen.getByLabelText("Latitude do ativo")).toHaveValue(-24.765432);
+    expect(registerAsset).not.toHaveBeenCalled();
+    expect(screen.getByText(/marcador é provisório/i)).toBeInTheDocument();
   });
 });

@@ -24,6 +24,7 @@ interface Props {
   deltaEnabled: boolean;
   token: string;
   onMapClick?: (coordinates: [number, number]) => void;
+  selectionLocation?: [number, number] | null;
 }
 
 const sourceId = "property-aoi";
@@ -138,12 +139,14 @@ export function MapCanvas({
   deltaEnabled,
   token,
   onMapClick,
+  selectionLocation = null,
 }: Props) {
   const basemapStatus = runtimeBasemapStatus();
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<maplibregl.Marker[]>([]);
   const locationMarker = useRef<maplibregl.Marker | null>(null);
+  const selectionMarker = useRef<maplibregl.Marker | null>(null);
   const onAssetSelectedRef = useRef(onAssetSelected);
   const onMapClickRef = useRef(onMapClick);
   const fitPropertyRef = useRef<(() => void) | null>(null);
@@ -189,9 +192,31 @@ export function MapCanvas({
       active.remove();
       locationMarker.current?.remove();
       locationMarker.current = null;
+      selectionMarker.current?.remove();
+      selectionMarker.current = null;
       map.current = null;
     };
   }, [apiBaseUrl, token]);
+
+  useEffect(() => {
+    const active = map.current;
+    if (!active) return;
+    selectionMarker.current?.remove();
+    selectionMarker.current = null;
+    if (!selectionLocation) return;
+    const markerElement = document.createElement("span");
+    markerElement.className = "map-location-marker map-selection-marker";
+    markerElement.setAttribute(
+      "aria-label",
+      "Localização selecionada para cadastro",
+    );
+    selectionMarker.current = new maplibregl.Marker({
+      element: markerElement,
+      anchor: "center",
+    })
+      .setLngLat(selectionLocation)
+      .addTo(active);
+  }, [selectionLocation]);
 
   useEffect(() => {
     const active = map.current;

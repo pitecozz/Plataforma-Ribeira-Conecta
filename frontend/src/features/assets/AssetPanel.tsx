@@ -1,4 +1,5 @@
 import { Fragment, useState } from "react";
+import type { Geometry } from "geojson";
 import type { DigitalTwinAsset } from "../../types/farm360";
 import { Status } from "../../components/Status";
 import { customerAssetTypeLabel, customerDateLabel, customerSourceLabel } from "../../presentation";
@@ -48,6 +49,9 @@ export function AssetPanel({
   api,
   tenantId,
   propertyId,
+  propertyGeometry = null,
+  apiBaseUrl,
+  token,
   canManageAssets = false,
   onCreated,
   canEvaluateAssets = false,
@@ -60,6 +64,9 @@ export function AssetPanel({
   api?: Farm360Api;
   tenantId?: string;
   propertyId?: string;
+  propertyGeometry?: Geometry | null;
+  apiBaseUrl?: string;
+  token?: string;
   canManageAssets?: boolean;
   onCreated?: (asset: DigitalTwinAsset) => void;
   canEvaluateAssets?: boolean;
@@ -134,7 +141,7 @@ export function AssetPanel({
           {canEvaluateAssets && api && tenantId && onEvaluated && <AssetRuleEvaluation api={api} tenantId={tenantId} asset={selected} onEvaluated={onEvaluated} />}
         </div>
       )}
-      {canManageAssets && api && tenantId && propertyId && onCreated && <AssetRegistrationPanel api={api} tenantId={tenantId} propertyId={propertyId} onCreated={onCreated} />}
+      {canManageAssets && api && tenantId && propertyId && onCreated && <AssetRegistrationPanel api={api} tenantId={tenantId} propertyId={propertyId} propertyGeometry={propertyGeometry} apiBaseUrl={apiBaseUrl} token={token} onCreated={onCreated} />}
     </section>
   );
 }

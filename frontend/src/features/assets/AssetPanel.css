@@ -42,6 +42,9 @@
 .asset-registration label { color: #4b5d51; display: grid; font-size: 12px; gap: 3px; }
 .asset-registration fieldset { border: 1px solid #d9e2da; display: grid; gap: 8px; }
 .asset-registration-note { color: #66756c; font-size: 12px; }
+.asset-location-picker-note { color: #4b5d51; font-size: 12px; margin: 4px 0; }
+.asset-location-picker { border: 1px solid #d9e2da; border-radius: 5px; height: 280px; overflow: hidden; }
+.asset-location-picker .map-frame { height: 100%; }
 
 .asset-rule-evaluation {
   border-top: 1px solid #d9e2da;

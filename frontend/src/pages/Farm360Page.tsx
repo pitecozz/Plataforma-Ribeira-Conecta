@@ -343,6 +343,9 @@ export function Farm360Page({
             api={api}
             tenantId={tenantId}
             propertyId={propertyId}
+            propertyGeometry={property.geometry_geojson}
+            apiBaseUrl={apiBaseUrl}
+            token={token}
             canManageAssets={canManageAssets}
             canEvaluateAssets={canEvaluateAssets}
             onEvaluated={refreshDecisions}
