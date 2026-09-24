@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Farm360Api } from "./client";
-import type { PropertyCreate } from "../types/farm360";
+import type { FieldContextCreate, PropertyCreate } from "../types/farm360";
 
 describe("Farm360Api", () => {
   it("uses the tenant-scoped contract and bearer session", async () => {
@@ -46,6 +46,20 @@ describe("Farm360Api", () => {
     vi.stubGlobal("fetch", fetchMock);
     await new Farm360Api("https://api.example", "session-token").assets("tenant / id", "property / id");
     expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/properties/property%20%2F%20id/assets", { headers: { Authorization: "Bearer session-token" } });
+  });
+
+  it("loads and registers fields only through the encoded tenant property endpoint", async () => {
+    const payload: FieldContextCreate = { name: "Field A", status: "ACTIVE", geometry_geojson: { type: "Polygon", coordinates: [] }, geometry_crs: "EPSG:4326", source_reference: "synthetic_test_data field walk", observed_at: "2026-09-24T10:00:00Z", classification: "MANUAL_CONFIRMED" };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ property_id: "property", items: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "field" }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new Farm360Api("https://api.example", "session-token");
+    await api.fields("tenant / id", "property / id");
+    await api.registerField("tenant / id", "property / id", payload);
+    const path = "https://api.example/v1/tenants/tenant%20%2F%20id/properties/property%20%2F%20id/fields";
+    expect(fetchMock).toHaveBeenNthCalledWith(1, path, { headers: { Authorization: "Bearer session-token" } });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, path, { method: "POST", headers: { Authorization: "Bearer session-token", "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   });
 
   it("evaluates an asset only through the encoded authenticated tenant endpoint", async () => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Farm360Api } from "../api/client";
 import type {
   DigitalTwinAsset,
+  FieldContext,
   NdviProduct,
   PropertyRecord,
   PropertyDecision,
@@ -13,6 +14,7 @@ import type {
 import { MapCanvas } from "../features/map/MapCanvas";
 import { LayerManager } from "../features/map/LayerManager";
 import { AssetPanel } from "../features/assets/AssetPanel";
+import { FieldPanel } from "../features/fields/FieldPanel";
 import { IntelligenceReportPanel } from "../features/report/IntelligenceReportPanel";
 import { PilotFeedbackPanel } from "../features/feedback/PilotFeedbackPanel";
 import { RiskDecisionPanel } from "../features/decisions/RiskDecisionPanel";
@@ -36,6 +38,7 @@ interface Props {
   propertyId: string;
   token: string;
   canManageBoundary?: boolean;
+  canManageProperties?: boolean;
   canRunSatelliteOperations?: boolean;
   canManageAssets?: boolean;
   canCompleteActions?: boolean;
@@ -44,6 +47,7 @@ interface Props {
 type LoadState = "loading" | "ready" | "empty" | "error";
 type PartialLoadIssues = {
   assets: boolean;
+  fields: boolean;
   context: boolean;
   decisions: boolean;
   provenance: boolean;
@@ -51,6 +55,7 @@ type PartialLoadIssues = {
 
 const noPartialLoadIssues: PartialLoadIssues = {
   assets: false,
+  fields: false,
   context: false,
   decisions: false,
   provenance: false,
@@ -72,6 +77,7 @@ export function Farm360Page({
   propertyId,
   token,
   canManageBoundary = false,
+  canManageProperties = false,
   canRunSatelliteOperations = false,
   canManageAssets = false,
   canCompleteActions = false,
@@ -81,6 +87,7 @@ export function Farm360Page({
   const [property, setProperty] = useState<PropertyRecord | null>(null);
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [assets, setAssets] = useState<DigitalTwinAsset[]>([]);
+  const [fields, setFields] = useState<FieldContext[]>([]);
   const [decisions, setDecisions] = useState<PropertyDecision[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
@@ -115,16 +122,18 @@ export function Farm360Page({
       const propertyResult = await api.property(tenantId, propertyId);
       setProperty(propertyResult);
       setState("ready");
-      const [scenesResult, timelineResult, assetsResult, decisionsResult] =
+      const [scenesResult, timelineResult, assetsResult, fieldsResult, decisionsResult] =
         await Promise.allSettled([
           api.scenes(tenantId, propertyId),
           api.timeline(tenantId, propertyId),
           api.assets(tenantId, propertyId),
+          api.fields(tenantId, propertyId),
           api.decisions(tenantId, propertyId),
         ]);
       const scenesItems = scenesResult.status === "fulfilled" ? scenesResult.value.items : [];
       const timelineItems = timelineResult.status === "fulfilled" ? timelineResult.value.items : [];
       const assetItems = assetsResult.status === "fulfilled" ? assetsResult.value.items : [];
+      const fieldItems = fieldsResult.status === "fulfilled" ? fieldsResult.value.items : [];
       const decisionItems = decisionsResult.status === "fulfilled" ? decisionsResult.value.items : [];
       const selected = newestSucceeded(timelineItems);
       const provenanceResult = selected
@@ -132,6 +141,7 @@ export function Farm360Page({
         : null;
       setScenes(scenesItems);
       setAssets(assetItems);
+      setFields(fieldItems);
       setDecisions(decisionItems);
       setSelectedAssetId((current) =>
         current && assetItems.some((asset) => asset.id === current)
@@ -150,6 +160,7 @@ export function Farm360Page({
       setProvenance(provenanceResult);
       setPartialLoadIssues({
         assets: assetsResult.status === "rejected",
+        fields: fieldsResult.status === "rejected",
         context: scenesResult.status === "rejected" || timelineResult.status === "rejected",
         decisions: decisionsResult.status === "rejected",
         provenance: Boolean(selected) && provenanceResult === null,
@@ -272,6 +283,7 @@ export function Farm360Page({
         <MapCanvas
           aoi={property.geometry_geojson}
           assets={assets}
+          fields={fields}
           selectedAssetId={selectedAssetId}
           onAssetSelected={setSelectedAssetId}
           apiBaseUrl={apiBaseUrl}
@@ -311,7 +323,7 @@ export function Farm360Page({
           <p className="eyebrow">Farm360</p>
           <h1>{property.name}</h1>
           <p className="property-summary-facts">
-            {area ? `${area} ha` : "Área ainda não disponível"} · {assets.length} ativo(s) confirmado(s)
+            {area ? `${area} ha` : "Área ainda não disponível"} · {assets.length} ativo(s) confirmado(s) · {fields.length} talhão(ões)
           </p>
           <dl>
             <dt>Limite</dt><dd>{property.geometry_geojson ? "Disponível e visível no mapa" : "Ainda não disponível"}</dd>
@@ -355,6 +367,15 @@ export function Farm360Page({
             }}
           />
         </div>
+        <FieldPanel
+          fields={fields}
+          loadError={partialLoadIssues.fields}
+          api={api}
+          tenantId={tenantId}
+          propertyId={propertyId}
+          canManageFields={canManageProperties}
+          onCreated={(field) => setFields((current) => [...current, field].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")))}
+        />
         {canRunSatelliteOperations && <SceneOperationsPanel
           api={api}
           tenantId={tenantId}

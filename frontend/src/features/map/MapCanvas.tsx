@@ -9,11 +9,12 @@ import { runtimeBasemapStatus } from "./basemapStatus";
 import { transformMapRequest } from "./tileAuth";
 import { areaSquareMetres, distanceMetres, type Coordinate } from "./measurements";
 import { parseCoordinates } from "./locationSearch";
-import type { DigitalTwinAsset } from "../../types/farm360";
+import type { DigitalTwinAsset, FieldContext } from "../../types/farm360";
 
 interface Props {
   aoi: Geometry | null;
   assets?: DigitalTwinAsset[];
+  fields?: FieldContext[];
   selectedAssetId?: string | null;
   onAssetSelected?: (assetId: string) => void;
   recenterRequest?: number;
@@ -29,6 +30,7 @@ interface Props {
 
 const sourceId = "property-aoi";
 const assetSourceId = "property-assets";
+const fieldSourceId = "property-fields";
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 const defaultBasemapStyle: maplibregl.StyleSpecification = {
   version: 8,
@@ -129,6 +131,7 @@ function overlapPopup(
 export function MapCanvas({
   aoi,
   assets = [],
+  fields = [],
   selectedAssetId,
   onAssetSelected,
   recenterRequest = 0,
@@ -270,6 +273,56 @@ export function MapCanvas({
       active.off("style.load", update);
     };
   }, [aoi]);
+
+  useEffect(() => {
+    const active = map.current;
+    if (!active) return;
+    const update = () => {
+      for (const layerId of ["field-areas", "field-lines"]) {
+        if (active.getLayer(layerId)) active.removeLayer(layerId);
+      }
+      if (active.getSource(fieldSourceId)) active.removeSource(fieldSourceId);
+      active.addSource(fieldSourceId, {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: fields.map((field) => ({
+            type: "Feature",
+            properties: { id: field.id, name: field.name, status: field.status },
+            geometry: field.geometry_geojson,
+          })),
+        },
+      });
+      const before = active.getLayer("property-outline-halo")
+        ? "property-outline-halo"
+        : undefined;
+      active.addLayer(
+        {
+          id: "field-areas",
+          type: "fill",
+          source: fieldSourceId,
+          filter: ["==", "$type", "Polygon"],
+          paint: { "fill-color": "#2563eb", "fill-opacity": 0.18 },
+        },
+        before,
+      );
+      active.addLayer(
+        {
+          id: "field-lines",
+          type: "line",
+          source: fieldSourceId,
+          filter: ["==", "$type", "Polygon"],
+          paint: { "line-color": "#1d4ed8", "line-width": 2.5 },
+        },
+        before,
+      );
+    };
+    if (active.isStyleLoaded()) update();
+    active.on("style.load", update);
+    return () => {
+      active.off("style.load", update);
+    };
+  }, [fields]);
 
   useEffect(() => {
     const active = map.current;

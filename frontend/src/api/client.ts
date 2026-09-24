@@ -4,6 +4,8 @@ import type {
   BoundaryImportPreview,
   AssetCreate,
   DigitalTwinAsset,
+  FieldContext,
+  FieldContextCreate,
   NdviProduct,
   PilotFeedback,
   PilotFeedbackType,
@@ -126,6 +128,21 @@ export class Farm360Api {
   assets(tenantId: string, propertyId: string) {
     return this.get<{ property_id: string; items: DigitalTwinAsset[] }>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/assets`,
+    );
+  }
+  fields(tenantId: string, propertyId: string) {
+    return this.get<{ property_id: string; items: FieldContext[] }>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/fields`,
+    );
+  }
+  registerField(
+    tenantId: string,
+    propertyId: string,
+    payload: FieldContextCreate,
+  ) {
+    return this.post<FieldContext>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/fields`,
+      payload,
     );
   }
   registerAsset(tenantId: string, payload: AssetCreate) {

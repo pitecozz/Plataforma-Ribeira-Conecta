@@ -176,6 +176,8 @@ soil observation, management zone, agronomic recommendation or rule result.
 A later field-boundary update and field/zone/crop rule applicability need their
 own explicit versioned workflow; registering a field does not activate a rule.
 
+Farm360 now loads this tenant-scoped inventory as an independent blue map layer and lists each persisted geometry with its source, observation time, classification, boundary-version checksum and opaque evidence identifier. A `property:write` user may submit a technical WGS84 Polygon or MultiPolygon from the same workspace; the browser does not clip, repair or infer geometry, and the server remains responsible for containment, provenance, RLS and audit. A missing or unavailable inventory is shown as `DADO_INSUFICIENTE` or a bounded load failure, never as an empty agronomic conclusion. There is no field-boundary editor, crop claim or field-scoped rule activation in this increment.
+
 ## Read endpoints
 
 - `GET /v1/tenants/{tenant_id}/properties`

@@ -54,6 +54,7 @@ function apiFor(overrides: Partial<Farm360Api> = {}) {
     scenes: vi.fn().mockResolvedValue({ items: [] }),
     timeline: vi.fn().mockResolvedValue({ items: [] }),
     assets: vi.fn().mockResolvedValue({ items: [asset] }),
+    fields: vi.fn().mockResolvedValue({ items: [] }),
     decisions: vi.fn().mockResolvedValue({ items: [] }),
     tileTemplate: vi.fn(),
     ...overrides,

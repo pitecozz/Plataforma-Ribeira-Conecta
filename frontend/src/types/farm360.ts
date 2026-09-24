@@ -53,6 +53,37 @@ export interface AssetCreate {
   classification: "MANUAL_CONFIRMED";
 }
 
+/**
+ * Source-backed operational field/talhão context. This is deliberately not a
+ * legal boundary, crop declaration, soil observation, or agronomic result.
+ */
+export interface FieldContext {
+  id: string;
+  tenant_id: string;
+  property_id: string;
+  name: string;
+  status: string;
+  geometry_geojson: Geometry;
+  geometry_crs: string;
+  boundary_version: number;
+  boundary_checksum: string;
+  source_reference: string;
+  observed_at: string;
+  classification: string;
+  created_at: string;
+  evidence_id?: string | null;
+}
+
+export interface FieldContextCreate {
+  name: string;
+  status: string;
+  geometry_geojson: Geometry;
+  geometry_crs: "EPSG:4326";
+  source_reference: string;
+  observed_at: string;
+  classification: "MANUAL_CONFIRMED";
+}
+
 export interface ActionOutcomeCreate {
   outcome_detail: string;
   outcome_classification: string;
