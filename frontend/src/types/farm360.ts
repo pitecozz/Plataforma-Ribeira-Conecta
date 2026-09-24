@@ -206,7 +206,7 @@ export interface BoundaryImport {
   tenant_id: string;
   property_id: string;
   original_filename: string;
-  original_format: "GEOJSON";
+  original_format: "GEOJSON" | "KML" | "KMZ";
   file_size_bytes: number;
   file_sha256: string;
   original_crs: string | null;

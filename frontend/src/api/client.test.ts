@@ -46,4 +46,12 @@ describe("Farm360Api", () => {
     await new Farm360Api("https://api.example", "session-token").uploadBoundaryImport("tenant", "property", file, "synthetic source", "MANUAL_CONFIRMED", "EPSG:4326");
     expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant/properties/property/boundary-imports", expect.objectContaining({ method: "POST", body: file, headers: expect.objectContaining({ "X-Boundary-Filename": "boundary.geojson", "X-Boundary-CRS": "EPSG:4326" }) }));
   });
+
+  it("labels a KMZ upload with its declared format while retaining the tenant contract", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "import" }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const file = new File(["synthetic_test_kmz"], "boundary.kmz", { type: "application/octet-stream" });
+    await new Farm360Api("https://api.example", "session-token").uploadBoundaryImport("tenant", "property", file, "synthetic source", "MANUAL_CONFIRMED", "EPSG:4326");
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant/properties/property/boundary-imports", expect.objectContaining({ headers: expect.objectContaining({ "Content-Type": "application/vnd.google-earth.kmz", "X-Boundary-Filename": "boundary.kmz" }) }));
+  });
 });

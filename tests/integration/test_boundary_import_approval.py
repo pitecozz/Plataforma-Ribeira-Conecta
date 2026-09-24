@@ -305,16 +305,30 @@ class BoundaryImportApprovalPostgresTests(unittest.TestCase):
                 self.store.get_property(tenant.id, property_item.id).boundary_checksum,
                 property_item.boundary_checksum,
             )
+        kml = b"""<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><Polygon><outerBoundaryIs><LinearRing><coordinates>-47,-24 -46.99,-24 -46.99,-24.01 -47,-24.01 -47,-24</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark></kml>"""
+        kml_import = self.application.create_boundary_import(
+            tenant.id,
+            property_item.id,
+            original_filename="synthetic_test_data.kml",
+            payload=kml,
+            declared_crs="EPSG:4326",
+            boundary_source="synthetic KML evidence",
+            classification=DataClassification.UNKNOWN,
+            actor="importer-d",
+        )
+        self.assertEqual(kml_import.status, "NEEDS_REVIEW")
+        self.assertEqual(kml_import.original_format, "KML")
+        self.assertEqual(kml_import.detected_crs, "EPSG:4326")
         with self.assertRaises(ValueError):
             self.application.create_boundary_import(
                 tenant.id,
                 property_item.id,
-                original_filename="synthetic_test_data.kml",
+                original_filename="synthetic_test_data.txt",
                 payload=self.payload(),
                 declared_crs="EPSG:4326",
                 boundary_source="synthetic unsupported format",
                 classification=DataClassification.UNKNOWN,
-                actor="importer-d",
+                actor="importer-e",
             )
 
     def test_tenant_scoped_api_never_returns_object_storage_paths(self) -> None:

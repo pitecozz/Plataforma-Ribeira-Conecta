@@ -220,11 +220,12 @@ export class Farm360Api {
     classification: string,
     crs: string,
   ) {
+    const contentType = file.name.toLowerCase().endsWith(".kmz") ? "application/vnd.google-earth.kmz" : file.name.toLowerCase().endsWith(".kml") ? "application/vnd.google-earth.kml+xml" : "application/geo+json";
     return this.rawPost<BoundaryImport>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/boundary-imports`,
       file,
       {
-        "Content-Type": "application/geo+json",
+        "Content-Type": contentType,
         "X-Boundary-Filename": file.name,
         "X-Boundary-Source": source,
         "X-Boundary-Classification": classification,

@@ -34,6 +34,17 @@ The persisted `boundary_source` and `MANUAL_CONFIRMED` classification are shown
 alongside the property. Legacy properties legitimately retain `UNKNOWN` for a
 missing boundary origin.
 
+Optional boundary import accepts GeoJSON, KML and KMZ, but no import changes the
+canonical property boundary until a separately authorized human review records a
+reason and current-boundary checksum. The original bytes, SHA-256, filename,
+format, declared/detected CRS, parsed-geometry checksum, warnings and audit event
+are retained. KML/KMZ are bounded to one unencrypted KML Polygon and KML's WGS84
+coordinates; a conflicting caller CRS, unsafe XML declaration, ambiguous polygon,
+invalid geometry or oversized compressed expansion is retained as failed evidence,
+never repaired or re-labelled. KML altitude is discarded because the boundary is
+2D only. These uploaded/drawn geometries are operational AOIs, not legal title or
+survey evidence.
+
 ## Operations workspace
 
 The workspace lists tenant-scoped properties, keeps the map as the main view,
@@ -116,6 +127,7 @@ drainage, soil, coverage or agronomic conclusion.
 Write operations use the same tenant authorization and RLS context:
 
 - `POST /v1/tenants/{tenant_id}/properties`
+- `POST /v1/tenants/{tenant_id}/properties/{property_id}/boundary-imports`
 - `POST /v1/tenants/{tenant_id}/properties/{property_id}/satellite-searches`
 - `POST /v1/tenants/{tenant_id}/properties/{property_id}/ndvi-jobs`
 - `POST /v1/tenants/{tenant_id}/processing-jobs/{job_id}/run`

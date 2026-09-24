@@ -27,7 +27,8 @@ from .models import (
 )
 from .boundary_imports import (
     MAX_BOUNDARY_IMPORT_BYTES,
-    parse_geojson_import,
+    boundary_import_format,
+    parse_boundary_import,
     validate_import_filename,
 )
 from .sources import HttpJsonSourceAdapter, SourceAdapter
@@ -229,7 +230,7 @@ class RibeiraApplication:
         actor: str,
         platform_admin: bool = False,
     ) -> BoundaryImport:
-        """Persist original GeoJSON evidence without changing the property.
+        """Persist original boundary evidence without changing the property.
 
         The API has already streamed the body through its size limiter.  The
         second guard makes this service safe for non-HTTP callers as well.
@@ -237,6 +238,7 @@ class RibeiraApplication:
         if len(payload) > MAX_BOUNDARY_IMPORT_BYTES:
             raise ValueError("boundary import exceeds the configured size limit")
         filename = validate_import_filename(original_filename)
+        original_format = boundary_import_format(filename)
         if not boundary_source.strip():
             raise ValueError("boundary_source is required")
         with self.store.tenant_transaction(tenant_id, platform_admin):
@@ -244,14 +246,18 @@ class RibeiraApplication:
             if property_item is None:
                 raise LookupError("property not found in tenant")
 
-        parsed = parse_geojson_import(payload, declared_crs)
+        parsed = parse_boundary_import(payload, declared_crs, original_format)
         import_id = new_id()
         # The client filename never becomes a filesystem path.  The opaque key
         # is deliberately segregated from COGs, products and backup archives.
         object_reference, stored_checksum = self.object_storage.put_bytes(
-            f"boundary-imports/{tenant_id}/{import_id}/original.geojson",
+            f"boundary-imports/{tenant_id}/{import_id}/original.{original_format.lower()}",
             payload,
-            "application/geo+json",
+            {
+                "GEOJSON": "application/geo+json",
+                "KML": "application/vnd.google-earth.kml+xml",
+                "KMZ": "application/vnd.google-earth.kmz",
+            }[original_format],
         )
         if stored_checksum != parsed.file_sha256:
             raise RuntimeError("stored boundary import checksum does not match input")
@@ -263,7 +269,7 @@ class RibeiraApplication:
             tenant_id,
             property_id,
             filename,
-            "GEOJSON",
+            original_format,
             len(payload),
             parsed.file_sha256,
             object_reference,
@@ -306,6 +312,7 @@ class RibeiraApplication:
                     "status": item.status,
                     "file_sha256": item.file_sha256,
                     "geometry_checksum": item.geometry_checksum,
+                    "original_format": item.original_format,
                     "classification": classification.value,
                 },
                 new_id(),

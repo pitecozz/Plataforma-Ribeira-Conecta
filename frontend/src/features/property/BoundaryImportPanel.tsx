@@ -115,16 +115,16 @@ export function BoundaryImportPanel({
     <section className="boundary-import">
       <h2>Importar limite</h2>
       <p>
-        Somente GeoJSON. O upload preserva o arquivo como evidência e nunca
-        altera o limite até aprovação humana.
+        GeoJSON, KML ou KMZ. O upload preserva o arquivo como evidência e nunca
+        altera o limite até aprovação humana. KML/KMZ aceitam somente um polígono WGS84 e não transformam nem corrigem a geometria.
       </p>
       <form noValidate onSubmit={upload}>
         <label>
-          Arquivo GeoJSON
+          Arquivo GeoJSON, KML ou KMZ
           <input
-            aria-label="Arquivo GeoJSON"
+            aria-label="Arquivo GeoJSON, KML ou KMZ"
             type="file"
-            accept=".geojson,.json,application/geo+json,application/json"
+            accept=".geojson,.json,.kml,.kmz,application/geo+json,application/json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             required
           />

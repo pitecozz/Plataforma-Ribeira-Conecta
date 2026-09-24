@@ -33,7 +33,7 @@ describe("BoundaryImportPanel", () => {
     const changed = vi.fn().mockResolvedValue(undefined);
     render(<BoundaryImportPanel api={api} tenantId="tenant" property={property} onBoundaryChanged={changed} />);
     const file = new File(["{\"type\":\"Polygon\"}"], "synthetic_test_data.geojson", { type: "application/geo+json" });
-    fireEvent.change(screen.getByLabelText("Arquivo GeoJSON"), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText("Arquivo GeoJSON, KML ou KMZ"), { target: { files: [file] } });
     fireEvent.change(screen.getByLabelText("Origem do import"), { target: { value: "synthetic test source" } });
     fireEvent.click(screen.getByRole("button", { name: "Enviar para revisão" }));
     expect(await screen.findByText("Preview de evidência")).toBeInTheDocument();
@@ -49,7 +49,7 @@ describe("BoundaryImportPanel", () => {
     const api = { boundaryImports: vi.fn().mockResolvedValue({ items: [] }), uploadBoundaryImport: vi.fn() } as unknown as Farm360Api;
     render(<BoundaryImportPanel api={api} tenantId="tenant" property={property} onBoundaryChanged={vi.fn()} />);
     const file = new File([new Uint8Array(1_000_001)], "synthetic_test_data.geojson");
-    fireEvent.change(screen.getByLabelText("Arquivo GeoJSON"), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText("Arquivo GeoJSON, KML ou KMZ"), { target: { files: [file] } });
     fireEvent.change(screen.getByLabelText("Origem do import"), { target: { value: "synthetic" } });
     fireEvent.click(screen.getByRole("button", { name: "Enviar para revisão" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("BOUNDARY_IMPORT_TOO_LARGE");
