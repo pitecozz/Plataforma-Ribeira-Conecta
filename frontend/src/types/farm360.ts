@@ -37,6 +37,20 @@ export interface DigitalTwinAsset {
   observed_at: string | null;
   context: Record<string, unknown>;
 }
+
+export interface AssetCreate {
+  asset_type: string;
+  name: string;
+  serial_number?: string | null;
+  status: string;
+  property_id: string;
+  geometry?: Geometry | null;
+  geometry_crs?: "EPSG:4326" | null;
+  source_reference: string;
+  observed_at: string;
+  context: Record<string, unknown>;
+  classification: "MANUAL_CONFIRMED";
+}
 export type PilotFeedbackType =
   | "BUG"
   | "CONFUSING"

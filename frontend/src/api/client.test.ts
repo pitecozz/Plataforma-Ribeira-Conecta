@@ -32,6 +32,15 @@ describe("Farm360Api", () => {
     expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/access", { headers: { Authorization: "Bearer session-token" } });
   });
 
+
+  it("registers a Digital Twin asset only through the authenticated tenant endpoint", async () => {
+    const payload = { asset_type: "RAIN_GAUGE", name: "Gauge A", status: "ACTIVE", property_id: "property", source_reference: "field survey", observed_at: "2026-09-24T10:00:00Z", context: {}, classification: "MANUAL_CONFIRMED" as const };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "asset" }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await new Farm360Api("https://api.example", "session-token").registerAsset("tenant / id", payload);
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/assets", { method: "POST", headers: { Authorization: "Bearer session-token", "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  });
+
   it("loads Digital Twin assets through the tenant-scoped property endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ property_id: "property", items: [] }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);

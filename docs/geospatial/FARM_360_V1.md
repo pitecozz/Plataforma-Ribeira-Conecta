@@ -76,6 +76,17 @@ classification and context. An empty inventory remains
 `DADO_INSUFICIENTE`; visualizing an asset never asserts unrecorded equipment,
 calibration, connectivity or condition.
 
+A user holding the tenant-scoped `asset:manage` permission can register a
+manually confirmed asset directly in Farm360. The form requires name, technical
+type, reported operational status, confirmation source and observation time; an
+optional point is accepted only when both WGS84 longitude and latitude are
+valid. Missing location remains missing rather than being derived from the
+property, map centre or another asset. The browser sends the property ID only
+through the authenticated tenant endpoint; the service independently verifies
+that property, applies RLS and records the existing `ASSET_REGISTERED` audit
+event. The registration does not assert ownership, calibration, connectivity,
+service availability or condition beyond the submitted factual fields.
+
 At the current zoom, very close real asset locations may be represented by one
 temporary overlap marker. Selecting it opens the names of every corresponding
 persisted asset; selecting an asset from the list recentres and highlights its

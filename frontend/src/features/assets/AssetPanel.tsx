@@ -2,6 +2,8 @@ import { Fragment } from "react";
 import type { DigitalTwinAsset } from "../../types/farm360";
 import { Status } from "../../components/Status";
 import { customerAssetTypeLabel, customerDateLabel, customerSourceLabel } from "../../presentation";
+import type { Farm360Api } from "../../api/client";
+import { AssetRegistrationPanel } from "./AssetRegistrationPanel";
 import "./AssetPanel.css";
 
 function contextEntries(
@@ -18,11 +20,21 @@ export function AssetPanel({
   selectedAssetId,
   onSelect,
   loadError = false,
+  api,
+  tenantId,
+  propertyId,
+  canManageAssets = false,
+  onCreated,
 }: {
   assets: DigitalTwinAsset[];
   selectedAssetId: string | null;
   onSelect: (assetId: string) => void;
   loadError?: boolean;
+  api?: Farm360Api;
+  tenantId?: string;
+  propertyId?: string;
+  canManageAssets?: boolean;
+  onCreated?: (asset: DigitalTwinAsset) => void;
 }) {
   const selected = assets.find((asset) => asset.id === selectedAssetId) ?? null;
   return (
@@ -92,6 +104,7 @@ export function AssetPanel({
           </details>
         </div>
       )}
+      {canManageAssets && api && tenantId && propertyId && onCreated && <AssetRegistrationPanel api={api} tenantId={tenantId} propertyId={propertyId} onCreated={onCreated} />}
     </section>
   );
 }

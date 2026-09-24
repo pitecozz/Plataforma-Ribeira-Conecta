@@ -36,6 +36,7 @@ export function PilotShell({
   }, [api, tenantId]);
   const canManageProperties = permissions.has("property:write");
   const canManageBoundary = permissions.has("tenant:manage");
+  const canManageAssets = permissions.has("asset:manage");
   const canRunSatelliteOperations = permissions.has("geospatial:search") && permissions.has("geospatial:process");
   const openFarm360 = (propertyId: string) => {
     setSelectedPropertyId(propertyId);
@@ -52,7 +53,7 @@ export function PilotShell({
         </nav>
       </header>
       {view === "HOME" && <HomePage api={api} tenantId={tenantId} onOpenFarm360={openFarm360} />}
-      {view === "FARM360" && <PropertyWorkspace key={selectedPropertyId ?? "portfolio"} api={api} apiBaseUrl={apiBaseUrl} tenantId={tenantId} initialPropertyId={selectedPropertyId} token={token} canManageProperties={canManageProperties} canManageBoundary={canManageBoundary} canRunSatelliteOperations={canRunSatelliteOperations} />}
+      {view === "FARM360" && <PropertyWorkspace key={selectedPropertyId ?? "portfolio"} api={api} apiBaseUrl={apiBaseUrl} tenantId={tenantId} initialPropertyId={selectedPropertyId} token={token} canManageProperties={canManageProperties} canManageBoundary={canManageBoundary} canRunSatelliteOperations={canRunSatelliteOperations} canManageAssets={canManageAssets} />}
       {view === "HELP" && <main className="state"><h1>Ajuda do piloto</h1><p>Use a Visão geral para abrir uma propriedade e o Farm360 para consultar limite, ativos e evidências disponíveis.</p><p>Quando uma análise ainda não está disponível, a tela explica o que falta. Nenhuma conclusão é criada por suposição.</p><p>Envie feedback pela propriedade no Farm360. Telemetria, adequação agrícola e automações ainda não estão disponíveis neste beta.</p></main>}
     </div>
   );

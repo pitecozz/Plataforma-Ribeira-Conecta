@@ -1,6 +1,7 @@
 import type {
   BoundaryImport,
   BoundaryImportPreview,
+  AssetCreate,
   DigitalTwinAsset,
   NdviProduct,
   PilotFeedback,
@@ -124,6 +125,12 @@ export class Farm360Api {
   assets(tenantId: string, propertyId: string) {
     return this.get<{ property_id: string; items: DigitalTwinAsset[] }>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/assets`,
+    );
+  }
+  registerAsset(tenantId: string, payload: AssetCreate) {
+    return this.post<DigitalTwinAsset>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/assets`,
+      payload,
     );
   }
   submitPilotFeedback(
