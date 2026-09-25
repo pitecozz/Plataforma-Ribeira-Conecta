@@ -1091,7 +1091,7 @@ class GeospatialApplication:
             or all(
                 alignment.get(key) == value
                 for key, value in {
-                    "status": "REPROJECTED_TO_BASELINE",
+                    "status": "ALIGNED_TO_BASELINE_GRID",
                     "target_grid": "baseline",
                     "resampling": "bilinear",
                 }.items()

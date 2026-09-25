@@ -52,7 +52,8 @@ pixels are NaN nodata, never NDVI zero. The scientific COG remains float.
 The delta product chooses the baseline quality-masked NDVI grid deterministically.
 If CRS, transform, dimensions and resolution match, it reads both directly. If
 they differ, target is reprojected explicitly to that baseline grid using
-bilinear resampling and the operation is recorded. A delta pixel exists only
+bilinear resampling and the operation is recorded as
+`ALIGNED_TO_BASELINE_GRID`. A delta pixel exists only
 where both masked NDVIs are finite:
 
 ```text

@@ -158,7 +158,47 @@ class QualityMaskedDeltaTests(unittest.TestCase):
         self.assertEqual(delta.alignment["status"], "IDENTICAL_GRID")
         validate_cog(
             self.storage.read_local_path(delta.output_reference),
-            expected_value_range=(-2, 2),
+            expected_value_range=(-2.0, 2.0),
+        )
+
+    def test_delta_reprojects_target_to_baseline_grid_with_recorded_alignment(
+        self,
+    ) -> None:
+        valid = np.full((4, 4), 4, dtype="uint8")
+        baseline = NdviProcessor(self.storage).process(
+            self._assets("reproject-baseline", 3.0, valid),
+            self.aoi,
+            "derived/reproject-baseline.tif",
+        )
+        target = NdviProcessor(self.storage).process(
+            self._assets(
+                "reproject-target",
+                5.0,
+                valid,
+                transform=from_origin(0.125, 1.125, 0.25, 0.25),
+            ),
+            self.aoi,
+            "derived/reproject-target.tif",
+        )
+
+        delta = TemporalDeltaProcessor(self.storage).process(
+            baseline.output_reference,
+            target.output_reference,
+            "derived/reproject-delta.tif",
+        )
+
+        self.assertEqual(
+            delta.alignment,
+            {
+                "status": "ALIGNED_TO_BASELINE_GRID",
+                "target_grid": "baseline",
+                "resampling": "bilinear",
+            },
+        )
+        self.assertGreater(delta.statistics.valid_count, 0)
+        validate_cog(
+            self.storage.read_local_path(delta.output_reference),
+            expected_value_range=(-2.0, 2.0),
         )
 
 

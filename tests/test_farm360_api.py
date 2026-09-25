@@ -618,6 +618,38 @@ class Farm360ApiTests(unittest.TestCase):
                 "quality_mask_policies": [quality_mask, quality_mask],
             },
         )
+        reprojected_delta = replace(
+            delta,
+            parameters={
+                **delta.parameters,
+                "alignment": {
+                    "status": "ALIGNED_TO_BASELINE_GRID",
+                    "target_grid": "baseline",
+                    "resampling": "bilinear",
+                },
+            },
+        )
+        self.assertTrue(
+            self.application.geospatial._has_valid_temporal_delta_provenance(
+                reprojected_delta, baseline, target
+            )
+        )
+        legacy_alignment_delta = replace(
+            delta,
+            parameters={
+                **delta.parameters,
+                "alignment": {
+                    "status": "REPROJECTED_TO_BASELINE",
+                    "target_grid": "baseline",
+                    "resampling": "bilinear",
+                },
+            },
+        )
+        self.assertFalse(
+            self.application.geospatial._has_valid_temporal_delta_provenance(
+                legacy_alignment_delta, baseline, target
+            )
+        )
         repository.create_job(baseline_job)
         repository.create_derived_product(baseline)
         repository.mark_job(
