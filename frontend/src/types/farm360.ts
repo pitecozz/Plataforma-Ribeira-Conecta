@@ -124,6 +124,11 @@ export interface PropertyDecision {
   id: string;
   property_id: string;
   subject_asset_id?: string | null;
+  subject_field_id?: string | null;
+  subject_field_boundary_version?: number | null;
+  subject_field_boundary_checksum?: string | null;
+  selected_rule_scope_type?: string | null;
+  subject_customer_id?: string | null;
   conclusion: string;
   classification: string;
   status: string;

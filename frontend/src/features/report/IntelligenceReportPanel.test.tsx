@@ -14,4 +14,26 @@ describe("IntelligenceReportPanel", () => {
     expect(screen.getByText(/ausência de registro não confirma ausência de risco/i)).toBeInTheDocument();
     expect(screen.getByText("Detalhes técnicos, proveniência e auditoria")).toBeInTheDocument();
   });
+
+  it("includes field-scoped decision context without turning registration into diagnosis", () => {
+    render(<IntelligenceReportPanel property={property} assets={[]} scenes={[]} provenance={null} fields={[{
+      id: "field-1", tenant_id: "tenant", property_id: "property", name: "Talhão Norte",
+      status: "ACTIVE", geometry_geojson: { type: "Polygon", coordinates: [] }, geometry_crs: "EPSG:4326",
+      boundary_version: 3, boundary_checksum: "current-checksum", source_reference: "survey.geojson",
+      observed_at: "2026-09-24T00:00:00Z", classification: "MANUAL_CONFIRMED", created_at: "2026-09-24T00:00:00Z",
+    }]} decisions={[{
+      id: "decision-1", property_id: "property", subject_field_id: "field-1",
+      subject_field_boundary_version: 2, subject_field_boundary_checksum: "evaluated-checksum",
+      selected_rule_scope_type: "FIELD", conclusion: "Inspect the field.", classification: "INFERRED",
+      status: "ACTIONABLE", evidence_ids: ["evidence-1"], rule_id: "rule-1", rule_version: 4,
+      limitations: [], missing_data: [], conflicts: [], recommended_action: null,
+      created_at: "2026-09-24T00:00:00Z", action: null,
+    }]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir relatório" }));
+    expect(screen.getByText(/escopo: talhão · talhão norte/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Contexto técnico do talhão"));
+    expect(screen.getByText("evaluated-checksum")).toBeInTheDocument();
+    expect(screen.getByText(/não comprova cultivo, solo, doença ou diagnóstico agronômico/i)).toBeInTheDocument();
+  });
 });

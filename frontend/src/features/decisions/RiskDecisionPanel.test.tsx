@@ -10,6 +10,39 @@ describe("RiskDecisionPanel", () => {
     expect(screen.getByText(/ausência de registro não confirma ausência de risco/i)).toBeInTheDocument();
   });
 
+  it("shows the immutable field applicability snapshot and its evidence limitation", () => {
+    render(<RiskDecisionPanel fields={[{
+      id: "field-1", tenant_id: "tenant-1", property_id: "property-1", name: "Talhão Norte",
+      status: "ACTIVE", geometry_geojson: { type: "Polygon", coordinates: [] }, geometry_crs: "EPSG:4326",
+      boundary_version: 3, boundary_checksum: "current-checksum", source_reference: "survey.geojson",
+      observed_at: "2026-09-24T00:00:00Z", classification: "MANUAL_CONFIRMED", created_at: "2026-09-24T00:00:00Z",
+    }]} decisions={[{
+      id: "decision-field", property_id: "property-1", subject_field_id: "field-1",
+      subject_field_boundary_version: 2, subject_field_boundary_checksum: "evaluated-checksum",
+      selected_rule_scope_type: "FIELD", conclusion: "Inspect the field.", classification: "INFERRED",
+      status: "ACTIONABLE", evidence_ids: ["evidence-1"], rule_id: "rule-1", rule_version: 4,
+      limitations: [], missing_data: [], conflicts: [], recommended_action: null,
+      created_at: "2026-09-24T00:00:00Z", action: null,
+    }]} />);
+
+    expect(screen.getByText("Escopo aplicado: Talhão · Talhão Norte")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Detalhes técnicos e evidências"));
+    expect(screen.getByText("evaluated-checksum")).toBeInTheDocument();
+    expect(screen.getByText(/não comprova cultivo, solo, doença ou diagnóstico agronômico/i)).toBeInTheDocument();
+  });
+
+  it("states when a referenced field is unavailable from the current inventory", () => {
+    render(<RiskDecisionPanel decisions={[{
+      id: "decision-field", property_id: "property-1", subject_field_id: "removed-field",
+      selected_rule_scope_type: "FIELD", conclusion: "Historical decision.", classification: "INFERRED",
+      status: "ACTIONABLE", evidence_ids: [], rule_id: "rule-1", rule_version: 1,
+      limitations: [], missing_data: [], conflicts: [], recommended_action: null,
+      created_at: "2026-09-24T00:00:00Z", action: null,
+    }]} />);
+
+    expect(screen.getByText(/talhão referenciado não disponível no inventário atual/i)).toBeInTheDocument();
+  });
+
   it("does not expose outcome capture without action:write", () => {
     render(<RiskDecisionPanel decisions={[{
       id: "decision-1", property_id: "property-1", conclusion: "Inspect the pump.",

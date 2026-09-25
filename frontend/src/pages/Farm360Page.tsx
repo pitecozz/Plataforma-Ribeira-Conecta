@@ -367,10 +367,9 @@ export function Farm360Page({
         </section>
         <LayerManager basemap={basemap} ndviAvailable={Boolean(product && product.processing_status === "SUCCEEDED")} ndviEnabled={ndviEnabled} onNdviEnabled={setNdviEnabled} deltaAvailable={Boolean(comparison?.comparison.delta_product_id)} deltaEnabled={deltaEnabled} onDeltaEnabled={setDeltaEnabled} />
         <DataAvailabilityPanel property={property} assets={assets} fields={fields} scenes={scenes} timeline={timeline} fieldsUnavailable={partialLoadIssues.fields} />
-        <IntelligenceReportPanel property={property} assets={assets} scenes={scenes} provenance={provenance} decisions={decisions} open={reportOpen} onOpenChange={setReportOpen} />
+        <IntelligenceReportPanel property={property} assets={assets} fields={fields} scenes={scenes} provenance={provenance} decisions={decisions} open={reportOpen} onOpenChange={setReportOpen} />
         <PilotFeedbackPanel api={api} tenantId={tenantId} propertyId={propertyId} />
-        {partialLoadIssues.decisions && <section><h2>Riscos e decisões</h2><p>Não foi possível atualizar decisões agora. Isso não confirma ausência de risco ou oportunidade.</p></section>}
-        {!partialLoadIssues.decisions && <RiskDecisionPanel decisions={decisions} api={api} tenantId={tenantId} canCompleteActions={canCompleteActions} onActionCompleted={refreshDecisions} />}
+        {!partialLoadIssues.decisions && <RiskDecisionPanel decisions={decisions} fields={fields} api={api} tenantId={tenantId} canCompleteActions={canCompleteActions} onActionCompleted={refreshDecisions} />}
         <div ref={assetPanelAnchor}>
           <AssetPanel
             assets={assets}
