@@ -103,6 +103,7 @@ export function Farm360Page({
   const [ndviEnabled, setNdviEnabled] = useState(false);
   const [deltaEnabled, setDeltaEnabled] = useState(false);
   const [mode, setMode] = useState<"view" | "compare">("view");
+  const [comparisonFieldId, setComparisonFieldId] = useState<string | null>(null);
   const [baselineProductId, setBaselineProductId] = useState<string | null>(
     null,
   );
@@ -233,7 +234,13 @@ export function Farm360Page({
     }
     setComparisonLoading(true);
     void api
-      .comparison(tenantId, propertyId, baselineProductId, targetProductId)
+      .comparison(
+        tenantId,
+        propertyId,
+        baselineProductId,
+        targetProductId,
+        comparisonFieldId ?? undefined,
+      )
       .then((result) => {
         if (active) setComparison(result);
       })
@@ -246,7 +253,15 @@ export function Farm360Page({
     return () => {
       active = false;
     };
-  }, [api, baselineProductId, mode, propertyId, targetProductId, tenantId]);
+  }, [
+    api,
+    baselineProductId,
+    comparisonFieldId,
+    mode,
+    propertyId,
+    targetProductId,
+    tenantId,
+  ]);
 
   if (state === "loading")
     return <main className="state">Carregando Farm 360…</main>;
@@ -404,8 +419,10 @@ export function Farm360Page({
           tenantId={tenantId}
           propertyId={propertyId}
           items={timeline}
+          fields={fields}
           selectedProductId={selectedProductId}
           mode={mode}
+          comparisonFieldId={comparisonFieldId}
           baselineProductId={baselineProductId}
           targetProductId={targetProductId}
           comparison={comparison}
@@ -416,6 +433,7 @@ export function Farm360Page({
           onDecisionChanged={refreshDecisions}
           onSelectProduct={(id) => { setSelectedProductId(id); setProvenanceProductId(id); }}
           onModeChange={setMode}
+          onComparisonFieldChange={setComparisonFieldId}
           onBaselineChange={setBaselineProductId}
           onTargetChange={setTargetProductId}
         />

@@ -10,6 +10,32 @@ describe("Farm360Api", () => {
     expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/properties/property%20%2F%20id/derived-products", { headers: { Authorization: "Bearer session-token" } });
   });
 
+  it("scopes temporal comparison and delta creation to an encoded field", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: "READY" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "job" }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new Farm360Api("https://api.example", "session-token");
+
+    await api.comparison("tenant", "property", "baseline", "target", "field / id");
+    await api.createTemporalDeltaJob("tenant", "property", "baseline", "target", "field / id");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example/v1/tenants/tenant/properties/property/temporal-comparison?baseline_product_id=baseline&target_product_id=target&field_id=field%20%2F%20id",
+      { headers: { Authorization: "Bearer session-token" } },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.example/v1/tenants/tenant/properties/property/temporal-delta-jobs",
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer session-token", "Content-Type": "application/json" },
+        body: JSON.stringify({ baseline_product_id: "baseline", target_product_id: "target", field_id: "field / id" }),
+      },
+    );
+  });
+
   it("creates a property through the authenticated tenant-scoped contract", async () => {
     const payload: PropertyCreate = { name: "AOI", geometry_geojson: { type: "Polygon", coordinates: [] }, geometry_crs: "EPSG:4326", boundary_source: "MANUAL_CONFIRMED", classification: "MANUAL_CONFIRMED" };
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "property-id" }), { status: 201 }));

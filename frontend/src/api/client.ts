@@ -211,9 +211,13 @@ export class Farm360Api {
     propertyId: string,
     baselineProductId: string,
     targetProductId: string,
+    fieldId?: string,
   ) {
+    const fieldQuery = fieldId
+      ? `&field_id=${encodeURIComponent(fieldId)}`
+      : "";
     return this.get<TemporalComparison>(
-      `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/temporal-comparison?baseline_product_id=${encodeURIComponent(baselineProductId)}&target_product_id=${encodeURIComponent(targetProductId)}`,
+      `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/temporal-comparison?baseline_product_id=${encodeURIComponent(baselineProductId)}&target_product_id=${encodeURIComponent(targetProductId)}${fieldQuery}`,
     );
   }
   evaluateTemporalDelta(
@@ -262,12 +266,14 @@ export class Farm360Api {
     propertyId: string,
     baselineProductId: string,
     targetProductId: string,
+    fieldId?: string,
   ) {
     return this.post<ProcessingJob>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/temporal-delta-jobs`,
       {
         baseline_product_id: baselineProductId,
         target_product_id: targetProductId,
+        ...(fieldId ? { field_id: fieldId } : {}),
       },
     );
   }

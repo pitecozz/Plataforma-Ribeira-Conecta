@@ -213,6 +213,7 @@ export interface TemporalDeltaEvaluation {
 }
 export interface TemporalComparison {
   property_id: string;
+  field_id: string | null;
   status: "READY" | "DADO_INSUFICIENTE" | "INCONCLUSIVE";
   baseline: NdviProduct;
   target: NdviProduct;

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Farm360Api } from "../../api/client";
 import type {
+  FieldContext,
   ProcessingJob,
   TemporalComparison,
   TimelineItem,
@@ -11,8 +12,10 @@ interface Props {
   tenantId: string;
   propertyId: string;
   items: TimelineItem[];
+  fields: FieldContext[];
   selectedProductId: string | null;
   mode: "view" | "compare";
+  comparisonFieldId: string | null;
   baselineProductId: string | null;
   targetProductId: string | null;
   comparison: TemporalComparison | null;
@@ -23,6 +26,7 @@ interface Props {
   onDecisionChanged?: () => Promise<void>;
   onSelectProduct: (productId: string) => void;
   onModeChange: (mode: "view" | "compare") => void;
+  onComparisonFieldChange: (fieldId: string | null) => void;
   onBaselineChange: (productId: string) => void;
   onTargetChange: (productId: string) => void;
 }
@@ -41,8 +45,10 @@ function terminal(job: ProcessingJob) {
 export function TemporalPanel(props: Props) {
   const {
     items,
+    fields,
     selectedProductId,
     mode,
+    comparisonFieldId,
     baselineProductId,
     targetProductId,
     comparison,
@@ -105,6 +111,7 @@ export function TemporalPanel(props: Props) {
           props.propertyId,
           baselineMaskedId,
           targetMaskedId,
+          comparisonFieldId ?? undefined,
         ),
       );
       await props.onChanged();
@@ -194,6 +201,28 @@ export function TemporalPanel(props: Props) {
       </div>
       {mode === "compare" && (
         <div className="comparison-controls">
+          <label>
+            Escopo da comparação
+            <select
+              aria-label="Escopo da comparação"
+              value={comparisonFieldId ?? ""}
+              onChange={(event) =>
+                props.onComparisonFieldChange(event.target.value || null)
+              }
+            >
+              <option value="">Propriedade inteira</option>
+              {fields.map((field) => (
+                <option key={field.id} value={field.id}>
+                  Talhão: {field.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted">
+            {comparisonFieldId
+              ? "O delta será recortado pelo limite versionado do talhão selecionado."
+              : "O delta usará o limite da propriedade inteira."}
+          </p>
           <label>
             Base
             <select
