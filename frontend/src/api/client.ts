@@ -18,6 +18,7 @@ import type {
   Scene,
   SearchResult,
   TemporalComparison,
+  TemporalDeltaEvaluation,
   TimelineItem,
 } from "../types/farm360";
 
@@ -213,6 +214,15 @@ export class Farm360Api {
   ) {
     return this.get<TemporalComparison>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/temporal-comparison?baseline_product_id=${encodeURIComponent(baselineProductId)}&target_product_id=${encodeURIComponent(targetProductId)}`,
+    );
+  }
+  evaluateTemporalDelta(
+    tenantId: string,
+    propertyId: string,
+    productId: string,
+  ) {
+    return this.post<TemporalDeltaEvaluation>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/temporal-deltas/${encodeURIComponent(productId)}/evaluate`,
     );
   }
   provenance(tenantId: string, productId: string) {

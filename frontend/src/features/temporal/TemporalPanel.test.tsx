@@ -72,6 +72,33 @@ describe("TemporalPanel", () => {
     expect(screen.getByText("No pixel-aligned delta raster")).toBeInTheDocument();
   });
 
+  it("evaluates a persisted pixel-aligned delta and refreshes decisions", async () => {
+    const onDecisionChanged = vi.fn().mockResolvedValue(undefined);
+    const evaluateTemporalDelta = vi.fn().mockResolvedValue({
+      decision: { id: "decision", status: "ACTIONABLE", conclusion: "inspection", evidence_ids: ["evidence"], rule_id: "rule", rule_version: 1 },
+      alert: { id: "alert", severity: "MEDIUM", status: "OPEN" },
+      action: { id: "action", action_type: "targeted field inspection recommendation", status: "OPEN" },
+    });
+    const comparison = {
+      property_id: "property", status: "READY" as const, baseline: items[0].derived_product, target: items[1].derived_product,
+      comparison: { delta_mean: "0.05", comparable_valid_pixels: 10, comparable_coverage_percentage: "80", classification: "PIXEL_ALIGNED_DELTA" as const, delta_product_id: "delta-product", delta_minimum: "-0.1", delta_maximum: "0.2", delta_median: "0.04", quality_mask_policy: [], alignment_summary: {}, limitations: [] },
+    };
+    render(<TemporalPanel {...common} api={{ evaluateTemporalDelta } as unknown as Farm360Api} mode="compare" comparison={comparison} canEvaluate onDecisionChanged={onDecisionChanged} />);
+    fireEvent.click(screen.getByRole("button", { name: "Avaliar delta com regras" }));
+    expect(await screen.findByText(/Regra acionada/)).toBeInTheDocument();
+    expect(evaluateTemporalDelta).toHaveBeenCalledWith("tenant", "property", "delta-product");
+    expect(onDecisionChanged).toHaveBeenCalled();
+  });
+
+  it("does not expose delta evaluation without authorization", () => {
+    const comparison = {
+      property_id: "property", status: "READY" as const, baseline: items[0].derived_product, target: items[1].derived_product,
+      comparison: { delta_mean: "0.05", comparable_valid_pixels: 10, comparable_coverage_percentage: "80", classification: "PIXEL_ALIGNED_DELTA" as const, delta_product_id: "delta-product", delta_minimum: null, delta_maximum: null, delta_median: null, quality_mask_policy: [], alignment_summary: {}, limitations: [] },
+    };
+    render(<TemporalPanel {...common} mode="compare" comparison={comparison} />);
+    expect(screen.queryByRole("button", { name: "Avaliar delta com regras" })).not.toBeInTheDocument();
+  });
+
   it("masks both NDVI inputs, creates the delta, polls jobs, and refreshes", async () => {
     vi.useFakeTimers();
     const maskA = queued("mask-a", "QUALITY_MASKED_NDVI");

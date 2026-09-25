@@ -18,7 +18,9 @@ interface Props {
   comparison: TemporalComparison | null;
   comparisonLoading: boolean;
   canProcess?: boolean;
+  canEvaluate?: boolean;
   onChanged: () => Promise<void>;
+  onDecisionChanged?: () => Promise<void>;
   onSelectProduct: (productId: string) => void;
   onModeChange: (mode: "view" | "compare") => void;
   onBaselineChange: (productId: string) => void;
@@ -46,6 +48,7 @@ export function TemporalPanel(props: Props) {
     comparison,
     comparisonLoading,
     canProcess = false,
+    canEvaluate = false,
   } = props;
   const [job, setJob] = useState<ProcessingJob | null>(null);
   const [busy, setBusy] = useState(false);
@@ -113,6 +116,32 @@ export function TemporalPanel(props: Props) {
       }
     } finally {
       if (active.current) setBusy(false);
+    }
+  };
+
+  const evaluateDelta = async () => {
+    const productId = comparison?.comparison.delta_product_id;
+    if (!productId) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await props.api.evaluateTemporalDelta(
+        props.tenantId,
+        props.propertyId,
+        productId,
+      );
+      if (result.decision.status === "ACTIONABLE") {
+        setMessage("Regra acionada. A decisão e a inspeção recomendada foram registradas.");
+      } else if (result.decision.status === "NO_TRIGGER") {
+        setMessage("Evidência avaliada. Nenhuma regra aplicável foi acionada.");
+      } else {
+        setMessage("Avaliação inconclusiva. Consulte os dados ausentes e limitações na decisão registrada.");
+      }
+      await props.onDecisionChanged?.();
+    } catch {
+      setMessage("Não foi possível avaliar o delta temporal.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -218,6 +247,15 @@ export function TemporalPanel(props: Props) {
                 {comparison.comparison.comparable_coverage_percentage ?? "UNKNOWN"}%
               </span>
               <span>{comparison.comparison.classification}</span>
+              {canEvaluate && comparison.comparison.delta_product_id && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void evaluateDelta()}
+                >
+                  {busy ? "Avaliando…" : "Avaliar delta com regras"}
+                </button>
+              )}
               {comparison.comparison.limitations.map((limitation) => (
                 <small key={limitation}>{limitation}</small>
               ))}

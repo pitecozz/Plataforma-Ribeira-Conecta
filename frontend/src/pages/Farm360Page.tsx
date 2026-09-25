@@ -43,6 +43,7 @@ interface Props {
   canManageAssets?: boolean;
   canCompleteActions?: boolean;
   canEvaluateAssets?: boolean;
+  canEvaluateTemporalDelta?: boolean;
 }
 type LoadState = "loading" | "ready" | "empty" | "error";
 type PartialLoadIssues = {
@@ -82,6 +83,7 @@ export function Farm360Page({
   canManageAssets = false,
   canCompleteActions = false,
   canEvaluateAssets = false,
+  canEvaluateTemporalDelta = false,
 }: Props) {
   const [state, setState] = useState<LoadState>("loading");
   const [property, setProperty] = useState<PropertyRecord | null>(null);
@@ -409,7 +411,9 @@ export function Farm360Page({
           comparison={comparison}
           comparisonLoading={comparisonLoading}
           canProcess={canRunSatelliteOperations}
+          canEvaluate={canEvaluateTemporalDelta}
           onChanged={refresh}
+          onDecisionChanged={refreshDecisions}
           onSelectProduct={(id) => { setSelectedProductId(id); setProvenanceProductId(id); }}
           onModeChange={setMode}
           onBaselineChange={setBaselineProductId}

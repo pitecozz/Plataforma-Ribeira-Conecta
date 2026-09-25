@@ -199,6 +199,18 @@ export interface TimelineItem {
   derived_product: NdviProduct;
   provenance_available: boolean;
 }
+export interface TemporalDeltaEvaluation {
+  decision: {
+    id: string;
+    status: string;
+    conclusion: string;
+    evidence_ids: string[];
+    rule_id: string | null;
+    rule_version: number | null;
+  };
+  alert: { id: string; severity: string; status: string } | null;
+  action: { id: string; action_type: string; status: string } | null;
+}
 export interface TemporalComparison {
   property_id: string;
   status: "READY" | "DADO_INSUFICIENTE" | "INCONCLUSIVE";

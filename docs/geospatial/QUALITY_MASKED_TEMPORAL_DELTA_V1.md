@@ -27,7 +27,9 @@ evaluation uses only the persisted mean as `ndvi_temporal_delta_mean`, preserves
 the derived-product evidence and exact selected rule version/scope, and creates
 an alert plus a non-automated targeted field-inspection recommendation only when
 the rule triggers. Invalid provenance or no applicable rule is `INCONCLUSIVE`;
-a valid non-trigger is `NO_TRIGGER`. The delta never constitutes a diagnosis.
+a valid non-trigger is `NO_TRIGGER`. Farm360 exposes this evaluation only to
+users with both `geospatial:read` and `decision:read`, then refreshes the
+persisted decision/action workflow. The delta never constitutes a diagnosis.
 Scene `eo:cloud_cover` remains scene metadata; it is not AOI valid coverage.
 
 ## Scientific processing
