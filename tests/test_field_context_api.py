@@ -108,9 +108,19 @@ class FieldContextApiTests(unittest.TestCase):
         correction_path = f"{path}/{created.json()['id']}/boundary-corrections"
         correction = {
             "geometry_geojson": mapping(
-                Polygon([(0.25, 0.25), (0.75, 0.25), (0.75, 0.75), (0.25, 0.75), (0.25, 0.25)])
+                Polygon(
+                    [
+                        (0.25, 0.25),
+                        (0.75, 0.25),
+                        (0.75, 0.75),
+                        (0.25, 0.75),
+                        (0.25, 0.25),
+                    ]
+                )
             ),
             "geometry_crs": "EPSG:4326",
+            "expected_boundary_version": created.json()["boundary_version"],
+            "expected_boundary_checksum": created.json()["boundary_checksum"],
             "source_reference": "synthetic corrected field walk",
             "observed_at": "2026-09-25T12:00:00+00:00",
             "classification": "MANUAL_CONFIRMED",
@@ -131,6 +141,20 @@ class FieldContextApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["boundary_version"], 2)
         self.assertIsNotNone(response.json()["evidence_id"])
+        stale = self.client.post(
+            correction_path,
+            headers={"Authorization": "Bearer admin"},
+            json={
+                **correction,
+                "geometry_geojson": mapping(
+                    Polygon(
+                        [(0.3, 0.3), (0.7, 0.3), (0.7, 0.7), (0.3, 0.7), (0.3, 0.3)]
+                    )
+                ),
+            },
+        )
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["error"]["code"], "FIELD_BOUNDARY_CONFLICT")
         listed = self.client.get(path, headers={"Authorization": "Bearer admin"})
         self.assertEqual(listed.json()["items"][0]["boundary_version"], 2)
 

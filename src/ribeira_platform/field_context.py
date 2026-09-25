@@ -13,6 +13,10 @@ from .models import Evidence, FieldContext, new_id, now_utc
 from .time_utils import parse_aware
 
 
+class FieldBoundaryConflict(ValueError):
+    pass
+
+
 SQLITE_FIELD_CONTEXT_SCHEMA = """
 CREATE TABLE IF NOT EXISTS field_context (
  id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, property_id TEXT NOT NULL,
@@ -119,6 +123,8 @@ class FieldContextRepository:
         self,
         current: FieldContext,
         *,
+        expected_boundary_version: int,
+        expected_boundary_checksum: str,
         geometry_geojson: dict[str, Any],
         geometry_crs: str,
         geometry_checksum: str,
@@ -151,10 +157,19 @@ class FieldContextRepository:
         ).fetchone()
         if row is None:
             raise LookupError("field context not found in tenant property")
-        if str(row["geometry_checksum"]) == geometry_checksum:
-            raise ValueError("field boundary geometry is unchanged")
+        current_version = int(row["version"])
+        current_checksum = str(row["geometry_checksum"])
+        if (
+            current_version != expected_boundary_version
+            or current_checksum != expected_boundary_checksum
+        ):
+            raise FieldBoundaryConflict(
+                "field boundary changed after it was loaded; refresh before correcting"
+            )
+        if current_checksum == geometry_checksum:
+            raise ValueError("field boundary correction geometry is unchanged")
+        next_version = current_version + 1
         version_id = new_id()
-        next_version = int(row["version"]) + 1
         geometry_column = "geometry" if self.postgres else "geometry_geojson"
         geometry_value = (
             f"ST_SetSRID(ST_GeomFromGeoJSON({p}::text),4326)" if self.postgres else p
@@ -440,6 +455,8 @@ class FieldContextApplication:
         *,
         property_id: str,
         field_id: str,
+        expected_boundary_version: int,
+        expected_boundary_checksum: str,
         geometry_geojson: dict[str, Any],
         geometry_crs: str,
         source_reference: str,
@@ -466,13 +483,17 @@ class FieldContextApplication:
             if current is None or current.property_id != property_id:
                 raise LookupError("field context not found in tenant property")
             if property_item.geometry_geojson is None:
-                raise ValueError("field correction requires a persisted property boundary")
+                raise ValueError(
+                    "field correction requires a persisted property boundary"
+                )
             if not shape(property_item.geometry_geojson).covers(shape(geometry)):
                 raise ValueError(
                     "field geometry must be fully contained by the property boundary"
                 )
             item = self.repository.append_boundary_version(
                 current,
+                expected_boundary_version=expected_boundary_version,
+                expected_boundary_checksum=expected_boundary_checksum,
                 geometry_geojson=geometry,
                 geometry_crs=geometry_crs.upper(),
                 geometry_checksum=checksum,

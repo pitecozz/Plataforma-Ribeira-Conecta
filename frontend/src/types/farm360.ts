@@ -85,6 +85,8 @@ export interface FieldContextCreate {
 }
 
 export interface FieldBoundaryCorrectionCreate {
+  expected_boundary_version: number;
+  expected_boundary_checksum: string;
   geometry_geojson: Geometry;
   geometry_crs: "EPSG:4326";
   source_reference: string;

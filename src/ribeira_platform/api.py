@@ -60,6 +60,7 @@ from .models import (
     now_utc,
     to_jsonable,
 )
+from .field_context import FieldBoundaryConflict
 from .object_storage import ObjectStorageError
 from .postgres import PostgresStore
 from .raster_tiles import InvalidTile, RasterUnavailable, render_ndvi_tile
@@ -146,6 +147,8 @@ class FieldContextRequest(BaseModel):
 
 class FieldBoundaryCorrectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    expected_boundary_version: int = Field(ge=1)
+    expected_boundary_checksum: str = Field(min_length=64, max_length=64)
     geometry_geojson: dict[str, Any]
     geometry_crs: str = Field(min_length=1, max_length=32)
     source_reference: str = Field(min_length=1, max_length=2000)
@@ -723,6 +726,13 @@ def create_app(
             content={"error": {"code": "INVALID_VALUE", "message": str(exc)}},
         )
 
+    @app.exception_handler(FieldBoundaryConflict)
+    async def field_boundary_conflict(_: Request, exc: FieldBoundaryConflict):
+        return JSONResponse(
+            status_code=409,
+            content={"error": {"code": "FIELD_BOUNDARY_CONFLICT", "message": str(exc)}},
+        )
+
     @app.exception_handler(BoundaryImportConflict)
     async def boundary_import_conflict(_: Request, exc: BoundaryImportConflict):
         return JSONResponse(
@@ -965,7 +975,9 @@ def create_app(
             if item.boundary_version > 1 and item.boundary_version_id
             else item.id
         )
-        evidence = application.store.evidence_for_reference(item.tenant_id, reference_id)
+        evidence = application.store.evidence_for_reference(
+            item.tenant_id, reference_id
+        )
         payload["evidence_id"] = evidence.id if evidence is not None else None
         return payload
 
@@ -1412,6 +1424,8 @@ def create_app(
             tenant_id,
             property_id=property_id,
             field_id=field_id,
+            expected_boundary_version=payload.expected_boundary_version,
+            expected_boundary_checksum=payload.expected_boundary_checksum,
             geometry_geojson=payload.geometry_geojson,
             geometry_crs=payload.geometry_crs,
             source_reference=payload.source_reference,

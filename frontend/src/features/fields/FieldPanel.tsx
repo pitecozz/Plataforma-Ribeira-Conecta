@@ -173,6 +173,8 @@ function FieldBoundaryCorrection({ field, api, tenantId, propertyId, propertyGeo
       const parsed = JSON.parse(geometry) as Geometry;
       if (!isFieldGeometry(parsed)) throw new Error("geometry");
       const corrected = await api.correctFieldBoundary(tenantId, propertyId, field.id, {
+        expected_boundary_version: field.boundary_version,
+        expected_boundary_checksum: field.boundary_checksum,
         geometry_geojson: parsed,
         geometry_crs: "EPSG:4326",
         source_reference: sourceReference.trim(),

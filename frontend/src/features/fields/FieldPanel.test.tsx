@@ -88,6 +88,8 @@ describe("FieldPanel", () => {
     fireEvent.click(within(correction).getByRole("button", { name: "Salvar nova versão" }));
 
     await vi.waitFor(() => expect(correctFieldBoundary).toHaveBeenCalledWith("tenant", "property", "field-1", expect.objectContaining({
+      expected_boundary_version: 1,
+      expected_boundary_checksum: "a".repeat(64),
       geometry_crs: "EPSG:4326",
       source_reference: "levantamento GNSS 2026-09-25",
       classification: "MANUAL_CONFIRMED",

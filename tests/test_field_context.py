@@ -64,7 +64,9 @@ class FieldContextTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(audit["event_type"], "FIELD_REGISTERED")
 
-    def test_corrects_boundary_as_immutable_successor_with_distinct_evidence(self) -> None:
+    def test_corrects_boundary_as_immutable_successor_with_distinct_evidence(
+        self,
+    ) -> None:
         field = self.application.fields.create(
             self.tenant.id,
             property_id=self.property.id,
@@ -78,12 +80,16 @@ class FieldContextTests(unittest.TestCase):
             actor="test-operator",
         )
         corrected_geometry = mapping(
-            Polygon([(0.25, 0.25), (0.75, 0.25), (0.75, 0.75), (0.25, 0.75), (0.25, 0.25)])
+            Polygon(
+                [(0.25, 0.25), (0.75, 0.25), (0.75, 0.75), (0.25, 0.75), (0.25, 0.25)]
+            )
         )
         corrected = self.application.fields.correct_boundary(
             self.tenant.id,
             property_id=self.property.id,
             field_id=field.id,
+            expected_boundary_version=field.boundary_version,
+            expected_boundary_checksum=field.boundary_checksum,
             geometry_geojson=corrected_geometry,
             geometry_crs="EPSG:4326",
             source_reference="synthetic corrected field walk",
@@ -94,7 +100,9 @@ class FieldContextTests(unittest.TestCase):
         )
 
         self.assertEqual(corrected.boundary_version, 2)
-        self.assertEqual(self.application.fields.get(self.tenant.id, field.id), corrected)
+        self.assertEqual(
+            self.application.fields.get(self.tenant.id, field.id), corrected
+        )
         self.assertEqual(
             self.application.fields.list_for_property(self.tenant.id, self.property.id),
             [corrected],
@@ -104,7 +112,9 @@ class FieldContextTests(unittest.TestCase):
             (field.id,),
         ).fetchall()
         self.assertEqual([row["version"] for row in versions], [1, 2])
-        self.assertEqual(versions[0]["source_reference"], "synthetic original field walk")
+        self.assertEqual(
+            versions[0]["source_reference"], "synthetic original field walk"
+        )
         registration = self.store.evidence_for_reference(self.tenant.id, field.id)
         correction = self.store.evidence_for_reference(
             self.tenant.id, corrected.boundary_version_id
@@ -114,11 +124,29 @@ class FieldContextTests(unittest.TestCase):
         self.assertEqual(registration.evidence_type, "FIELD_REGISTRATION")
         self.assertEqual(correction.evidence_type, "FIELD_BOUNDARY_CORRECTION")
 
+        with self.assertRaisesRegex(ValueError, "changed after it was loaded"):
+            self.application.fields.correct_boundary(
+                self.tenant.id,
+                property_id=self.property.id,
+                field_id=field.id,
+                expected_boundary_version=field.boundary_version,
+                expected_boundary_checksum=field.boundary_checksum,
+                geometry_geojson=self.field_geometry(),
+                geometry_crs="EPSG:4326",
+                source_reference="synthetic stale correction",
+                observed_at="2026-09-25T12:30:00+00:00",
+                classification=DataClassification.MANUAL_CONFIRMED,
+                reason="synthetic stale operator view",
+                actor="test-corrector",
+            )
+
         with self.assertRaisesRegex(ValueError, "unchanged"):
             self.application.fields.correct_boundary(
                 self.tenant.id,
                 property_id=self.property.id,
                 field_id=field.id,
+                expected_boundary_version=corrected.boundary_version,
+                expected_boundary_checksum=corrected.boundary_checksum,
                 geometry_geojson=corrected_geometry,
                 geometry_crs="EPSG:4326",
                 source_reference="synthetic duplicate correction",
@@ -171,6 +199,8 @@ class FieldContextTests(unittest.TestCase):
                 self.other_tenant.id,
                 property_id=self.property.id,
                 field_id=field.id,
+                expected_boundary_version=field.boundary_version,
+                expected_boundary_checksum=field.boundary_checksum,
                 geometry_geojson=self.field_geometry(),
                 geometry_crs="EPSG:4326",
                 source_reference="synthetic cross tenant",

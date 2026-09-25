@@ -98,6 +98,8 @@ class FieldContextPostgresTests(unittest.TestCase):
             tenant.id,
             property_id=property_item.id,
             field_id=field.id,
+            expected_boundary_version=field.boundary_version,
+            expected_boundary_checksum=field.boundary_checksum,
             geometry_geojson=self.polygon(-46.997, -24.007, -46.993, -24.003),
             geometry_crs="EPSG:4326",
             source_reference="synthetic corrected integration field walk",
@@ -116,7 +118,9 @@ class FieldContextPostgresTests(unittest.TestCase):
                     WHERE tenant_id=%s AND field_context_id=%s ORDER BY version""",
                 (tenant.id, field.id),
             ).fetchall()
-            registration_evidence = self.store.evidence_for_reference(tenant.id, field.id)
+            registration_evidence = self.store.evidence_for_reference(
+                tenant.id, field.id
+            )
             correction_evidence = self.store.evidence_for_reference(
                 tenant.id, corrected.boundary_version_id
             )
@@ -130,6 +134,8 @@ class FieldContextPostgresTests(unittest.TestCase):
                 tenant.id,
                 property_id=property_item.id,
                 field_id=field.id,
+                expected_boundary_version=corrected.boundary_version,
+                expected_boundary_checksum=corrected.boundary_checksum,
                 geometry_geojson=self.polygon(-46.997, -24.007, -46.993, -24.003),
                 geometry_crs="EPSG:4326",
                 source_reference="synthetic duplicate correction",
@@ -143,6 +149,8 @@ class FieldContextPostgresTests(unittest.TestCase):
                 tenant.id,
                 property_id=property_item.id,
                 field_id=field.id,
+                expected_boundary_version=corrected.boundary_version,
+                expected_boundary_checksum=corrected.boundary_checksum,
                 geometry_geojson=self.polygon(-47.01, -24.02, -46.98, -23.99),
                 geometry_crs="EPSG:4326",
                 source_reference="synthetic outside correction",

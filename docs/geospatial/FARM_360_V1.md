@@ -177,7 +177,11 @@ composite tenant/property foreign keys, a PostGIS containment trigger and immuta
 is operational context only: it is not legal title, survey, crop declaration,
 soil observation, management zone, agronomic recommendation or rule result.
 A field-boundary correction uses its own explicit immutable successor workflow.
-Field/zone/crop rule applicability remains separate; registering or correcting a
+It must identify the exact boundary version and checksum reviewed by the operator.
+The server compares that snapshot after locking the field and returns
+`409 FIELD_BOUNDARY_CONFLICT` when a newer version exists, preventing a stale
+screen from overwriting an intervening correction. Field/zone/crop rule
+applicability remains separate; registering or correcting a
 field does not activate a rule.
 
 Farm360 now loads this tenant-scoped inventory as an independent blue map layer and lists each persisted geometry with its source, observation time, classification, boundary-version checksum and opaque evidence identifier. Its availability panel reports only the persisted field count and whether the sourced inventory is absent. A `property:write` user may submit a technical WGS84 Polygon or MultiPolygon from the same workspace; the browser does not clip, repair or infer geometry, and the server remains responsible for containment, provenance, RLS and audit. The same authorized user may correct a persisted field boundary by redrawing or supplying replacement WGS84 GeoJSON together with a factual source, observation time and correction reason. Farm360 replaces only the current inventory view with the immutable successor returned by the API; when that field was selected for temporal comparison it clears the displayed delta and requests comparison again, so evidence clipped to the prior boundary cannot remain presented as current. A missing or unavailable inventory is shown as `DADO_INSUFICIENTE` or a bounded load failure, never as an empty agronomic conclusion. There is no crop claim or field-scoped rule activation control in Farm360 in this increment; field-scoped rules are activated and evaluated only through the explicit audited API workflow documented in the rule catalogue.
