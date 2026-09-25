@@ -46,7 +46,10 @@ remains optional and is never a prerequisite for this workflow.
 
 Optional boundary import accepts GeoJSON, KML and KMZ, but no import changes the
 canonical property boundary until a separately authorized human review records a
-reason and current-boundary checksum. The original bytes, SHA-256, filename,
+reason and current-boundary checksum. A correction also fails atomically when it
+would exclude any current field/talhão boundary; the field must first be corrected
+through its own immutable, source-backed boundary history. The original bytes,
+SHA-256, filename,
 format, declared/detected CRS, parsed-geometry checksum, warnings and audit event
 are retained. KML/KMZ are bounded to one unencrypted KML Polygon and KML's WGS84
 coordinates; a conflicting caller CRS, unsafe XML declaration, ambiguous polygon,

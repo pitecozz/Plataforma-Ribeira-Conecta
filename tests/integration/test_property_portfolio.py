@@ -157,6 +157,66 @@ class PropertyPortfolioPostgresTests(unittest.TestCase):
                 property_a.boundary_checksum,
             )
 
+    def test_boundary_update_cannot_exclude_current_field(self) -> None:
+        tenant = self.tenant("Synthetic property field guard tenant")
+        property_item = self.application.create_property(
+            tenant.id,
+            "Synthetic property with field",
+            BOUNDARY_V2,
+            "EPSG:4326",
+            boundary_source="synthetic property survey",
+            classification=DataClassification.MANUAL_CONFIRMED,
+        )
+        self.application.fields.create(
+            tenant.id,
+            property_id=property_item.id,
+            name="Synthetic east field",
+            status="ACTIVE",
+            geometry_geojson={
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-46.989, -24.009],
+                        [-46.981, -24.009],
+                        [-46.981, -24.001],
+                        [-46.989, -24.001],
+                        [-46.989, -24.009],
+                    ]
+                ],
+            },
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic field walk",
+            observed_at="2026-09-25T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            actor="integration-test",
+        )
+
+        with self.assertRaisesRegex(
+            psycopg.Error, "property boundary must cover every current field boundary"
+        ):
+            self.application.update_property_boundary(
+                tenant.id,
+                property_item.id,
+                BOUNDARY_V1,
+                "EPSG:4326",
+                "synthetic excluding correction",
+                DataClassification.MANUAL_CONFIRMED,
+                "synthetic invalid correction",
+                "integration-test",
+                property_item.boundary_checksum,
+            )
+
+        with self.store.tenant_transaction(tenant.id):
+            current = self.store.get_property(tenant.id, property_item.id)
+            versions = self.store.connection.execute(
+                "SELECT count(*) AS count FROM property_boundary_version WHERE tenant_id=%s AND property_id=%s",
+                (tenant.id, property_item.id),
+            ).fetchone()
+        self.assertIsNotNone(current)
+        assert current is not None
+        self.assertEqual(current.boundary_checksum, property_item.boundary_checksum)
+        self.assertEqual(versions["count"], 1)
+
     def test_concurrent_updates_serialize_or_report_stale_checksum(self) -> None:
         tenant = self.tenant("Synthetic concurrent boundary tenant")
         item = self.application.create_property(
