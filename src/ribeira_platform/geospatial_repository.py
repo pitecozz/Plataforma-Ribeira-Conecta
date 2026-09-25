@@ -1180,9 +1180,19 @@ class GeospatialRepository:
         ]
 
     def find_temporal_delta(
-        self, tenant_id: str, baseline_product_id: str, target_product_id: str
+        self,
+        tenant_id: str,
+        baseline_product_id: str,
+        target_product_id: str,
+        field_id: str | None = None,
     ) -> DerivedProduct | None:
         p = self.p
+        field_scope = (
+            f"d.field_id={p}" if field_id is not None else "d.field_id IS NULL"
+        )
+        parameters = [tenant_id, baseline_product_id, target_product_id]
+        if field_id is not None:
+            parameters.append(field_id)
         row = self._one(
             f"""SELECT d.* FROM derived_product d
               JOIN derived_product_dependency baseline ON baseline.tenant_id=d.tenant_id
@@ -1191,8 +1201,9 @@ class GeospatialRepository:
                 AND target.derived_product_id=d.id AND target.relationship='TARGET_NDVI'
               WHERE d.tenant_id={p} AND d.product_type='NDVI_DELTA'
                 AND baseline.upstream_product_id={p} AND target.upstream_product_id={p}
+                AND {field_scope}
               ORDER BY d.created_at DESC, d.id DESC LIMIT 1""",  # nosec B608
-            [tenant_id, baseline_product_id, target_product_id],
+            parameters,
         )
         return self._derived_product(row) if row is not None else None
 

@@ -26,10 +26,12 @@ exact tenant-local `field_id`, property, immutable boundary version and SHA-256
 geometry checksum on both job and product; PostgreSQL composite foreign keys and
 the equivalent test-store lookup reject tenant/property/version/checksum drift.
 Processing transforms that exact snapshot geometry to the baseline grid and
-clips both already quality-masked NDVI inputs before subtraction. Only pixels
-inside the field and finite in both inputs contribute; valid, nodata and coverage
-statistics still describe the full output grid, and both upstream dependencies
-remain explicit. Legacy, mismatched or tampered field provenance is not eligible
+clips both already quality-masked NDVI inputs before subtraction. Comparison
+lookup includes the optional field identity, so a property-wide delta cannot be
+replaced by a field-clipped result for the same upstream pair, and one field's
+delta cannot be returned for another field. Only pixels inside the field and
+finite in both inputs contribute; valid, nodata and coverage statistics still
+describe the full output grid, and both upstream dependencies remain explicit. Legacy, mismatched or tampered field provenance is not eligible
 for `FIELD` rules. The authenticated temporal-delta evaluation uses only the
 persisted mean as `ndvi_temporal_delta_mean`, preserves the derived-product
 evidence, field boundary snapshot and exact selected rule version/scope, and creates

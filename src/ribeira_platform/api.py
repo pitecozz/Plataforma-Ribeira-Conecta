@@ -971,6 +971,9 @@ def create_app(
             "algorithm_id": item.algorithm_id,
             "algorithm_version": item.algorithm_version,
             "formula": item.formula,
+            "field_id": item.field_id,
+            "field_boundary_version": item.field_boundary_version,
+            "field_boundary_checksum": item.field_boundary_checksum,
             "input_asset_keys": item.input_asset_keys,
             "limitations": item.limitations,
             "quality": [quality.value for quality in item.quality],
@@ -2258,6 +2261,7 @@ def create_app(
         property_id: str,
         baseline_product_id: str,
         target_product_id: str,
+        field_id: str | None = None,
         ctx: AuthContext = Depends(context),
     ):
         authorize(ctx, "geospatial:read", tenant_id)
@@ -2266,11 +2270,16 @@ def create_app(
         if property_item is None:
             raise LookupError("property not found in tenant")
         comparison = application.geospatial.compare_products(
-            tenant_id, property_id, baseline_product_id, target_product_id
+            tenant_id,
+            property_id,
+            baseline_product_id,
+            target_product_id,
+            field_id,
         )
         return to_jsonable(
             {
                 "property_id": property_id,
+                "field_id": field_id,
                 "status": comparison["status"],
                 "baseline": safe_product(comparison["baseline"]),
                 "target": safe_product(comparison["target"]),

@@ -687,15 +687,54 @@ class Farm360ApiTests(unittest.TestCase):
             classification=DataClassification.MANUAL_CONFIRMED,
             actor="operator",
         )
-        tampered_field_delta = replace(
+        field_delta_job = replace(
+            delta_job,
+            id=new_id(),
+            idempotency_key=new_id(),
+            output_product_id=None,
+            field_id=field.id,
+            field_boundary_version=field.boundary_version,
+            field_boundary_checksum=field.boundary_checksum,
+        )
+        field_delta = replace(
             delta,
             id=new_id(),
-            processing_job_id=new_id(),
+            processing_job_id=field_delta_job.id,
+            output_checksum="synthetic_test_field_delta",
             field_id=field.id,
             field_boundary_version=field.boundary_version,
             field_boundary_checksum=field.boundary_checksum,
             parameters={
                 **delta.parameters,
+                "field_snapshot": {
+                    "field_id": field.id,
+                    "boundary_version": field.boundary_version,
+                    "boundary_checksum": field.boundary_checksum,
+                },
+            },
+        )
+        repository.create_job(field_delta_job)
+        repository.create_derived_product(field_delta)
+        repository.create_product_dependency(
+            DerivedProductDependency(
+                self.tenant.id, field_delta.id, baseline.id, "BASELINE_NDVI"
+            )
+        )
+        repository.create_product_dependency(
+            DerivedProductDependency(
+                self.tenant.id, field_delta.id, target.id, "TARGET_NDVI"
+            )
+        )
+        repository.mark_job(
+            self.tenant.id,
+            field_delta_job.id,
+            original_job.status,
+            output_product_id=field_delta.id,
+        )
+        tampered_field_delta = replace(
+            field_delta,
+            parameters={
+                **field_delta.parameters,
                 "field_snapshot": {
                     "field_id": field.id,
                     "boundary_version": field.boundary_version,
@@ -721,8 +760,28 @@ class Farm360ApiTests(unittest.TestCase):
         self.assertEqual(
             comparison.json()["comparison"]["classification"], "PIXEL_ALIGNED_DELTA"
         )
+        self.assertEqual(comparison.json()["field_id"], None)
         self.assertEqual(comparison.json()["comparison"]["delta_product_id"], delta.id)
         self.assertEqual(comparison.json()["comparison"]["comparable_valid_pixels"], 12)
+
+        field_comparison = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
+            params={
+                "baseline_product_id": baseline.id,
+                "target_product_id": target.id,
+                "field_id": field.id,
+            },
+            headers={"Authorization": "Bearer admin"},
+        )
+        self.assertEqual(field_comparison.status_code, 200)
+        self.assertEqual(field_comparison.json()["field_id"], field.id)
+        self.assertEqual(
+            field_comparison.json()["comparison"]["delta_product_id"], field_delta.id
+        )
+        self.assertEqual(
+            field_comparison.json()["comparison"]["classification"],
+            "PIXEL_ALIGNED_DELTA",
+        )
 
         self.application.create_rule(
             RuleDefinition(

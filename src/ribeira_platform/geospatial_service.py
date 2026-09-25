@@ -1406,6 +1406,7 @@ class GeospatialApplication:
         property_id: str,
         baseline_product_id: str,
         target_product_id: str,
+        field_id: str | None = None,
     ) -> dict[str, Any]:
         """Compare persisted NDVI products without causal inference.
 
@@ -1431,14 +1432,27 @@ class GeospatialApplication:
                 tenant_id, baseline.processing_job_id
             )
             target_job = self.repository.get_job(tenant_id, target.processing_job_id)
+            field = self.fields.get(tenant_id, field_id) if field_id else None
+        if field_id is not None and field is None:
+            raise LookupError("field context not found in tenant")
+        if field is not None and field.property_id != property_id:
+            raise ValueError("field context must belong to the requested property")
 
         delta = None
         with self.store.tenant_transaction(tenant_id):
             delta = self.repository.find_temporal_delta(
-                tenant_id, baseline.id, target.id
+                tenant_id, baseline.id, target.id, field_id
             )
-        if delta is not None and self._has_valid_temporal_delta_provenance(
-            delta, baseline, target
+        valid_field_scope = delta is not None and (
+            field is None
+            and delta.field_id is None
+            or field is not None
+            and self._has_valid_field_delta_provenance(delta, field)
+        )
+        if (
+            delta is not None
+            and valid_field_scope
+            and self._has_valid_temporal_delta_provenance(delta, baseline, target)
         ):
             return {
                 "status": "READY",
