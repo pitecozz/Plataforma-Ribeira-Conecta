@@ -21,9 +21,14 @@ from ribeira_platform.geospatial import (
     SatelliteScene,
     SatelliteSearchRequest,
 )
+from ribeira_platform.epistemology import (
+    DataClassification,
+    DecisionStatus,
+    RuleAuthority,
+)
 from ribeira_platform.geospatial_provider import default_copernicus_registry
 from ribeira_platform.geospatial_service import GeospatialApplication
-from ribeira_platform.models import new_id
+from ribeira_platform.models import RuleDefinition, new_id
 from ribeira_platform.object_storage import LocalObjectStorage
 from ribeira_platform.postgres import PostgresStore
 from ribeira_platform.raster_processing import validate_cog
@@ -94,19 +99,23 @@ class _SyntheticStacProvider:
 
 
 def _synthetic_tiff(value: float) -> bytes:
+    return _synthetic_raster(np.full((8, 8), value, dtype="float32"))
+
+
+def _synthetic_raster(values: np.ndarray) -> bytes:
     profile = {
         "driver": "GTiff",
         "height": 8,
         "width": 8,
         "count": 1,
-        "dtype": "float32",
+        "dtype": str(values.dtype),
         "crs": "EPSG:4326",
         "transform": from_origin(-47.1, -24.0, 0.0125, 0.0125),
-        "nodata": -9999.0,
+        "nodata": 0 if values.dtype == np.dtype("uint8") else -9999.0,
     }
     with MemoryFile() as memory:
         with memory.open(**profile) as dataset:
-            dataset.write(np.full((1, 8, 8), value, dtype="float32"))
+            dataset.write(values, 1)
         return memory.read()
 
 
@@ -517,6 +526,335 @@ class GeospatialPostgresTests(unittest.TestCase):
                         (search.search.selected_scene_id,),
                     ).fetchone()
                 )
+
+    def test_field_quality_masked_temporal_delta_end_to_end(self) -> None:
+        property_boundary = mapping(
+            Polygon(
+                [
+                    (-47.1, -24.1),
+                    (-47.0, -24.1),
+                    (-47.0, -24.0),
+                    (-47.1, -24.0),
+                    (-47.1, -24.1),
+                ]
+            )
+        )
+        field_boundary = mapping(
+            Polygon(
+                [
+                    (-47.1, -24.1),
+                    (-47.05, -24.1),
+                    (-47.05, -24.0),
+                    (-47.1, -24.0),
+                    (-47.1, -24.1),
+                ]
+            )
+        )
+        baseline_scl = np.full((8, 8), 4, dtype="uint8")
+        baseline_scl[0, 0] = 9
+        target_scl = np.full((8, 8), 4, dtype="uint8")
+        target_scl[0, 1] = 9
+        target_nir = np.full((8, 8), 5.0, dtype="float32")
+        target_nir[:, :4] = 2.0
+        fixture_objects = {
+            "synthetic-delta-baseline/B04_10m.tif": _synthetic_tiff(1.0),
+            "synthetic-delta-baseline/B08_10m.tif": _synthetic_tiff(3.0),
+            "synthetic-delta-baseline/SCL_20m.tif": _synthetic_raster(baseline_scl),
+            "synthetic-delta-target/B04_10m.tif": _synthetic_tiff(1.0),
+            "synthetic-delta-target/B08_10m.tif": _synthetic_raster(target_nir),
+            "synthetic-delta-target/SCL_20m.tif": _synthetic_raster(target_scl),
+        }
+
+        def scene_item(name: str, acquired_at: str) -> dict[str, object]:
+            prefix = f"synthetic-delta-{name}"
+            return {
+                "type": "Feature",
+                "stac_version": "1.1.0",
+                "id": f"SYNTHETIC_DELTA_{name.upper()}",
+                "geometry": property_boundary,
+                "bbox": [-47.1, -24.1, -47.0, -24.0],
+                "properties": {
+                    "datetime": acquired_at,
+                    "created": acquired_at,
+                    "eo:cloud_cover": 0,
+                    "platform": "synthetic-sentinel-2a",
+                    "constellation": "sentinel-2",
+                    "processing:level": "L2A",
+                },
+                "assets": {
+                    key: {
+                        "href": f"s3://eodata/{prefix}/{key}.tif",
+                        "type": "image/tiff",
+                        "roles": ["data", "reflectance"]
+                        if key != "SCL_20m"
+                        else ["data", "classification"],
+                        "title": {
+                            "B04_10m": "Red (band 4) - 10m",
+                            "B08_10m": "NIR 1 (band 8) - 10m",
+                            "SCL_20m": "Scene classification - 20m",
+                        }[key],
+                    }
+                    for key in ("B04_10m", "B08_10m", "SCL_20m")
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            storage = LocalObjectStorage(Path(temporary))
+            adapter = CdseS3AssetAdapter(
+                storage,
+                credential_provider=_SyntheticCredentials(),
+                config=CdseS3Config(
+                    max_object_bytes=1_000_000,
+                    max_job_bytes=3_000_000,
+                    chunk_bytes=1024,
+                ),
+                client_factory=lambda *_: _SyntheticS3(fixture_objects),
+            )
+            provider = _SyntheticStacProvider(
+                scene_item("baseline", "2025-01-15T10:00:00Z")
+            )
+            application = RibeiraApplication(
+                self.store,
+                geospatial_provider=provider,
+                object_storage=storage,
+            )
+            application.geospatial = GeospatialApplication(
+                self.store, provider, storage, asset_adapter=adapter
+            )
+            tenant = self.create_test_tenant(
+                "Synthetic field delta tenant", application
+            )
+            property_item = application.create_property(
+                tenant.id,
+                "Synthetic field delta property",
+                property_boundary,
+                "EPSG:4326",
+                boundary_source="synthetic integration boundary",
+                classification=DataClassification.MANUAL_CONFIRMED,
+            )
+            field = application.fields.create(
+                tenant.id,
+                property_id=property_item.id,
+                name="Synthetic western field",
+                status="ACTIVE",
+                geometry_geojson=field_boundary,
+                geometry_crs="EPSG:4326",
+                source_reference="synthetic integration field boundary",
+                observed_at="2025-01-10T10:00:00+00:00",
+                classification=DataClassification.MANUAL_CONFIRMED,
+                actor="integration-operator",
+            )
+
+            products = []
+            for name, acquired_at, search_end in (
+                (
+                    "baseline",
+                    "2025-01-15T10:00:00Z",
+                    "2025-01-15T10:01:00Z",
+                ),
+                (
+                    "target",
+                    "2025-02-15T10:00:00Z",
+                    "2025-02-15T10:01:00Z",
+                ),
+            ):
+                provider.item = scene_item(name, acquired_at)
+                search = application.geospatial.search_satellite(
+                    tenant.id,
+                    SatelliteSearchRequest(
+                        property_item.id,
+                        "sentinel-2-l2a",
+                        acquired_at,
+                        search_end,
+                    ),
+                )
+                ndvi_job = application.geospatial.create_ndvi_job(
+                    tenant.id, property_item.id, search.search.id
+                )
+                ndvi = application.geospatial.run_ndvi_job(tenant.id, ndvi_job.id)
+                self.assertIsNotNone(
+                    ndvi.product,
+                    f"{name} NDVI job failed: {ndvi.job.failure_code} {ndvi.job.failure_reason}",
+                )
+                assert ndvi.product is not None
+                masked_job = application.geospatial.create_quality_masked_ndvi_job(
+                    tenant.id, property_item.id, ndvi.product.id
+                )
+                masked = application.geospatial.run_quality_masked_ndvi_job(
+                    tenant.id, masked_job.id
+                )
+                assert masked.product is not None
+                products.append(masked.product)
+
+            baseline, target = products
+            self.assertEqual(baseline.product_type, "NDVI_QUALITY_MASKED")
+            self.assertEqual(target.product_type, "NDVI_QUALITY_MASKED")
+            self.assertEqual(baseline.parameters["quality_mask"]["valid_after_scl"], 63)
+            self.assertEqual(target.parameters["quality_mask"]["valid_after_scl"], 63)
+            delta_job = application.geospatial.create_temporal_delta_job(
+                tenant.id,
+                property_item.id,
+                baseline.id,
+                target.id,
+                field_id=field.id,
+            )
+            self.assertEqual(delta_job.field_id, field.id)
+            self.assertEqual(delta_job.field_boundary_version, field.boundary_version)
+            self.assertEqual(delta_job.field_boundary_checksum, field.boundary_checksum)
+            self.assertEqual(
+                delta_job.parameters["field_snapshot"],
+                {
+                    "field_id": field.id,
+                    "boundary_version": field.boundary_version,
+                    "boundary_checksum": field.boundary_checksum,
+                },
+            )
+            delta_result = application.geospatial.run_temporal_delta_job(
+                tenant.id, delta_job.id
+            )
+            assert delta_result.product is not None
+            delta = delta_result.product
+            self.assertEqual(delta.statistics.valid_count, 30)
+            self.assertAlmostEqual(float(delta.statistics.mean), -1 / 6, places=5)
+            self.assertEqual(delta.field_id, field.id)
+            self.assertEqual(delta.field_boundary_version, field.boundary_version)
+            self.assertEqual(delta.field_boundary_checksum, field.boundary_checksum)
+            assert delta.output_reference is not None
+            validate_cog(
+                storage.read_local_path(delta.output_reference),
+                expected_value_range=(-2.0, 2.0),
+            )
+
+            with self.store.tenant_transaction(tenant.id):
+                dependencies = (
+                    application.geospatial.repository.list_product_dependencies(
+                        tenant.id, delta.id
+                    )
+                )
+                evidence = self.store.evidence_for_reference(tenant.id, delta.id)
+                persisted_jobs = self.store.connection.execute(
+                    "SELECT id,status,output_product_id FROM processing_job "
+                    "WHERE tenant_id=%s AND id IN (%s,%s,%s) ORDER BY id",
+                    (
+                        tenant.id,
+                        baseline.processing_job_id,
+                        target.processing_job_id,
+                        delta_job.id,
+                    ),
+                ).fetchall()
+                snapshot_row = self.store.connection.execute(
+                    "SELECT version,geometry_checksum FROM field_context_boundary_version "
+                    "WHERE tenant_id=%s AND field_context_id=%s AND version=%s",
+                    (tenant.id, field.id, field.boundary_version),
+                ).fetchone()
+                with self.assertRaises(psycopg.Error):
+                    with self.store.connection.transaction():
+                        self.store.connection.execute(
+                            "UPDATE field_context_boundary_version SET reason=%s "
+                            "WHERE tenant_id=%s AND field_context_id=%s AND version=%s",
+                            (
+                                "synthetic attempted rewrite",
+                                tenant.id,
+                                field.id,
+                                field.boundary_version,
+                            ),
+                        )
+            self.assertEqual(
+                {
+                    (item.relationship, item.upstream_product_id)
+                    for item in dependencies
+                },
+                {("BASELINE_NDVI", baseline.id), ("TARGET_NDVI", target.id)},
+            )
+            self.assertEqual(len(persisted_jobs), 3)
+            self.assertTrue(
+                all(
+                    row["status"] == ProcessingJobStatus.SUCCEEDED.value
+                    and row["output_product_id"] is not None
+                    for row in persisted_jobs
+                )
+            )
+            self.assertIsNotNone(evidence)
+            assert evidence is not None
+            self.assertEqual(evidence.evidence_type, "DERIVED_PRODUCT")
+            self.assertEqual(evidence.classification, DataClassification.DERIVED)
+            self.assertIsNotNone(snapshot_row)
+            assert snapshot_row is not None
+            self.assertEqual(snapshot_row["version"], field.boundary_version)
+            self.assertEqual(snapshot_row["geometry_checksum"], field.boundary_checksum)
+
+            with self.store.tenant_transaction(tenant.id):
+                persisted_delta = (
+                    application.geospatial.repository.find_temporal_delta(
+                        tenant.id, baseline.id, target.id, field.id
+                    )
+                )
+            self.assertIsNotNone(persisted_delta)
+            assert persisted_delta is not None
+            self.assertTrue(
+                application.geospatial._has_valid_field_delta_provenance(
+                    persisted_delta, field
+                ),
+                persisted_delta.parameters,
+            )
+            self.assertTrue(
+                application.geospatial._has_valid_temporal_delta_provenance(
+                    persisted_delta, baseline, target
+                ),
+                persisted_delta.parameters,
+            )
+            comparison = application.geospatial.compare_products(
+                tenant.id,
+                property_item.id,
+                baseline.id,
+                target.id,
+                field.id,
+            )
+            unscoped_comparison = application.geospatial.compare_products(
+                tenant.id, property_item.id, baseline.id, target.id
+            )
+            self.assertEqual(comparison["status"], "READY", comparison)
+            self.assertEqual(comparison["delta"].id, delta.id)
+            self.assertEqual(comparison["comparable_valid_pixels"], 30)
+            self.assertNotEqual(unscoped_comparison.get("delta"), delta)
+
+            rule = application.create_rule(
+                RuleDefinition(
+                    new_id(),
+                    tenant.id,
+                    1,
+                    "synthetic field NDVI decline rule",
+                    RuleAuthority.REGRA_AGRONOMICA,
+                    "ndvi_temporal_delta_mean",
+                    "<",
+                    -0.1,
+                    "NDVI",
+                    "HIGH",
+                    "ACTIVE",
+                    "integration-approver",
+                    "2025-01-01T00:00:00+00:00",
+                    scope_type="FIELD",
+                    scope_field_id=field.id,
+                )
+            )
+            decision = application.evaluate_temporal_delta(
+                tenant.id, property_item.id, delta.id, actor="integration-operator"
+            )
+            self.assertEqual(decision.decision.status, DecisionStatus.ACTIONABLE)
+            self.assertEqual(decision.decision.rule_id, rule.id)
+            self.assertEqual(decision.decision.selected_rule_scope_type, "FIELD")
+            self.assertEqual(decision.decision.subject_field_id, field.id)
+            self.assertEqual(
+                decision.decision.subject_field_boundary_version,
+                field.boundary_version,
+            )
+            self.assertEqual(
+                decision.decision.subject_field_boundary_checksum,
+                field.boundary_checksum,
+            )
+            self.assertEqual(decision.decision.evidence_ids, [evidence.id])
+            self.assertIsNotNone(decision.alert)
+            self.assertIsNotNone(decision.action)
 
 
 if __name__ == "__main__":

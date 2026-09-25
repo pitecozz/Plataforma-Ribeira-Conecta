@@ -1079,17 +1079,23 @@ class GeospatialApplication:
     ) -> bool:
         alignment = delta.parameters.get("alignment")
         policies = delta.parameters.get("quality_mask_policies")
-        valid_alignment = alignment in (
-            {
-                "status": "IDENTICAL_GRID",
-                "target_grid": "baseline",
-                "resampling": None,
-            },
-            {
-                "status": "REPROJECTED_TO_BASELINE",
-                "target_grid": "baseline",
-                "resampling": "bilinear",
-            },
+        valid_alignment = isinstance(alignment, dict) and (
+            all(
+                alignment.get(key) == value
+                for key, value in {
+                    "status": "IDENTICAL_GRID",
+                    "target_grid": "baseline",
+                    "resampling": None,
+                }.items()
+            )
+            or all(
+                alignment.get(key) == value
+                for key, value in {
+                    "status": "REPROJECTED_TO_BASELINE",
+                    "target_grid": "baseline",
+                    "resampling": "bilinear",
+                }.items()
+            )
         )
         return (
             delta.product_type == "NDVI_DELTA"
