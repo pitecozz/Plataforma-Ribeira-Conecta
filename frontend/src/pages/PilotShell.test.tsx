@@ -13,11 +13,13 @@ vi.mock("./HomePage", () => ({
 vi.mock("./PropertyWorkspace", () => ({
   PropertyWorkspace: ({
     canEvaluateAssets,
+    canEvaluateFields,
     canEvaluateTemporalDelta,
   }: {
     canEvaluateAssets: boolean;
+    canEvaluateFields: boolean;
     canEvaluateTemporalDelta: boolean;
-  }) => <div>{`${canEvaluateAssets}:${canEvaluateTemporalDelta}`}</div>,
+  }) => <div>{`${canEvaluateAssets}:${canEvaluateFields}:${canEvaluateTemporalDelta}`}</div>,
 }));
 
 afterEach(cleanup);
@@ -26,7 +28,7 @@ describe("PilotShell permissions", () => {
   it("does not expose evaluation controls from read permissions alone", async () => {
     const api = {
       access: vi.fn().mockResolvedValue({
-        permissions: ["asset:read", "decision:read", "geospatial:read"],
+        permissions: ["asset:read", "property:read", "decision:read", "geospatial:read"],
       }),
     } as unknown as Farm360Api;
 
@@ -34,13 +36,13 @@ describe("PilotShell permissions", () => {
     await act(async () => { await Promise.resolve(); });
     fireEvent.click(screen.getByRole("button", { name: "Abrir teste" }));
 
-    expect(screen.getByText("false:false")).toBeInTheDocument();
+    expect(screen.getByText("false:false:false")).toBeInTheDocument();
   });
 
   it("exposes evaluation controls only with decision:evaluate and subject read access", async () => {
     const api = {
       access: vi.fn().mockResolvedValue({
-        permissions: ["asset:read", "decision:evaluate", "geospatial:read"],
+        permissions: ["asset:read", "property:read", "decision:evaluate", "geospatial:read"],
       }),
     } as unknown as Farm360Api;
 
@@ -48,6 +50,6 @@ describe("PilotShell permissions", () => {
     await act(async () => { await Promise.resolve(); });
     fireEvent.click(screen.getByRole("button", { name: "Abrir teste" }));
 
-    expect(screen.getByText("true:true")).toBeInTheDocument();
+    expect(screen.getByText("true:true:true")).toBeInTheDocument();
   });
 });

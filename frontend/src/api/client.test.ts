@@ -88,11 +88,15 @@ describe("Farm360Api", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, path, { method: "POST", headers: { Authorization: "Bearer session-token", "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   });
 
-  it("evaluates an asset only through the encoded authenticated tenant endpoint", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ decision: { id: "decision" } }), { status: 200 }));
+  it("evaluates assets and fields only through encoded authenticated tenant endpoints", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ decision: { id: "decision" } }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
-    await new Farm360Api("https://api.example", "session-token").evaluateAsset("tenant / id", "asset / id");
-    expect(fetchMock).toHaveBeenCalledWith("https://api.example/v1/tenants/tenant%20%2F%20id/assets/asset%20%2F%20id/evaluate", { method: "POST", headers: { Authorization: "Bearer session-token", "Content-Type": "application/json" }, body: undefined });
+    const api = new Farm360Api("https://api.example", "session-token");
+    await api.evaluateAsset("tenant / id", "asset / id");
+    await api.evaluateField("tenant / id", "field / id");
+    const request = { method: "POST", headers: { Authorization: "Bearer session-token", "Content-Type": "application/json" }, body: undefined };
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "https://api.example/v1/tenants/tenant%20%2F%20id/assets/asset%20%2F%20id/evaluate", request);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "https://api.example/v1/tenants/tenant%20%2F%20id/fields/field%20%2F%20id/evaluate", request);
   });
 
   it("uploads GeoJSON bytes through the tenant-scoped review endpoint without a storage path", async () => {

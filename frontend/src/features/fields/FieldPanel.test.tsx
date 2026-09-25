@@ -51,6 +51,29 @@ describe("FieldPanel", () => {
     expect(screen.queryByText(/recomendação agronômica/i)).not.toBeInTheDocument();
   });
 
+  it("evaluates field rules and refreshes decisions only when authorized", async () => {
+    const evaluateField = vi.fn().mockResolvedValue({ decision: { id: "decision-1" } });
+    const onEvaluated = vi.fn();
+    const { rerender } = render(<FieldPanel fields={[field]} api={{ evaluateField } as never} tenantId="tenant" onEvaluated={onEvaluated} />);
+    expect(screen.queryByText("Avaliar regras para este talhão")).not.toBeInTheDocument();
+    rerender(<FieldPanel fields={[field]} api={{ evaluateField } as never} tenantId="tenant" canEvaluateFields onEvaluated={onEvaluated} />);
+    fireEvent.click(screen.getByText("Avaliar regras para este talhão"));
+    fireEvent.click(screen.getByRole("button", { name: "Avaliar regras" }));
+    expect(evaluateField).toHaveBeenCalledWith("tenant", "field-1");
+    expect(await screen.findByText(/Avaliação registrada no histórico/i)).toBeInTheDocument();
+    expect(onEvaluated).toHaveBeenCalledOnce();
+  });
+
+  it("reports field evaluation failure without claiming a decision", async () => {
+    const evaluateField = vi.fn().mockRejectedValue(new Error("forbidden"));
+    const onEvaluated = vi.fn();
+    render(<FieldPanel fields={[field]} api={{ evaluateField } as never} tenantId="tenant" canEvaluateFields onEvaluated={onEvaluated} />);
+    fireEvent.click(screen.getByText("Avaliar regras para este talhão"));
+    fireEvent.click(screen.getByRole("button", { name: "Avaliar regras" }));
+    expect(await screen.findByText(/Não foi possível registrar a avaliação/i)).toBeInTheDocument();
+    expect(onEvaluated).not.toHaveBeenCalled();
+  });
+
   it("builds a provisional polygon from map clicks before registration", () => {
     render(<FieldPanel fields={[]} api={{ registerField: vi.fn() } as never} tenantId="tenant" propertyId="property" propertyGeometry={propertyGeometry} apiBaseUrl="/api" token="test" canManageFields onCreated={vi.fn()} />);
     fireEvent.click(screen.getByText("Registrar talhão", { selector: "summary" }));

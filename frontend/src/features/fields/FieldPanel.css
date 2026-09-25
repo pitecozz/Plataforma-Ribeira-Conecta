@@ -22,6 +22,8 @@
 .field-correction textarea { min-height: 110px; font-family: ui-monospace, monospace; }
 .field-correction { margin-top: 4px; }
 .field-correction > summary { cursor: pointer; font-weight: 600; }
+.field-rule-evaluation { border-top: 1px solid #d9e2da; margin-top: 12px; padding-top: 10px; }
+.field-rule-evaluation p { color: #4b5d51; font-size: 12px; }
 .field-registration-note { color: #46584b; font-size: 0.9rem; }
 .field-drawing { display: grid; gap: 8px; margin-top: 10px; }
 .field-drawing .map-canvas { min-height: 320px; }

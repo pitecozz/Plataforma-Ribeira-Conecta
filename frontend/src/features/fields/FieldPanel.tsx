@@ -137,6 +137,30 @@ function FieldRegistration({ api, tenantId, propertyId, propertyGeometry, apiBas
   );
 }
 
+function FieldRuleEvaluation({ api, tenantId, field, onEvaluated }: {
+  api: Farm360Api;
+  tenantId: string;
+  field: FieldContext;
+  onEvaluated: () => Promise<void> | void;
+}) {
+  const [evaluating, setEvaluating] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const evaluate = async () => {
+    setEvaluating(true);
+    setMessage(null);
+    try {
+      await api.evaluateField(tenantId, field.id);
+      await onEvaluated();
+      setMessage("Avaliação registrada no histórico desta propriedade. Consulte a decisão e suas limitações em Riscos e decisões.");
+    } catch {
+      setMessage("Não foi possível registrar a avaliação agora. Confirme a permissão e tente novamente.");
+    } finally {
+      setEvaluating(false);
+    }
+  };
+  return <details className="field-rule-evaluation"><summary>Avaliar regras para este talhão</summary><p>Esta ação usa o talhão e a versão atual de seu limite somente como contexto de aplicabilidade. Ela não transforma o cadastro em observação, medição ou diagnóstico.</p><button type="button" disabled={evaluating} onClick={() => void evaluate()}>{evaluating ? "Avaliando…" : "Avaliar regras"}</button>{message && <p role="status">{message}</p>}</details>;
+}
+
 function FieldBoundaryCorrection({ field, api, tenantId, propertyId, propertyGeometry, apiBaseUrl, token, onCorrected }: {
   field: FieldContext;
   api: Farm360Api;
@@ -226,7 +250,7 @@ function FieldBoundaryCorrection({ field, api, tenantId, propertyId, propertyGeo
   );
 }
 
-export function FieldPanel({ fields, loadError = false, api, tenantId, propertyId, propertyGeometry = null, apiBaseUrl = "", token = "", canManageFields = false, onCreated, onCorrected }: {
+export function FieldPanel({ fields, loadError = false, api, tenantId, propertyId, propertyGeometry = null, apiBaseUrl = "", token = "", canManageFields = false, canEvaluateFields = false, onCreated, onCorrected, onEvaluated }: {
   fields: FieldContext[];
   loadError?: boolean;
   api?: Farm360Api;
@@ -236,8 +260,10 @@ export function FieldPanel({ fields, loadError = false, api, tenantId, propertyI
   apiBaseUrl?: string;
   token?: string;
   canManageFields?: boolean;
+  canEvaluateFields?: boolean;
   onCreated?: (field: FieldContext) => void;
   onCorrected?: (field: FieldContext) => void;
+  onEvaluated?: () => Promise<void> | void;
 }) {
   return (
     <section className="field-panel">
@@ -262,6 +288,9 @@ export function FieldPanel({ fields, loadError = false, api, tenantId, propertyI
                 <dt>Evidência</dt><dd>{field.evidence_id}</dd>
               </dl>
             </details>
+            {canEvaluateFields && api && tenantId && onEvaluated && (
+              <FieldRuleEvaluation api={api} tenantId={tenantId} field={field} onEvaluated={onEvaluated} />
+            )}
             {canManageFields && api && tenantId && propertyId && onCorrected && (
               <FieldBoundaryCorrection field={field} api={api} tenantId={tenantId} propertyId={propertyId} propertyGeometry={propertyGeometry} apiBaseUrl={apiBaseUrl} token={token} onCorrected={onCorrected} />
             )}

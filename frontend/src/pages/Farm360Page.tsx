@@ -43,6 +43,7 @@ interface Props {
   canManageAssets?: boolean;
   canCompleteActions?: boolean;
   canEvaluateAssets?: boolean;
+  canEvaluateFields?: boolean;
   canEvaluateTemporalDelta?: boolean;
 }
 type LoadState = "loading" | "ready" | "empty" | "error";
@@ -83,6 +84,7 @@ export function Farm360Page({
   canManageAssets = false,
   canCompleteActions = false,
   canEvaluateAssets = false,
+  canEvaluateFields = false,
   canEvaluateTemporalDelta = false,
 }: Props) {
   const [state, setState] = useState<LoadState>("loading");
@@ -400,6 +402,8 @@ export function Farm360Page({
           apiBaseUrl={apiBaseUrl}
           token={token}
           canManageFields={canManageProperties}
+          canEvaluateFields={canEvaluateFields}
+          onEvaluated={refreshDecisions}
           onCreated={(field) => setFields((current) => [...current, field])}
           onCorrected={(field) => {
             setFields((current) => current.map((item) => item.id === field.id ? field : item));
