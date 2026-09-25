@@ -15,6 +15,27 @@ describe("IntelligenceReportPanel", () => {
     expect(screen.getByText("Detalhes técnicos, proveniência e auditoria")).toBeInTheDocument();
   });
 
+  it("includes completed action result provenance in the report", () => {
+    render(<IntelligenceReportPanel property={property} assets={[]} scenes={[]} provenance={null} decisions={[{
+      id: "decision-completed", property_id: "property", conclusion: "Inspect the field.",
+      classification: "INFERRED", status: "ACTIONABLE", evidence_ids: ["decision-evidence"],
+      rule_id: "rule-1", rule_version: 4, limitations: [], missing_data: [], conflicts: [],
+      recommended_action: null, created_at: "2026-09-24T00:00:00Z", action: {
+        id: "action-1", status: "COMPLETED", completed_at: "2026-09-24T15:30:00Z",
+        completed_by: "field-technician", outcome_detail: "Inspection completed without visible damage.",
+        outcome_classification: "MANUAL_CONFIRMED", outcome_evidence_ids: ["photo-1", "inspection-1"],
+      },
+    }]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Abrir relatório" }));
+
+    expect(screen.getAllByRole("heading", { name: "Riscos, decisões e resultados", level: 2 }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Inspection completed without visible damage.").length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle("Estado técnico: MANUAL_CONFIRMED").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/24 de set\. de 2026/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("field-technician").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("photo-1, inspection-1").length).toBeGreaterThan(0);
+  });
+
   it("includes field-scoped decision context without turning registration into diagnosis", () => {
     render(<IntelligenceReportPanel property={property} assets={[]} scenes={[]} provenance={null} fields={[{
       id: "field-1", tenant_id: "tenant", property_id: "property", name: "Talhão Norte",

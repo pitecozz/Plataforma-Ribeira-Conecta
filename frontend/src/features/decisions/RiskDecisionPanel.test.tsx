@@ -54,6 +54,42 @@ describe("RiskDecisionPanel", () => {
     expect(screen.queryByText("Registrar resultado da ação")).not.toBeInTheDocument();
   });
 
+  it("shows the complete persisted result provenance for a completed action", () => {
+    render(<RiskDecisionPanel decisions={[{
+      id: "decision-completed", property_id: "property-1", conclusion: "Inspect the field.",
+      classification: "INFERRED", status: "ACTIONABLE", evidence_ids: ["decision-evidence"],
+      rule_id: "rule-1", rule_version: 4, limitations: [], missing_data: [], conflicts: [],
+      recommended_action: null, created_at: "2026-09-24T00:00:00Z", action: {
+        id: "action-1", status: "COMPLETED", completed_at: "2026-09-24T15:30:00Z",
+        completed_by: "field-technician", outcome_detail: "Inspection completed without visible damage.",
+        outcome_classification: "MANUAL_CONFIRMED", outcome_evidence_ids: ["photo-1", "inspection-1"],
+      },
+    }]} />);
+
+    expect(screen.getByText("Inspection completed without visible damage.")).toBeInTheDocument();
+    expect(screen.getByText("Confirmado")).toBeInTheDocument();
+    expect(screen.getByText(/24 de set\. de 2026/)).toBeInTheDocument();
+    expect(screen.getByText("field-technician")).toBeInTheDocument();
+    expect(screen.getByText("photo-1, inspection-1")).toBeInTheDocument();
+  });
+
+  it("keeps absent legacy result provenance explicit", () => {
+    render(<RiskDecisionPanel decisions={[{
+      id: "decision-legacy", property_id: "property-1", conclusion: "Historical decision.",
+      classification: "INFERRED", status: "ACTIONABLE", evidence_ids: [], rule_id: null,
+      rule_version: null, limitations: [], missing_data: [], conflicts: [], recommended_action: null,
+      created_at: "2026-09-24T00:00:00Z", action: {
+        id: "action-legacy", status: "COMPLETED", completed_at: null, completed_by: null,
+        outcome_detail: null, outcome_classification: null, outcome_evidence_ids: [],
+      },
+    }]} />);
+
+    expect(screen.getByText("Resultado não registrado")).toBeInTheDocument();
+    expect(screen.getAllByText("Não registrado")).toHaveLength(3);
+    expect(screen.getAllByText("Não registrada")).toHaveLength(3);
+    expect(screen.getAllByText("Nenhuma registrada").length).toBeGreaterThan(0);
+  });
+
   it("records an explicit outcome only for an authorized open action", async () => {
     const completeAction = vi.fn().mockResolvedValue({ id: "action-1", status: "COMPLETED" });
     const onActionCompleted = vi.fn().mockResolvedValue(undefined);

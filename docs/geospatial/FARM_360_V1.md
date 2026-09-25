@@ -119,8 +119,11 @@ evidence identifiers that support that result. The screen never prepopulates
 outcome evidence from decision evidence: a recommendation and its subsequent
 result are different claims. The original decision remains immutable; the API
 records the authenticated actor and audit event, and a failed submission leaves
-the action open. Read-only users can inspect the history without seeing the
-completion control.
+the action open. The decision history and Intelligence Report show the persisted
+result text, classification, occurrence time, authenticated actor and supporting
+evidence identifiers; absent legacy metadata remains explicit and is never
+inferred. Read-only users can inspect the history without seeing the completion
+control.
 
 At the current zoom, very close real asset locations may be represented by one
 temporary overlap marker. Selecting it opens the names of every corresponding
