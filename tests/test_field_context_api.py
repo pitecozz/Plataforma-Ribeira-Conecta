@@ -53,6 +53,16 @@ class FieldContextApiTests(unittest.TestCase):
                 settings=settings,
             )
         )
+        self.viewer_client = TestClient(
+            create_app(
+                self.application,
+                DevelopmentIdentityProvider(
+                    "viewer",
+                    AuthContext("viewer", self.tenant.id, roles=frozenset({"VIEWER"})),
+                ),
+                settings=settings,
+            )
+        )
 
     def tearDown(self) -> None:
         self.store.close()
@@ -89,6 +99,40 @@ class FieldContextApiTests(unittest.TestCase):
             path, headers={"Authorization": "Bearer viewer"}
         )
         self.assertEqual(denied.status_code, 403)
+
+    def test_corrects_boundary_and_requires_property_write(self) -> None:
+        path = f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/fields"
+        created = self.client.post(
+            path, headers={"Authorization": "Bearer admin"}, json=self.payload()
+        )
+        correction_path = f"{path}/{created.json()['id']}/boundary-corrections"
+        correction = {
+            "geometry_geojson": mapping(
+                Polygon([(0.25, 0.25), (0.75, 0.25), (0.75, 0.75), (0.25, 0.75), (0.25, 0.25)])
+            ),
+            "geometry_crs": "EPSG:4326",
+            "source_reference": "synthetic corrected field walk",
+            "observed_at": "2026-09-25T12:00:00+00:00",
+            "classification": "MANUAL_CONFIRMED",
+            "reason": "synthetic operator correction",
+        }
+        denied = self.viewer_client.post(
+            correction_path,
+            headers={"Authorization": "Bearer viewer"},
+            json=correction,
+        )
+        self.assertEqual(denied.status_code, 403)
+
+        response = self.client.post(
+            correction_path,
+            headers={"Authorization": "Bearer admin"},
+            json=correction,
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["boundary_version"], 2)
+        self.assertIsNotNone(response.json()["evidence_id"])
+        listed = self.client.get(path, headers={"Authorization": "Bearer admin"})
+        self.assertEqual(listed.json()["items"][0]["boundary_version"], 2)
 
     def test_rejects_blank_source_at_request_validation(self) -> None:
         path = f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/fields"

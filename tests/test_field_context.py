@@ -64,6 +64,75 @@ class FieldContextTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(audit["event_type"], "FIELD_REGISTERED")
 
+    def test_corrects_boundary_as_immutable_successor_with_distinct_evidence(self) -> None:
+        field = self.application.fields.create(
+            self.tenant.id,
+            property_id=self.property.id,
+            name="TEST_FIELD_CORRECTION",
+            status="ACTIVE",
+            geometry_geojson=self.field_geometry(),
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic original field walk",
+            observed_at="2026-09-24T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            actor="test-operator",
+        )
+        corrected_geometry = mapping(
+            Polygon([(0.25, 0.25), (0.75, 0.25), (0.75, 0.75), (0.25, 0.75), (0.25, 0.25)])
+        )
+        corrected = self.application.fields.correct_boundary(
+            self.tenant.id,
+            property_id=self.property.id,
+            field_id=field.id,
+            geometry_geojson=corrected_geometry,
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic corrected field walk",
+            observed_at="2026-09-25T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            reason="synthetic operator correction",
+            actor="test-corrector",
+        )
+
+        self.assertEqual(corrected.boundary_version, 2)
+        self.assertEqual(self.application.fields.get(self.tenant.id, field.id), corrected)
+        self.assertEqual(
+            self.application.fields.list_for_property(self.tenant.id, self.property.id),
+            [corrected],
+        )
+        versions = self.store.connection.execute(
+            "SELECT version,source_reference FROM field_context_boundary_version WHERE field_context_id=? ORDER BY version",
+            (field.id,),
+        ).fetchall()
+        self.assertEqual([row["version"] for row in versions], [1, 2])
+        self.assertEqual(versions[0]["source_reference"], "synthetic original field walk")
+        registration = self.store.evidence_for_reference(self.tenant.id, field.id)
+        correction = self.store.evidence_for_reference(
+            self.tenant.id, corrected.boundary_version_id
+        )
+        assert registration is not None
+        assert correction is not None
+        self.assertEqual(registration.evidence_type, "FIELD_REGISTRATION")
+        self.assertEqual(correction.evidence_type, "FIELD_BOUNDARY_CORRECTION")
+
+        with self.assertRaisesRegex(ValueError, "unchanged"):
+            self.application.fields.correct_boundary(
+                self.tenant.id,
+                property_id=self.property.id,
+                field_id=field.id,
+                geometry_geojson=corrected_geometry,
+                geometry_crs="EPSG:4326",
+                source_reference="synthetic duplicate correction",
+                observed_at="2026-09-25T13:00:00+00:00",
+                classification=DataClassification.MANUAL_CONFIRMED,
+                reason="synthetic duplicate",
+                actor="test-corrector",
+            )
+        count = self.store.connection.execute(
+            "SELECT COUNT(*) AS count FROM field_context_boundary_version WHERE field_context_id=?",
+            (field.id,),
+        ).fetchone()
+        self.assertEqual(count["count"], 2)
+
     def test_rejects_geometry_outside_property_and_cross_tenant_read(self) -> None:
         outside = mapping(
             Polygon([(0.8, 0.8), (1.2, 0.8), (1.2, 1.2), (0.8, 1.2), (0.8, 0.8)])
@@ -84,6 +153,32 @@ class FieldContextTests(unittest.TestCase):
         with self.assertRaisesRegex(LookupError, "property not found"):
             self.application.fields.list_for_property(
                 self.other_tenant.id, self.property.id
+            )
+        field = self.application.fields.create(
+            self.tenant.id,
+            property_id=self.property.id,
+            name="SCOPED_TEST_FIELD",
+            status="ACTIVE",
+            geometry_geojson=self.field_geometry(),
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic scoped field walk",
+            observed_at="2026-09-24T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            actor="test-operator",
+        )
+        with self.assertRaisesRegex(LookupError, "property not found"):
+            self.application.fields.correct_boundary(
+                self.other_tenant.id,
+                property_id=self.property.id,
+                field_id=field.id,
+                geometry_geojson=self.field_geometry(),
+                geometry_crs="EPSG:4326",
+                source_reference="synthetic cross tenant",
+                observed_at="2026-09-25T12:00:00+00:00",
+                classification=DataClassification.MANUAL_CONFIRMED,
+                reason="synthetic invalid scope",
+                actor="test-operator",
+                platform_admin=True,
             )
 
     def test_snapshot_lookup_fails_closed_for_tenant_property_version_and_checksum(

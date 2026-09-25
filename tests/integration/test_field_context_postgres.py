@@ -94,6 +94,64 @@ class FieldContextPostgresTests(unittest.TestCase):
                         ("synthetic attempted rewrite", field.id),
                     )
 
+        corrected = self.application.fields.correct_boundary(
+            tenant.id,
+            property_id=property_item.id,
+            field_id=field.id,
+            geometry_geojson=self.polygon(-46.997, -24.007, -46.993, -24.003),
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic corrected integration field walk",
+            observed_at="2026-09-25T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            reason="synthetic integration correction",
+            actor="integration-corrector",
+        )
+        self.assertEqual(corrected.boundary_version, 2)
+        self.assertEqual(
+            self.application.fields.get(tenant.id, field.id).boundary_version, 2
+        )
+        with self.store.tenant_transaction(tenant.id):
+            versions = self.store.connection.execute(
+                """SELECT version,source_reference FROM field_context_boundary_version
+                    WHERE tenant_id=%s AND field_context_id=%s ORDER BY version""",
+                (tenant.id, field.id),
+            ).fetchall()
+            registration_evidence = self.store.evidence_for_reference(tenant.id, field.id)
+            correction_evidence = self.store.evidence_for_reference(
+                tenant.id, corrected.boundary_version_id
+            )
+        self.assertEqual([item["version"] for item in versions], [1, 2])
+        assert registration_evidence is not None
+        assert correction_evidence is not None
+        self.assertEqual(registration_evidence.evidence_type, "FIELD_REGISTRATION")
+        self.assertEqual(correction_evidence.evidence_type, "FIELD_BOUNDARY_CORRECTION")
+        with self.assertRaisesRegex(ValueError, "unchanged"):
+            self.application.fields.correct_boundary(
+                tenant.id,
+                property_id=property_item.id,
+                field_id=field.id,
+                geometry_geojson=self.polygon(-46.997, -24.007, -46.993, -24.003),
+                geometry_crs="EPSG:4326",
+                source_reference="synthetic duplicate correction",
+                observed_at="2026-09-25T13:00:00+00:00",
+                classification=DataClassification.MANUAL_CONFIRMED,
+                reason="synthetic duplicate",
+                actor="integration-corrector",
+            )
+        with self.assertRaisesRegex(ValueError, "fully contained"):
+            self.application.fields.correct_boundary(
+                tenant.id,
+                property_id=property_item.id,
+                field_id=field.id,
+                geometry_geojson=self.polygon(-47.01, -24.02, -46.98, -23.99),
+                geometry_crs="EPSG:4326",
+                source_reference="synthetic outside correction",
+                observed_at="2026-09-25T14:00:00+00:00",
+                classification=DataClassification.MANUAL_CONFIRMED,
+                reason="synthetic outside",
+                actor="integration-corrector",
+            )
+
         with self.store.tenant_transaction(other_tenant.id):
             rows = self.store.connection.execute(
                 "SELECT id FROM field_context WHERE tenant_id=%s", (tenant.id,)

@@ -61,6 +61,7 @@ class FieldContext:
     observed_at: str
     classification: DataClassification
     created_at: str = field(default_factory=now_utc)
+    boundary_version_id: str | None = None
 
 
 @dataclass(frozen=True)

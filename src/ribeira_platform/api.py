@@ -144,6 +144,24 @@ class FieldContextRequest(BaseModel):
         return normalized
 
 
+class FieldBoundaryCorrectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    geometry_geojson: dict[str, Any]
+    geometry_crs: str = Field(min_length=1, max_length=32)
+    source_reference: str = Field(min_length=1, max_length=2000)
+    observed_at: str
+    classification: DataClassification = DataClassification.MANUAL_CONFIRMED
+    reason: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("source_reference", "reason")
+    @classmethod
+    def correction_text_must_not_be_blank(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("field boundary correction text must not be blank")
+        return normalized
+
+
 class BoundaryUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     geometry_geojson: dict[str, Any]
@@ -941,7 +959,13 @@ def create_app(
     def safe_field_context(item: Any) -> dict[str, Any]:
         """Return stored field context and evidence, never an agronomic interpretation."""
         payload = to_jsonable(item)
-        evidence = application.store.evidence_for_reference(item.tenant_id, item.id)
+        payload.pop("boundary_version_id", None)
+        reference_id = (
+            item.boundary_version_id
+            if item.boundary_version > 1 and item.boundary_version_id
+            else item.id
+        )
+        evidence = application.store.evidence_for_reference(item.tenant_id, reference_id)
         payload["evidence_id"] = evidence.id if evidence is not None else None
         return payload
 
@@ -1366,6 +1390,34 @@ def create_app(
             source_reference=payload.source_reference,
             observed_at=payload.observed_at,
             classification=payload.classification,
+            actor=ctx.subject,
+            platform_admin=ctx.is_platform_admin,
+        )
+        return safe_field_context(item)
+
+    @app.post(
+        "/v1/tenants/{tenant_id}/properties/{property_id}/fields/{field_id}/boundary-corrections",
+        status_code=201,
+        tags=["farm-360", "fields"],
+    )
+    async def correct_property_field_boundary(
+        tenant_id: str,
+        property_id: str,
+        field_id: str,
+        payload: FieldBoundaryCorrectionRequest,
+        ctx: AuthContext = Depends(context),
+    ):
+        authorize(ctx, "property:write", tenant_id)
+        item = application.fields.correct_boundary(
+            tenant_id,
+            property_id=property_id,
+            field_id=field_id,
+            geometry_geojson=payload.geometry_geojson,
+            geometry_crs=payload.geometry_crs,
+            source_reference=payload.source_reference,
+            observed_at=payload.observed_at,
+            classification=payload.classification,
+            reason=payload.reason,
             actor=ctx.subject,
             platform_admin=ctx.is_platform_admin,
         )

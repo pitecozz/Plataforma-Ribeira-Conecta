@@ -75,13 +75,14 @@ class FieldContextRepository:
         geometry_value = (
             f"ST_SetSRID(ST_GeomFromGeoJSON({p}::text),4326)" if self.postgres else p
         )
+        version_id = new_id()
         self._execute(
             f"""INSERT INTO field_context_boundary_version(
                  id,tenant_id,field_context_id,property_id,version,{geometry_column},geometry_crs,
                  geometry_checksum,source_reference,observed_at,data_classification,reason,created_by,created_at
                ) VALUES ({p},{p},{p},{p},{p},{geometry_value},{p},{p},{p},{p},{p},{p},{p},{p})""",  # nosec B608 - fixed internal SQL and geometry expression
             [
-                new_id(),
+                version_id,
                 item.tenant_id,
                 item.id,
                 item.property_id,
@@ -97,7 +98,106 @@ class FieldContextRepository:
                 item.created_at,
             ],
         )
-        return item
+        return FieldContext(
+            item.id,
+            item.tenant_id,
+            item.property_id,
+            item.name,
+            item.status,
+            item.geometry_geojson,
+            item.geometry_crs,
+            item.boundary_version,
+            item.boundary_checksum,
+            item.source_reference,
+            item.observed_at,
+            item.classification,
+            item.created_at,
+            version_id,
+        )
+
+    def append_boundary_version(
+        self,
+        current: FieldContext,
+        *,
+        geometry_geojson: dict[str, Any],
+        geometry_crs: str,
+        geometry_checksum: str,
+        source_reference: str,
+        observed_at: str,
+        classification: DataClassification,
+        reason: str,
+        actor: str,
+    ) -> FieldContext:
+        p = self.placeholder
+        if self.postgres:
+            locked = self._execute(
+                f"""SELECT id FROM field_context
+                     WHERE tenant_id={p} AND property_id={p} AND id={p}
+                     FOR UPDATE""",  # nosec B608 - fixed internal SQL and placeholder
+                [current.tenant_id, current.property_id, current.id],
+            ).fetchone()
+            if locked is None:
+                raise LookupError("field context not found in tenant property")
+        row = self._execute(
+            f"""SELECT field.id,field.name,field.status,field.created_at,
+                       version.version,version.geometry_checksum
+                  FROM field_context field
+                  JOIN field_context_boundary_version version
+                    ON version.tenant_id=field.tenant_id
+                   AND version.field_context_id=field.id
+                 WHERE field.tenant_id={p} AND field.property_id={p} AND field.id={p}
+                 ORDER BY version.version DESC LIMIT 1""",  # nosec B608 - fixed internal SQL and placeholder
+            [current.tenant_id, current.property_id, current.id],
+        ).fetchone()
+        if row is None:
+            raise LookupError("field context not found in tenant property")
+        if str(row["geometry_checksum"]) == geometry_checksum:
+            raise ValueError("field boundary geometry is unchanged")
+        version_id = new_id()
+        next_version = int(row["version"]) + 1
+        geometry_column = "geometry" if self.postgres else "geometry_geojson"
+        geometry_value = (
+            f"ST_SetSRID(ST_GeomFromGeoJSON({p}::text),4326)" if self.postgres else p
+        )
+        created_at = now_utc()
+        self._execute(
+            f"""INSERT INTO field_context_boundary_version(
+                 id,tenant_id,field_context_id,property_id,version,{geometry_column},geometry_crs,
+                 geometry_checksum,source_reference,observed_at,data_classification,reason,created_by,created_at
+               ) VALUES ({p},{p},{p},{p},{p},{geometry_value},{p},{p},{p},{p},{p},{p},{p},{p})""",  # nosec B608 - fixed internal SQL and geometry expression
+            [
+                version_id,
+                current.tenant_id,
+                current.id,
+                current.property_id,
+                next_version,
+                json.dumps(geometry_geojson, separators=(",", ":")),
+                geometry_crs,
+                geometry_checksum,
+                source_reference,
+                observed_at,
+                classification.value,
+                reason,
+                actor,
+                created_at,
+            ],
+        )
+        return FieldContext(
+            current.id,
+            current.tenant_id,
+            current.property_id,
+            str(row["name"]),
+            str(row["status"]),
+            geometry_geojson,
+            geometry_crs,
+            next_version,
+            geometry_checksum,
+            source_reference,
+            observed_at,
+            classification,
+            self._timestamp(row["created_at"]),
+            version_id,
+        )
 
     def list_for_property(self, tenant_id: str, property_id: str) -> list[FieldContext]:
         p = self.placeholder
@@ -109,12 +209,15 @@ class FieldContextRepository:
         rows = self._execute(
             f"""SELECT field.id,field.tenant_id,field.property_id,field.name,field.status,
                        {geometry} AS geometry_geojson,version.geometry_crs,version.version,
-                       version.geometry_checksum,field.source_reference,field.observed_at,
-                       field.data_classification,field.created_at
+                       version.geometry_checksum,version.source_reference,version.observed_at,
+                       version.data_classification,field.created_at,version.id AS boundary_version_id
                   FROM field_context field
                   JOIN field_context_boundary_version version
                     ON version.tenant_id=field.tenant_id AND version.field_context_id=field.id
-                   AND version.version=1
+                   AND version.version=(SELECT MAX(latest.version)
+                                          FROM field_context_boundary_version latest
+                                         WHERE latest.tenant_id=field.tenant_id
+                                           AND latest.field_context_id=field.id)
                  WHERE field.tenant_id={p} AND field.property_id={p}
                  ORDER BY field.name ASC,field.id ASC""",  # nosec B608 - fixed internal SQL and placeholder
             [tenant_id, property_id],
@@ -136,6 +239,7 @@ class FieldContextRepository:
                 self._timestamp(row["observed_at"]),
                 DataClassification(str(row["data_classification"])),
                 self._timestamp(row["created_at"]),
+                str(row["boundary_version_id"]),
             )
             for row in rows
         ]
@@ -150,12 +254,15 @@ class FieldContextRepository:
         row = self._execute(
             f"""SELECT field.id,field.tenant_id,field.property_id,field.name,field.status,
                        {geometry} AS geometry_geojson,version.geometry_crs,version.version,
-                       version.geometry_checksum,field.source_reference,field.observed_at,
-                       field.data_classification,field.created_at
+                       version.geometry_checksum,version.source_reference,version.observed_at,
+                       version.data_classification,field.created_at,version.id AS boundary_version_id
                   FROM field_context field
                   JOIN field_context_boundary_version version
                     ON version.tenant_id=field.tenant_id AND version.field_context_id=field.id
-                   AND version.version=1
+                   AND version.version=(SELECT MAX(latest.version)
+                                          FROM field_context_boundary_version latest
+                                         WHERE latest.tenant_id=field.tenant_id
+                                           AND latest.field_context_id=field.id)
                  WHERE field.tenant_id={p} AND field.id={p}""",  # nosec B608 - fixed internal SQL and placeholder
             [tenant_id, field_id],
         ).fetchone()
@@ -177,6 +284,7 @@ class FieldContextRepository:
             self._timestamp(row["observed_at"]),
             DataClassification(str(row["data_classification"])),
             self._timestamp(row["created_at"]),
+            str(row["boundary_version_id"]),
         )
 
     def get_snapshot(
@@ -287,7 +395,7 @@ class FieldContextApplication:
                 observed_at,
                 classification,
             )
-            self.repository.create(item, actor=actor)
+            item = self.repository.create(item, actor=actor)
             evidence = self.store.create_evidence(
                 Evidence(
                     id=new_id(),
@@ -318,6 +426,96 @@ class FieldContextApplication:
                     "boundary_version": 1,
                     "classification": classification.value,
                     "evidence_id": evidence.id,
+                    "source_reference_recorded": True,
+                    "observed_at": observed_at,
+                },
+                new_id(),
+                now_utc(),
+            )
+        return item
+
+    def correct_boundary(
+        self,
+        tenant_id: str,
+        *,
+        property_id: str,
+        field_id: str,
+        geometry_geojson: dict[str, Any],
+        geometry_crs: str,
+        source_reference: str,
+        observed_at: str,
+        classification: DataClassification,
+        reason: str,
+        actor: str,
+        platform_admin: bool = False,
+    ) -> FieldContext:
+        source_reference = source_reference.strip()
+        reason = reason.strip()
+        if not source_reference:
+            raise ValueError("field source_reference must not be blank")
+        if not reason:
+            raise ValueError("field boundary correction reason must not be blank")
+        parse_aware(observed_at)
+        geometry, _, checksum = validate_boundary(geometry_geojson, geometry_crs)
+        geometry = json.loads(json.dumps(geometry))
+        with self.store.tenant_transaction(tenant_id, platform_admin):
+            property_item = self.store.get_property(tenant_id, property_id)
+            if property_item is None:
+                raise LookupError("property not found in tenant")
+            current = self.repository.get(tenant_id, field_id)
+            if current is None or current.property_id != property_id:
+                raise LookupError("field context not found in tenant property")
+            if property_item.geometry_geojson is None:
+                raise ValueError("field correction requires a persisted property boundary")
+            if not shape(property_item.geometry_geojson).covers(shape(geometry)):
+                raise ValueError(
+                    "field geometry must be fully contained by the property boundary"
+                )
+            item = self.repository.append_boundary_version(
+                current,
+                geometry_geojson=geometry,
+                geometry_crs=geometry_crs.upper(),
+                geometry_checksum=checksum,
+                source_reference=source_reference,
+                observed_at=observed_at,
+                classification=classification,
+                reason=reason,
+                actor=actor,
+            )
+            assert item.boundary_version_id is not None
+            evidence = self.store.create_evidence(
+                Evidence(
+                    id=new_id(),
+                    tenant_id=tenant_id,
+                    evidence_type="FIELD_BOUNDARY_CORRECTION",
+                    reference_id=item.boundary_version_id,
+                    classification=classification,
+                    source_id=None,
+                    observed_at=observed_at,
+                    transformation=(
+                        "field boundary correction retained as an immutable successor; "
+                        "the original registration evidence remains unchanged"
+                    ),
+                    limitations=[
+                        "the corrected field/talhão remains non-legal operational context",
+                        "the correction does not infer crop, soil, management, or agronomic facts",
+                    ],
+                )
+            )
+            self.store.audit(
+                tenant_id,
+                actor,
+                "FIELD_BOUNDARY_CORRECTED",
+                "field_context_boundary_version",
+                item.boundary_version_id,
+                {
+                    "field_id": field_id,
+                    "property_id": property_id,
+                    "boundary_version": item.boundary_version,
+                    "previous_boundary_version": item.boundary_version - 1,
+                    "classification": classification.value,
+                    "evidence_id": evidence.id,
+                    "reason": reason,
                     "source_reference_recorded": True,
                     "observed_at": observed_at,
                 },
