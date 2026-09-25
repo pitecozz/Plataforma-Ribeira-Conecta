@@ -137,7 +137,94 @@ function FieldRegistration({ api, tenantId, propertyId, propertyGeometry, apiBas
   );
 }
 
-export function FieldPanel({ fields, loadError = false, api, tenantId, propertyId, propertyGeometry = null, apiBaseUrl = "", token = "", canManageFields = false, onCreated }: {
+function FieldBoundaryCorrection({ field, api, tenantId, propertyId, propertyGeometry, apiBaseUrl, token, onCorrected }: {
+  field: FieldContext;
+  api: Farm360Api;
+  tenantId: string;
+  propertyId: string;
+  propertyGeometry: Geometry | null;
+  apiBaseUrl: string;
+  token: string;
+  onCorrected: (field: FieldContext) => void;
+}) {
+  const [geometry, setGeometry] = useState(JSON.stringify(field.geometry_geojson));
+  const [drawPoints, setDrawPoints] = useState<Point[]>([]);
+  const [sourceReference, setSourceReference] = useState("");
+  const [observedAt, setObservedAt] = useState("");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const draftGeometry = useMemo(
+    () => drawPoints.length >= 3 ? drawnGeometry(drawPoints) : field.geometry_geojson,
+    [drawPoints, field.geometry_geojson],
+  );
+
+  const addPoint = (point: Point) => {
+    const next = [...drawPoints, point];
+    setDrawPoints(next);
+    if (next.length >= 3) setGeometry(JSON.stringify(drawnGeometry(next)));
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      const parsed = JSON.parse(geometry) as Geometry;
+      if (!isFieldGeometry(parsed)) throw new Error("geometry");
+      const corrected = await api.correctFieldBoundary(tenantId, propertyId, field.id, {
+        geometry_geojson: parsed,
+        geometry_crs: "EPSG:4326",
+        source_reference: sourceReference.trim(),
+        observed_at: new Date(observedAt).toISOString(),
+        classification: "MANUAL_CONFIRMED",
+        reason: reason.trim(),
+      });
+      onCorrected(corrected);
+      setMessage(`Limite corrigido como versão ${corrected.boundary_version}.`);
+    } catch {
+      setMessage("Não foi possível corrigir o limite. Revise geometria, fonte, data e motivo.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <details className="field-correction">
+      <summary>Corrigir limite</summary>
+      <p className="field-registration-note">A correção cria uma nova versão imutável. O limite anterior e suas evidências são preservados.</p>
+      <div className="field-drawing">
+        <MapCanvas
+          aoi={drawPoints.length >= 3 ? draftGeometry : propertyGeometry ?? field.geometry_geojson}
+          apiBaseUrl={apiBaseUrl}
+          tileUrl={null}
+          deltaTileUrl={null}
+          ndviEnabled={false}
+          deltaEnabled={false}
+          token={token}
+          assets={[]}
+          fields={[]}
+          selectionLocation={null}
+          onMapClick={addPoint}
+        />
+        <div className="field-drawing-actions">
+          <button type="button" onClick={() => { setDrawPoints([]); setGeometry(JSON.stringify(field.geometry_geojson)); }}>Restaurar limite atual</button>
+        </div>
+        <small>Para redesenhar, clique três ou mais pontos dentro da propriedade. O servidor valida a contenção.</small>
+      </div>
+      <form onSubmit={submit}>
+        <label>Novo limite WGS84 (GeoJSON)<textarea value={geometry} onChange={(event) => { setGeometry(event.target.value); setDrawPoints([]); }} required /></label>
+        <label>Fonte factual<input value={sourceReference} onChange={(event) => setSourceReference(event.target.value)} required /></label>
+        <label>Data da observação<input type="datetime-local" value={observedAt} onChange={(event) => setObservedAt(event.target.value)} required /></label>
+        <label>Motivo da correção<textarea value={reason} onChange={(event) => setReason(event.target.value)} required /></label>
+        <button type="submit" disabled={saving}>{saving ? "Salvando…" : "Salvar nova versão"}</button>
+      </form>
+      {message && <p><Status value={message.startsWith("Limite corrigido") ? "CONFIRMED" : "UNKNOWN"} /> {message}</p>}
+    </details>
+  );
+}
+
+export function FieldPanel({ fields, loadError = false, api, tenantId, propertyId, propertyGeometry = null, apiBaseUrl = "", token = "", canManageFields = false, onCreated, onCorrected }: {
   fields: FieldContext[];
   loadError?: boolean;
   api?: Farm360Api;
@@ -148,6 +235,7 @@ export function FieldPanel({ fields, loadError = false, api, tenantId, propertyI
   token?: string;
   canManageFields?: boolean;
   onCreated?: (field: FieldContext) => void;
+  onCorrected?: (field: FieldContext) => void;
 }) {
   return (
     <section className="field-panel">
@@ -172,6 +260,9 @@ export function FieldPanel({ fields, loadError = false, api, tenantId, propertyI
                 <dt>Evidência</dt><dd>{field.evidence_id}</dd>
               </dl>
             </details>
+            {canManageFields && api && tenantId && propertyId && onCorrected && (
+              <FieldBoundaryCorrection field={field} api={api} tenantId={tenantId} propertyId={propertyId} propertyGeometry={propertyGeometry} apiBaseUrl={apiBaseUrl} token={token} onCorrected={onCorrected} />
+            )}
           </article>
         ))}
       </div>

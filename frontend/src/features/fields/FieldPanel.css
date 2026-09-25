@@ -16,8 +16,12 @@
   padding: 12px;
 }
 
-.field-registration form { display: grid; gap: 8px; margin-top: 10px; }
-.field-registration textarea { min-height: 110px; font-family: ui-monospace, monospace; }
+.field-registration form,
+.field-correction form { display: grid; gap: 8px; margin-top: 10px; }
+.field-registration textarea,
+.field-correction textarea { min-height: 110px; font-family: ui-monospace, monospace; }
+.field-correction { margin-top: 4px; }
+.field-correction > summary { cursor: pointer; font-weight: 600; }
 .field-registration-note { color: #46584b; font-size: 0.9rem; }
 .field-drawing { display: grid; gap: 8px; margin-top: 10px; }
 .field-drawing .map-canvas { min-height: 320px; }

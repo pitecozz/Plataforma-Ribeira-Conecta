@@ -110,6 +110,9 @@ export function Farm360Page({
   const [targetProductId, setTargetProductId] = useState<string | null>(null);
   const [comparison, setComparison] = useState<TemporalComparison | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
+  const comparisonFieldBoundaryChecksum = fields.find(
+    (field) => field.id === comparisonFieldId,
+  )?.boundary_checksum ?? null;
   const [partialLoadIssues, setPartialLoadIssues] =
     useState<PartialLoadIssues>(noPartialLoadIssues);
   const [optionalDataLoading, setOptionalDataLoading] = useState(true);
@@ -232,6 +235,8 @@ export function Farm360Page({
         active = false;
       };
     }
+    setComparison(null);
+    setDeltaEnabled(false);
     setComparisonLoading(true);
     void api
       .comparison(
@@ -256,6 +261,7 @@ export function Farm360Page({
   }, [
     api,
     baselineProductId,
+    comparisonFieldBoundaryChecksum,
     comparisonFieldId,
     mode,
     propertyId,
@@ -395,6 +401,13 @@ export function Farm360Page({
           token={token}
           canManageFields={canManageProperties}
           onCreated={(field) => setFields((current) => [...current, field])}
+          onCorrected={(field) => {
+            setFields((current) => current.map((item) => item.id === field.id ? field : item));
+            if (comparisonFieldId === field.id) {
+              setComparison(null);
+              setDeltaEnabled(false);
+            }
+          }}
         />
         {canRunSatelliteOperations && <SceneOperationsPanel
           api={api}

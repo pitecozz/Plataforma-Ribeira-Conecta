@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(cleanup);
@@ -63,6 +63,54 @@ describe("FieldPanel", () => {
     fireEvent.click(screen.getByText("Desfazer último ponto"));
     expect(screen.getByText("2 vértice(s) selecionado(s).")).toBeInTheDocument();
     expect(screen.getByLabelText("GeoJSON técnico (WGS84)")).toHaveValue("");
+  });
+
+  it("corrects a field boundary as a source-backed successor", async () => {
+    const corrected = {
+      ...field,
+      geometry_geojson: { type: "Polygon" as const, coordinates: [[[-47.2, -24.1], [-47.1, -24.1], [-47.1, -24.2], [-47.2, -24.1]]] },
+      boundary_version: 2,
+      boundary_checksum: "b".repeat(64),
+      evidence_id: "evidence-2",
+    };
+    const correctFieldBoundary = vi.fn().mockResolvedValue(corrected);
+    const onCorrected = vi.fn();
+    render(<FieldPanel fields={[field]} api={{ correctFieldBoundary } as never} tenantId="tenant" propertyId="property" propertyGeometry={propertyGeometry} canManageFields onCorrected={onCorrected} />);
+
+    fireEvent.click(screen.getByText("Corrigir limite"));
+    const correction = screen.getByText("Corrigir limite").parentElement as HTMLElement;
+    fireEvent.change(within(correction).getByLabelText("Fonte factual"), { target: { value: "levantamento GNSS 2026-09-25" } });
+    fireEvent.change(within(correction).getByLabelText("Data da observação"), { target: { value: "2026-09-25T09:30" } });
+    fireEvent.change(within(correction).getByLabelText("Motivo da correção"), { target: { value: "Ajuste confirmado em vistoria" } });
+    fireEvent.click(within(correction).getByText("Adicionar primeiro ponto"));
+    fireEvent.click(within(correction).getByText("Adicionar segundo ponto"));
+    fireEvent.click(within(correction).getByText("Adicionar terceiro ponto"));
+    fireEvent.click(within(correction).getByRole("button", { name: "Salvar nova versão" }));
+
+    await vi.waitFor(() => expect(correctFieldBoundary).toHaveBeenCalledWith("tenant", "property", "field-1", expect.objectContaining({
+      geometry_crs: "EPSG:4326",
+      source_reference: "levantamento GNSS 2026-09-25",
+      classification: "MANUAL_CONFIRMED",
+      reason: "Ajuste confirmado em vistoria",
+    })));
+    expect(onCorrected).toHaveBeenCalledWith(corrected);
+    expect(await screen.findByText("Limite corrigido como versão 2.")).toBeTruthy();
+  });
+
+  it("keeps the current field after a correction failure", async () => {
+    const onCorrected = vi.fn();
+    render(<FieldPanel fields={[field]} api={{ correctFieldBoundary: vi.fn().mockRejectedValue(new Error("invalid")) } as never} tenantId="tenant" propertyId="property" propertyGeometry={propertyGeometry} canManageFields onCorrected={onCorrected} />);
+
+    fireEvent.click(screen.getByText("Corrigir limite"));
+    const correction = screen.getByText("Corrigir limite").parentElement as HTMLElement;
+    fireEvent.change(within(correction).getByLabelText("Fonte factual"), { target: { value: "vistoria" } });
+    fireEvent.change(within(correction).getByLabelText("Data da observação"), { target: { value: "2026-09-25T09:30" } });
+    fireEvent.change(within(correction).getByLabelText("Motivo da correção"), { target: { value: "ajuste" } });
+    fireEvent.click(within(correction).getByRole("button", { name: "Salvar nova versão" }));
+
+    expect(await screen.findByText(/Não foi possível corrigir o limite/)).toBeTruthy();
+    expect(screen.getByText("Talhão sintético")).toBeTruthy();
+    expect(onCorrected).not.toHaveBeenCalled();
   });
 
   it("posts only an explicit source-backed WGS84 field registration", async () => {

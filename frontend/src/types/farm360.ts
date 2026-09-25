@@ -84,6 +84,15 @@ export interface FieldContextCreate {
   classification: "MANUAL_CONFIRMED";
 }
 
+export interface FieldBoundaryCorrectionCreate {
+  geometry_geojson: Geometry;
+  geometry_crs: "EPSG:4326";
+  source_reference: string;
+  observed_at: string;
+  classification: "MANUAL_CONFIRMED";
+  reason: string;
+}
+
 export interface ActionOutcomeCreate {
   outcome_detail: string;
   outcome_classification: string;

@@ -4,6 +4,7 @@ import type {
   BoundaryImportPreview,
   AssetCreate,
   DigitalTwinAsset,
+  FieldBoundaryCorrectionCreate,
   FieldContext,
   FieldContextCreate,
   NdviProduct,
@@ -143,6 +144,17 @@ export class Farm360Api {
   ) {
     return this.post<FieldContext>(
       `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/fields`,
+      payload,
+    );
+  }
+  correctFieldBoundary(
+    tenantId: string,
+    propertyId: string,
+    fieldId: string,
+    payload: FieldBoundaryCorrectionCreate,
+  ) {
+    return this.post<FieldContext>(
+      `/v1/tenants/${encodeURIComponent(tenantId)}/properties/${encodeURIComponent(propertyId)}/fields/${encodeURIComponent(fieldId)}/boundary-corrections`,
       payload,
     );
   }
