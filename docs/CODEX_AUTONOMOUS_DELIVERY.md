@@ -136,7 +136,7 @@ not hard-code a one-off municipal conclusion.
 | Business / Prospect | Customer, contract, opportunity evidence, score foundation | public-data prospect intake and environment profile | NOW/NEXT |
 | Rules / Monitor | Versioned rule and alert/action chain | sector/customer/property/field/asset inheritance and feedback | NOW |
 | Connect | Asset/contract primitives | POP/tower inventory, LoS/Fresnel, feasibility evidence | NEXT |
-| Agro / Banana | Rainfall, municipal baseline and imagery foundations | fields, verified agronomic observations, inspection workflow | NEXT |
+| Agro / Banana | Rainfall, municipal baseline, imagery foundations and source-backed fields drawn or supplied in Farm360 | verified agronomic observations and inspection workflow | NEXT |
 | IoT | Architecture only | device, telemetry, MQTT/LoRaWAN, replay-safe pipeline | NEXT |
 | Energy / Security | Commercial asset primitives | spatial inventory, condition data and operational rules | NEXT |
 | Trace | Audit/evidence implemented | batch/harvest/packing/transport chain | LATER |

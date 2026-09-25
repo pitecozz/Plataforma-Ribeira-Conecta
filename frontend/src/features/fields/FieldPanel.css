@@ -19,3 +19,6 @@
 .field-registration form { display: grid; gap: 8px; margin-top: 10px; }
 .field-registration textarea { min-height: 110px; font-family: ui-monospace, monospace; }
 .field-registration-note { color: #46584b; font-size: 0.9rem; }
+.field-drawing { display: grid; gap: 8px; margin-top: 10px; }
+.field-drawing .map-canvas { min-height: 320px; }
+.field-drawing-actions { display: flex; flex-wrap: wrap; gap: 8px; }

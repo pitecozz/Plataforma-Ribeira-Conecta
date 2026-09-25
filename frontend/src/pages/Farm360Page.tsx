@@ -390,8 +390,11 @@ export function Farm360Page({
           api={api}
           tenantId={tenantId}
           propertyId={propertyId}
+          propertyGeometry={property.geometry_geojson}
+          apiBaseUrl={apiBaseUrl}
+          token={token}
           canManageFields={canManageProperties}
-          onCreated={(field) => setFields((current) => [...current, field].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")))}
+          onCreated={(field) => setFields((current) => [...current, field])}
         />
         {canRunSatelliteOperations && <SceneOperationsPanel
           api={api}
