@@ -72,12 +72,14 @@ CREATE TABLE IF NOT EXISTS processing_job (
   output_product_id TEXT, failure_code TEXT, failure_reason TEXT, created_at TEXT NOT NULL, started_at TEXT,
   finished_at TEXT, attempt INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
   next_attempt_at TEXT, heartbeat_at TEXT, claimed_by TEXT, claimed_at TEXT, requested_by TEXT,
-  request_id TEXT, correlation_id TEXT, UNIQUE(tenant_id, idempotency_key)
+  request_id TEXT, correlation_id TEXT, field_id TEXT, field_boundary_version INTEGER,
+  field_boundary_checksum TEXT, UNIQUE(tenant_id, idempotency_key)
 );
 CREATE TABLE IF NOT EXISTS processing_job_transition (
   id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, job_id TEXT NOT NULL, from_status TEXT,
   to_status TEXT NOT NULL, attempt INTEGER NOT NULL, actor TEXT NOT NULL, worker_id TEXT,
-  failure_code TEXT, failure_reason TEXT, request_id TEXT, correlation_id TEXT, created_at TEXT NOT NULL
+  failure_code TEXT, failure_reason TEXT, request_id TEXT, correlation_id TEXT,
+  created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS derived_product (
   id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, property_id TEXT NOT NULL, scene_id TEXT NOT NULL,
@@ -86,7 +88,9 @@ CREATE TABLE IF NOT EXISTS derived_product (
   mean TEXT, median TEXT, coverage_percentage TEXT, output_reference TEXT, output_checksum TEXT,
   algorithm_id TEXT NOT NULL, algorithm_version TEXT NOT NULL, formula TEXT NOT NULL,
   input_asset_keys TEXT NOT NULL, parameters TEXT NOT NULL, limitations TEXT NOT NULL,
-  quality TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(tenant_id, processing_job_id)
+  quality TEXT NOT NULL, created_at TEXT NOT NULL, field_id TEXT,
+  field_boundary_version INTEGER, field_boundary_checksum TEXT,
+  UNIQUE(tenant_id, processing_job_id)
 );
 CREATE TABLE IF NOT EXISTS derived_product_dependency (
   tenant_id TEXT NOT NULL, derived_product_id TEXT NOT NULL,
@@ -593,7 +597,27 @@ class GeospatialRepository:
     def create_evidence(self, evidence: Evidence) -> Evidence:
         return self.store.create_evidence(evidence)
 
+    @staticmethod
+    def _validate_field_snapshot(item: ProcessingJob | DerivedProduct) -> None:
+        values = (
+            item.field_id,
+            item.field_boundary_version,
+            item.field_boundary_checksum,
+        )
+        if any(value is not None for value in values) and not all(
+            value is not None for value in values
+        ):
+            raise ValueError("field snapshot must include id, version, and checksum")
+        if item.field_boundary_version is not None and item.field_boundary_version < 1:
+            raise ValueError("field boundary version must be positive")
+        if (
+            item.field_boundary_checksum is not None
+            and len(item.field_boundary_checksum) != 64
+        ):
+            raise ValueError("field boundary checksum must be SHA-256")
+
     def create_job(self, item: ProcessingJob, actor: str = "system") -> ProcessingJob:
+        self._validate_field_snapshot(item)
         p = self.p
         existing = self._one(
             f"SELECT * FROM processing_job WHERE tenant_id={p} AND idempotency_key={p}",  # nosec B608
@@ -629,6 +653,9 @@ class GeospatialRepository:
                 "requested_by",
                 "request_id",
                 "correlation_id",
+                "field_id",
+                "field_boundary_version",
+                "field_boundary_checksum",
             ],
             [
                 item.id,
@@ -656,6 +683,9 @@ class GeospatialRepository:
                 item.requested_by,
                 item.request_id,
                 item.correlation_id,
+                item.field_id,
+                item.field_boundary_version,
+                item.field_boundary_checksum,
             ],
         )
         self._record_transition(item, None, item.status, actor, None)
@@ -692,6 +722,16 @@ class GeospatialRepository:
             row["requested_by"] if "requested_by" in row.keys() else None,
             row["request_id"] if "request_id" in row.keys() else None,
             row["correlation_id"] if "correlation_id" in row.keys() else None,
+            str(row["field_id"])
+            if "field_id" in row.keys() and row["field_id"]
+            else None,
+            int(row["field_boundary_version"])
+            if "field_boundary_version" in row.keys()
+            and row["field_boundary_version"] is not None
+            else None,
+            row["field_boundary_checksum"]
+            if "field_boundary_checksum" in row.keys()
+            else None,
         )
 
     def get_job(self, tenant_id: str, job_id: str) -> ProcessingJob | None:
@@ -1033,6 +1073,7 @@ class GeospatialRepository:
         return result
 
     def create_derived_product(self, item: DerivedProduct) -> DerivedProduct:
+        self._validate_field_snapshot(item)
         stats = item.statistics
         self._insert(
             "derived_product",
@@ -1061,6 +1102,9 @@ class GeospatialRepository:
                 "limitations",
                 "quality",
                 "created_at",
+                "field_id",
+                "field_boundary_version",
+                "field_boundary_checksum",
             ],
             [
                 item.id,
@@ -1087,6 +1131,9 @@ class GeospatialRepository:
                 self._json(item.limitations),
                 self._json([value.value for value in item.quality]),
                 item.created_at,
+                item.field_id,
+                item.field_boundary_version,
+                item.field_boundary_checksum,
             ],
         )
         return item
@@ -1190,6 +1237,16 @@ class GeospatialRepository:
             self._decode(row["limitations"], []),
             [GeospatialQuality(item) for item in self._decode(row["quality"], [])],
             self._timestamp(row["created_at"]) or "",
+            str(row["field_id"])
+            if "field_id" in row.keys() and row["field_id"]
+            else None,
+            int(row["field_boundary_version"])
+            if "field_boundary_version" in row.keys()
+            and row["field_boundary_version"] is not None
+            else None,
+            row["field_boundary_checksum"]
+            if "field_boundary_checksum" in row.keys()
+            else None,
         )
 
     def list_derived_products(

@@ -64,6 +64,70 @@ class VerticalSliceTests(unittest.TestCase):
         self.assertIsNone(result.alert)
         self.assertIsNone(result.action)
 
+    def test_field_temporal_delta_selects_field_rule_and_snapshots_boundary(
+        self,
+    ) -> None:
+        field = self.app.fields.create(
+            self.tenant.id,
+            property_id=self.property.id,
+            name="Synthetic field",
+            status="ACTIVE",
+            geometry_geojson={
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-47.01, -24.01],
+                        [-47.01, -24.02],
+                        [-47.02, -24.02],
+                        [-47.02, -24.01],
+                        [-47.01, -24.01],
+                    ]
+                ],
+            },
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic_test_data",
+            observed_at="2026-09-24T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            actor="operator",
+        )
+        self.app.create_rule(
+            RuleDefinition(
+                id=new_id(),
+                tenant_id=self.tenant.id,
+                version=1,
+                name="explicit field delta threshold",
+                authority=RuleAuthority.REGRA_AGRONOMICA,
+                metric="ndvi_temporal_delta_mean",
+                operator="<",
+                threshold=-0.1,
+                unit="index",
+                severity="HIGH",
+                status="ACTIVE",
+                approved_by="agronomist-test",
+                valid_from="2026-09-16T00:00:00+00:00",
+                scope_type="FIELD",
+                scope_field_id=field.id,
+            )
+        )
+        result = self.app.decisions.evaluate_temporal_delta(
+            self.tenant.id,
+            self.property,
+            "synthetic-field-derived-product",
+            -0.12,
+            "synthetic-field-derived-evidence",
+            True,
+            "operator",
+            field.id,
+            field.boundary_version,
+            field.boundary_checksum,
+        )
+        self.assertEqual(result.decision.status, DecisionStatus.ACTIONABLE)
+        self.assertEqual(result.decision.selected_rule_scope_type, "FIELD")
+        self.assertEqual(result.decision.subject_field_id, field.id)
+        self.assertEqual(
+            result.decision.subject_field_boundary_checksum, field.boundary_checksum
+        )
+
     def activate_rule(
         self, metric: str = "soil_moisture", threshold: float = 30.0
     ) -> None:

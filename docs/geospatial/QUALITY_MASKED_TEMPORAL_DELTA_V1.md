@@ -20,14 +20,23 @@ Bare soil and water remain accepted: their NDVI is mathematically meaningful.
 SCL class, local checksum, accepted/excluded class sets, policy version and
 discarded pixels are persisted in the quality-masked product parameters.
 Temporal-delta creation and read paths fail closed unless both upstream products
-retain that complete, internally consistent mask record; legacy or tampered
-deltas fall back to the explicitly aggregate comparison rather than being
-presented as pixel-comparable evidence. The authenticated temporal-delta
-evaluation uses only the persisted mean as `ndvi_temporal_delta_mean`, preserves
-the derived-product evidence and exact selected rule version/scope, and creates
+retain that complete, internally consistent mask record. Property-scoped jobs
+remain backward compatible. An optional field/talhão-scoped job snapshots the
+exact tenant-local `field_id`, property, immutable boundary version and SHA-256
+geometry checksum on both job and product; PostgreSQL composite foreign keys and
+the equivalent test-store lookup reject tenant/property/version/checksum drift.
+Processing transforms that exact snapshot geometry to the baseline grid and
+clips both already quality-masked NDVI inputs before subtraction. Only pixels
+inside the field and finite in both inputs contribute; valid, nodata and coverage
+statistics still describe the full output grid, and both upstream dependencies
+remain explicit. Legacy, mismatched or tampered field provenance is not eligible
+for `FIELD` rules. The authenticated temporal-delta evaluation uses only the
+persisted mean as `ndvi_temporal_delta_mean`, preserves the derived-product
+evidence, field boundary snapshot and exact selected rule version/scope, and creates
 an alert plus a non-automated targeted field-inspection recommendation only when
-the rule triggers. Invalid provenance or no applicable rule is `INCONCLUSIVE`;
-a valid non-trigger is `NO_TRIGGER`. Farm360 exposes this evaluation only to
+the rule triggers. Invalid provenance or no applicable rule is `INCONCLUSIVE`; field rules have
+precedence only for a valid field-clipped delta, followed by property, customer
+and tenant scope. A valid non-trigger is `NO_TRIGGER`. Farm360 exposes this evaluation only to
 users with both `geospatial:read` and `decision:evaluate`, then refreshes the
 persisted decision/action workflow. The delta never constitutes a diagnosis.
 Scene `eo:cloud_cover` remains scene metadata; it is not AOI valid coverage.

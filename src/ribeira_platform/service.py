@@ -120,6 +120,24 @@ class RibeiraApplication:
                     product, baseline, target
                 )
             )
+            field = (
+                self.fields.repository.get_snapshot(
+                    tenant_id,
+                    property_id,
+                    product.field_id,
+                    product.field_boundary_version,
+                    product.field_boundary_checksum,
+                )
+                if product.field_id is not None
+                and product.field_boundary_version is not None
+                and product.field_boundary_checksum is not None
+                else None
+            )
+            field_provenance_valid = product.field_id is None or (
+                field is not None
+                and self.geospatial._has_valid_field_delta_provenance(product, field)
+            )
+            provenance_valid = provenance_valid and field_provenance_valid
             evidence = self.store.evidence_for_reference(tenant_id, product.id)
             provenance_valid = (
                 provenance_valid
@@ -137,6 +155,13 @@ class RibeiraApplication:
                 evidence.id if evidence is not None else None,
                 provenance_valid,
                 actor,
+                field.id if field is not None and field_provenance_valid else None,
+                field.boundary_version
+                if field is not None and field_provenance_valid
+                else None,
+                field.boundary_checksum
+                if field is not None and field_provenance_valid
+                else None,
             )
 
     def create_tenant(

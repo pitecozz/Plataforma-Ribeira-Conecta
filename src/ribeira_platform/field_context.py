@@ -179,6 +179,53 @@ class FieldContextRepository:
             self._timestamp(row["created_at"]),
         )
 
+    def get_snapshot(
+        self,
+        tenant_id: str,
+        property_id: str,
+        field_id: str,
+        version: int,
+        checksum: str,
+    ) -> FieldContext | None:
+        p = self.placeholder
+        geometry = (
+            "ST_AsGeoJSON(version.geometry)"
+            if self.postgres
+            else "version.geometry_geojson"
+        )
+        row = self._execute(
+            f"""SELECT field.id,field.tenant_id,field.property_id,field.name,field.status,
+                       {geometry} AS geometry_geojson,version.geometry_crs,version.version,
+                       version.geometry_checksum,version.source_reference,version.observed_at,
+                       version.data_classification,field.created_at
+                  FROM field_context field
+                  JOIN field_context_boundary_version version
+                    ON version.tenant_id=field.tenant_id AND version.field_context_id=field.id
+                 WHERE field.tenant_id={p} AND field.property_id={p} AND field.id={p}
+                   AND version.property_id={p} AND version.version={p}
+                   AND version.geometry_checksum={p}""",  # nosec B608 - fixed internal SQL and placeholder
+            [tenant_id, property_id, field_id, property_id, version, checksum],
+        ).fetchone()
+        if row is None:
+            return None
+        return FieldContext(
+            str(row["id"]),
+            str(row["tenant_id"]),
+            str(row["property_id"]),
+            str(row["name"]),
+            str(row["status"]),
+            json.loads(row["geometry_geojson"])
+            if isinstance(row["geometry_geojson"], str)
+            else row["geometry_geojson"],
+            str(row["geometry_crs"]),
+            int(row["version"]),
+            str(row["geometry_checksum"]),
+            str(row["source_reference"]),
+            self._timestamp(row["observed_at"]),
+            DataClassification(str(row["data_classification"])),
+            self._timestamp(row["created_at"]),
+        )
+
 
 class FieldContextApplication:
     """Register a field only when its source, time and containing property exist."""

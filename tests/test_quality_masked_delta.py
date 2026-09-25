@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 import numpy as np
@@ -98,6 +99,39 @@ class QualityMaskedDeltaTests(unittest.TestCase):
         self.assertEqual(output.quality_mask["discarded_by_scl"], 9)
         self.assertEqual(output.input_asset_keys, ["B04_10m", "B08_10m", "SCL_20m"])
         validate_cog(self.storage.read_local_path(output.output_reference))
+
+    def test_field_delta_uses_only_valid_pixels_inside_exact_geometry(self) -> None:
+        baseline = NdviProcessor(self.storage).process(
+            self._assets("field-base", 3.0, np.full((4, 4), 4)),
+            self.aoi,
+            "derived/field-base.tif",
+            quality_policy=Sentinel2QualityPolicy(),
+        )
+        target_scl = np.full((4, 4), 4, dtype="uint8")
+        target_scl[0, 0] = 8
+        target = NdviProcessor(self.storage).process(
+            self._assets("field-target", 5.0, target_scl),
+            self.aoi,
+            "derived/field-target.tif",
+            quality_policy=Sentinel2QualityPolicy(),
+        )
+        field_geometry = {
+            "type": "Polygon",
+            "coordinates": [[(0, 0), (0.5, 0), (0.5, 1), (0, 1), (0, 0)]],
+        }
+        delta = TemporalDeltaProcessor(self.storage).process(
+            baseline.output_reference,
+            target.output_reference,
+            "derived/field-delta.tif",
+            field_geometry,
+        )
+        self.assertEqual(delta.statistics.valid_count, 7)
+        self.assertEqual(delta.statistics.nodata_count, 9)
+        self.assertEqual(delta.statistics.coverage_percentage, Decimal("43.75"))
+        with rasterio.open(self.storage.read_local_path(delta.output_reference)) as src:
+            values = src.read(1)
+            self.assertTrue(np.isnan(values[:, 2:]).all())
+            self.assertTrue(np.isnan(values[0, 0]))
 
     def test_delta_uses_only_valid_intersection_and_writes_float_cog(self) -> None:
         baseline = NdviProcessor(self.storage).process(

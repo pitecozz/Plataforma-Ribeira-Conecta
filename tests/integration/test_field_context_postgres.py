@@ -99,3 +99,94 @@ class FieldContextPostgresTests(unittest.TestCase):
                 "SELECT id FROM field_context WHERE tenant_id=%s", (tenant.id,)
             ).fetchall()
         self.assertEqual(rows, [])
+
+    def test_field_delta_snapshot_constraints_reject_mismatched_context(self) -> None:
+        tenant = self.tenant("Synthetic delta snapshot tenant")
+        other_tenant = self.tenant("Other synthetic delta snapshot tenant")
+        property_item = self.application.create_property(
+            tenant.id,
+            "Synthetic delta property",
+            self.polygon(-47.0, -24.01, -46.99, -24.0),
+            "EPSG:4326",
+            boundary_source="synthetic integration boundary",
+            classification=DataClassification.MANUAL_CONFIRMED,
+        )
+        other_property = self.application.create_property(
+            tenant.id,
+            "Other synthetic delta property",
+            self.polygon(-48.0, -25.01, -47.99, -25.0),
+            "EPSG:4326",
+            boundary_source="synthetic integration boundary",
+            classification=DataClassification.MANUAL_CONFIRMED,
+        )
+        field = self.application.fields.create(
+            tenant.id,
+            property_id=property_item.id,
+            name="Synthetic delta field",
+            status="ACTIVE",
+            geometry_geojson=self.polygon(-46.998, -24.008, -46.992, -24.002),
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic integration field walk",
+            observed_at="2026-09-24T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            actor="integration-operator",
+        )
+        with self.store.tenant_transaction(tenant.id):
+            snapshot = self.application.fields.repository.get_snapshot(
+                tenant.id,
+                property_item.id,
+                field.id,
+                field.boundary_version,
+                field.boundary_checksum,
+            )
+            mismatch = self.application.fields.repository.get_snapshot(
+                tenant.id,
+                other_property.id,
+                field.id,
+                field.boundary_version,
+                field.boundary_checksum,
+            )
+        self.assertIsNotNone(snapshot)
+        self.assertIsNone(mismatch)
+        with self.store.tenant_transaction(other_tenant.id):
+            self.assertIsNone(
+                self.application.fields.repository.get_snapshot(
+                    other_tenant.id,
+                    property_item.id,
+                    field.id,
+                    field.boundary_version,
+                    field.boundary_checksum,
+                )
+            )
+        with self.store.tenant_transaction(tenant.id):
+            constraints = self.store.connection.execute(
+                """SELECT conname FROM pg_constraint
+                     WHERE conname IN (
+                       'processing_job_field_snapshot_fk',
+                       'derived_product_field_snapshot_fk',
+                       'derived_product_job_field_snapshot_fk'
+                     )"""
+            ).fetchall()
+        self.assertEqual(
+            {row["conname"] for row in constraints},
+            {
+                "processing_job_field_snapshot_fk",
+                "derived_product_field_snapshot_fk",
+                "derived_product_job_field_snapshot_fk",
+            },
+        )
+        with self.store.tenant_transaction(tenant.id):
+            triggers = self.store.connection.execute(
+                """SELECT tgname FROM pg_trigger
+                     WHERE tgname IN (
+                       'processing_job_field_delta_snapshot_immutable',
+                       'derived_product_field_delta_snapshot_immutable'
+                     ) AND NOT tgisinternal"""
+            ).fetchall()
+        self.assertEqual(
+            {row["tgname"] for row in triggers},
+            {
+                "processing_job_field_delta_snapshot_immutable",
+                "derived_product_field_delta_snapshot_immutable",
+            },
+        )

@@ -664,6 +664,51 @@ class Farm360ApiTests(unittest.TestCase):
         )
         repository.create_evidence(evidence)
 
+        field = self.application.fields.create(
+            self.tenant.id,
+            property_id=self.property.id,
+            name="Synthetic delta field",
+            status="ACTIVE",
+            geometry_geojson={
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [0.2, 0.2],
+                        [0.2, 0.8],
+                        [0.8, 0.8],
+                        [0.8, 0.2],
+                        [0.2, 0.2],
+                    ]
+                ],
+            },
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic_test_data",
+            observed_at="2026-09-24T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            actor="operator",
+        )
+        tampered_field_delta = replace(
+            delta,
+            id=new_id(),
+            processing_job_id=new_id(),
+            field_id=field.id,
+            field_boundary_version=field.boundary_version,
+            field_boundary_checksum=field.boundary_checksum,
+            parameters={
+                **delta.parameters,
+                "field_snapshot": {
+                    "field_id": field.id,
+                    "boundary_version": field.boundary_version,
+                    "boundary_checksum": "0" * 64,
+                },
+            },
+        )
+        self.assertFalse(
+            self.application.geospatial._has_valid_field_delta_provenance(
+                tampered_field_delta, field
+            )
+        )
+
         comparison = self.client.get(
             f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
             params={

@@ -198,6 +198,7 @@ class TemporalDeltaJobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     baseline_product_id: str
     target_product_id: str
+    field_id: str | None = None
 
 
 class RuleRequest(BaseModel):
@@ -2372,6 +2373,7 @@ def create_app(
                 payload.baseline_product_id,
                 payload.target_product_id,
                 ctx.subject,
+                payload.field_id,
                 ctx.is_platform_admin,
             )
         )

@@ -77,6 +77,9 @@ class DecisionEngine:
         evidence_id: str | None,
         provenance_valid: bool,
         actor: str = "system",
+        field_id: str | None = None,
+        field_boundary_version: int | None = None,
+        field_boundary_checksum: str | None = None,
     ) -> DecisionResult:
         metric = "ndvi_temporal_delta_mean"
         evidence_ids = [evidence_id] if evidence_id is not None else []
@@ -108,7 +111,7 @@ class DecisionEngine:
             return DecisionResult(decision, None, None)
 
         applicable_rules = self.store.active_rules(
-            tenant_id, metric, property.id, None, None
+            tenant_id, metric, property.id, None, field_id
         )
         if not applicable_rules:
             decision = Decision(
@@ -130,12 +133,22 @@ class DecisionEngine:
                 missing_data=[f"active_rule:{metric}"],
                 conflicts=[],
                 recommended_action=None,
+                subject_field_id=field_id,
+                subject_field_boundary_version=field_boundary_version,
+                subject_field_boundary_checksum=field_boundary_checksum,
             )
             decision = self.store.create_decision(decision)
             self._audit(tenant_id, actor, decision, "rule_missing")
             return DecisionResult(decision, None, None)
 
-        priority = {"PROPERTY": 0, "CUSTOMER": 1, "TENANT": 2}
+        priority = {
+            "FIELD": 0,
+            "PROPERTY": 1,
+            "CUSTOMER": 2,
+            "TENANT": 3,
+        }
+        if field_id is None:
+            priority.pop("FIELD")
         supported_rules = [
             rule for rule in applicable_rules if rule.scope_type in priority
         ]
@@ -179,6 +192,9 @@ class DecisionEngine:
                     }
                 ],
                 recommended_action=None,
+                subject_field_id=field_id,
+                subject_field_boundary_version=field_boundary_version,
+                subject_field_boundary_checksum=field_boundary_checksum,
                 selected_rule_scope_type=scope_type,
             )
             decision = self.store.create_decision(decision)
@@ -227,6 +243,9 @@ class DecisionEngine:
             missing_data=[],
             conflicts=[],
             recommended_action=recommendation,
+            subject_field_id=field_id,
+            subject_field_boundary_version=field_boundary_version,
+            subject_field_boundary_checksum=field_boundary_checksum,
             selected_rule_scope_type=rule.scope_type,
             subject_customer_id=selected_customer_id,
         )

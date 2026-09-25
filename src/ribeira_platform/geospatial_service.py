@@ -30,6 +30,7 @@ from .geospatial import (
 )
 from .geospatial_provider import StacProviderError
 from .geospatial_repository import GeospatialRepository
+from .field_context import FieldContextRepository
 from .models import Evidence, Source, new_id, now_utc
 from .object_storage import LocalObjectStorage, ObjectStorageError
 from .cdse_s3 import (
@@ -75,6 +76,7 @@ class GeospatialApplication:
         self.provider = provider
         self.object_storage = object_storage
         self.repository = GeospatialRepository(store)
+        self.fields = FieldContextRepository(store)
         self.processor = NdviProcessor(object_storage)
         asset_config = CdseS3Config.from_environment()
         registry = getattr(provider, "registry", None)
@@ -1107,6 +1109,25 @@ class GeospatialApplication:
             and cls._has_valid_quality_mask(target)
         )
 
+    @staticmethod
+    def _has_valid_field_delta_provenance(
+        delta: DerivedProduct, field: Any | None
+    ) -> bool:
+        snapshot = delta.parameters.get("field_snapshot")
+        return (
+            field is not None
+            and delta.field_id == field.id
+            and delta.property_id == field.property_id
+            and delta.field_boundary_version == field.boundary_version
+            and delta.field_boundary_checksum == field.boundary_checksum
+            and snapshot
+            == {
+                "field_id": field.id,
+                "boundary_version": field.boundary_version,
+                "boundary_checksum": field.boundary_checksum,
+            }
+        )
+
     def create_temporal_delta_job(
         self,
         tenant_id: str,
@@ -1114,6 +1135,7 @@ class GeospatialApplication:
         baseline_product_id: str,
         target_product_id: str,
         actor: str = "system",
+        field_id: str | None = None,
         platform_admin: bool = False,
     ) -> ProcessingJob:
         with self.store.tenant_transaction(tenant_id, platform_admin):
@@ -1121,12 +1143,17 @@ class GeospatialApplication:
                 tenant_id, baseline_product_id
             )
             target = self.repository.get_derived_product(tenant_id, target_product_id)
+            field = self.fields.get(tenant_id, field_id) if field_id else None
         if baseline is None or target is None:
             raise LookupError("quality-masked NDVI product not found in tenant")
         if baseline.property_id != property_id or target.property_id != property_id:
             raise ValueError(
                 "baseline and target must belong to the requested property"
             )
+        if field_id and field is None:
+            raise LookupError("field not found in tenant")
+        if field is not None and field.property_id != property_id:
+            raise ValueError("field does not belong to the requested property")
         if (
             baseline.id == target.id
             or not self._has_valid_quality_mask(baseline)
@@ -1135,12 +1162,18 @@ class GeospatialApplication:
             raise ValueError(
                 "temporal delta requires two different provenance-valid quality-masked NDVI products"
             )
-        params = {
+        params: dict[str, Any] = {
             "baseline_product_id": baseline.id,
             "target_product_id": target.id,
             "target_grid": "baseline",
             "alignment_resampling": "bilinear",
         }
+        if field is not None:
+            params["field_snapshot"] = {
+                "field_id": field.id,
+                "boundary_version": field.boundary_version,
+                "boundary_checksum": field.boundary_checksum,
+            }
         request_id, correlation_id = current_context()
         job = ProcessingJob(
             id=new_id(),
@@ -1163,6 +1196,13 @@ class GeospatialApplication:
             requested_by=actor,
             request_id=request_id,
             correlation_id=correlation_id,
+            field_id=field.id if field is not None else None,
+            field_boundary_version=field.boundary_version
+            if field is not None
+            else None,
+            field_boundary_checksum=field.boundary_checksum
+            if field is not None
+            else None,
         )
         with self.store.tenant_transaction(tenant_id, platform_admin):
             persisted = self.repository.create_job(job, actor)
@@ -1201,6 +1241,21 @@ class GeospatialApplication:
         with self.store.tenant_transaction(tenant_id, platform_admin):
             baseline = self.repository.get_derived_product(tenant_id, baseline_id)
             target = self.repository.get_derived_product(tenant_id, target_id)
+            field = (
+                self.fields.get_snapshot(
+                    tenant_id,
+                    job.property_id,
+                    job.field_id,
+                    job.field_boundary_version,
+                    job.field_boundary_checksum,
+                )
+                if job.field_id is not None
+                and job.field_boundary_version is not None
+                and job.field_boundary_checksum is not None
+                else None
+            )
+        if job.field_id is not None and field is None:
+            raise ValueError("field boundary snapshot provenance is invalid")
         if (
             baseline is None
             or target is None
@@ -1221,6 +1276,8 @@ class GeospatialApplication:
                 baseline.output_reference,
                 target.output_reference,
                 f"tenants/{tenant_id}/derived/{job.id}/ndvi-delta.tif",
+                field.geometry_geojson if field is not None else None,
+                field.geometry_crs if field is not None else "EPSG:4326",
             )
         except (RasterProcessingError, ObjectStorageError, OSError, ValueError) as exc:
             with self.store.tenant_transaction(tenant_id, platform_admin):
@@ -1262,6 +1319,9 @@ class GeospatialApplication:
                 "Delta does not identify a cause, diagnosis, gain, loss, or field condition",
             ],
             quality=[],
+            field_id=job.field_id,
+            field_boundary_version=job.field_boundary_version,
+            field_boundary_checksum=job.field_boundary_checksum,
         )
         with self.store.tenant_transaction(tenant_id, platform_admin):
             self.repository.create_derived_product(product)

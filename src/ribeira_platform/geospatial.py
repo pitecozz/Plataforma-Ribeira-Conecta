@@ -224,6 +224,9 @@ class ProcessingJob:
     requested_by: str | None = None
     request_id: str | None = None
     correlation_id: str | None = None
+    field_id: str | None = None
+    field_boundary_version: int | None = None
+    field_boundary_checksum: str | None = None
 
 
 @dataclass(frozen=True)
@@ -274,6 +277,9 @@ class DerivedProduct:
     limitations: list[str]
     quality: list[GeospatialQuality]
     created_at: str = field(default_factory=now_utc)
+    field_id: str | None = None
+    field_boundary_version: int | None = None
+    field_boundary_checksum: str | None = None
 
 
 @dataclass(frozen=True)

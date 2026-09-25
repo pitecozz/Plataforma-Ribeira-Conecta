@@ -13,6 +13,7 @@ import rasterio
 from rasterio.enums import Resampling
 from rasterio.mask import mask
 from rasterio.windows import Window
+from rasterio.features import geometry_mask
 from rasterio.warp import reproject, transform_geom
 from shapely.geometry import shape
 
@@ -359,7 +360,12 @@ class TemporalDeltaProcessor:
         self.object_storage = object_storage
 
     def process(
-        self, baseline_reference: str, target_reference: str, output_key: str
+        self,
+        baseline_reference: str,
+        target_reference: str,
+        output_key: str,
+        field_geometry: dict[str, Any] | None = None,
+        field_geometry_crs: str = "EPSG:4326",
     ) -> DeltaRasterProcessingOutput:
         baseline_path = self.object_storage.read_local_path(baseline_reference)
         target_path = self.object_storage.read_local_path(target_reference)
@@ -400,6 +406,21 @@ class TemporalDeltaProcessor:
                     "resampling": "bilinear",
                 }
             comparable = np.isfinite(baseline_values) & np.isfinite(target_values)
+            if field_geometry is not None:
+                geometry = transform_geom(
+                    field_geometry_crs,
+                    baseline.crs,
+                    field_geometry,
+                    precision=15,
+                )
+                inside_field = geometry_mask(
+                    [geometry],
+                    out_shape=baseline_values.shape,
+                    transform=baseline.transform,
+                    invert=True,
+                    all_touched=False,
+                )
+                comparable &= inside_field
             values = np.full(baseline_values.shape, np.nan, dtype="float32")
             values[comparable] = target_values[comparable] - baseline_values[comparable]
             valid_values = values[np.isfinite(values)]
