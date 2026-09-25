@@ -79,7 +79,8 @@ CREATE TABLE IF NOT EXISTS decisions (
   classification TEXT NOT NULL, status TEXT NOT NULL, evidence_ids_json TEXT NOT NULL,
   rule_id TEXT, rule_version INTEGER, model_id TEXT, model_version TEXT,
   confidence REAL, limitations_json TEXT NOT NULL, missing_data_json TEXT NOT NULL,
-  conflicts_json TEXT NOT NULL, recommended_action_json TEXT, subject_asset_id TEXT, subject_field_id TEXT, selected_rule_scope_type TEXT, subject_customer_id TEXT,
+  conflicts_json TEXT NOT NULL, recommended_action_json TEXT, subject_asset_id TEXT, subject_field_id TEXT,
+  subject_field_boundary_version INTEGER, subject_field_boundary_checksum TEXT, selected_rule_scope_type TEXT, subject_customer_id TEXT,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_property ON decisions(tenant_id, property_id, created_at);
@@ -135,6 +136,8 @@ class SQLiteStore:
         self.connection.executescript(SCHEMA)
         self._ensure_column("rules", "scope_field_id", "TEXT")
         self._ensure_column("decisions", "subject_field_id", "TEXT")
+        self._ensure_column("decisions", "subject_field_boundary_version", "INTEGER")
+        self._ensure_column("decisions", "subject_field_boundary_checksum", "TEXT")
 
     def _ensure_column(self, table: str, column: str, definition: str) -> None:
         columns = {
@@ -551,8 +554,8 @@ class SQLiteStore:
     def create_decision(self, item: Decision) -> Decision:
         self._insert(
             """INSERT INTO decisions(id,tenant_id,property_id,conclusion,classification,status,evidence_ids_json,rule_id,rule_version,
-               model_id,model_version,confidence,limitations_json,missing_data_json,conflicts_json,recommended_action_json,subject_asset_id,subject_field_id,selected_rule_scope_type,subject_customer_id,created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               model_id,model_version,confidence,limitations_json,missing_data_json,conflicts_json,recommended_action_json,subject_asset_id,subject_field_id,subject_field_boundary_version,subject_field_boundary_checksum,selected_rule_scope_type,subject_customer_id,created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 item.id,
                 item.tenant_id,
@@ -574,6 +577,8 @@ class SQLiteStore:
                 else None,
                 item.subject_asset_id,
                 item.subject_field_id,
+                item.subject_field_boundary_version,
+                item.subject_field_boundary_checksum,
                 item.selected_rule_scope_type,
                 item.subject_customer_id,
                 item.created_at,
@@ -599,6 +604,10 @@ class SQLiteStore:
                 "property_id": row["property_id"],
                 "subject_asset_id": row["subject_asset_id"],
                 "subject_field_id": row["subject_field_id"],
+                "subject_field_boundary_version": row["subject_field_boundary_version"],
+                "subject_field_boundary_checksum": row[
+                    "subject_field_boundary_checksum"
+                ],
                 "selected_rule_scope_type": row["selected_rule_scope_type"],
                 "subject_customer_id": row["subject_customer_id"],
                 "conclusion": row["conclusion"],

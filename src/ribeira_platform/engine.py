@@ -277,6 +277,8 @@ class DecisionEngine:
         asset_evidence_id: str | None = None,
         field_id: str | None = None,
         field_evidence_id: str | None = None,
+        field_boundary_version: int | None = None,
+        field_boundary_checksum: str | None = None,
     ) -> DecisionResult:
         observations = [
             item
@@ -340,7 +342,13 @@ class DecisionEngine:
                 conflicts=[],
                 recommended_action=None,
             )
-            decision = self._persist_decision(decision, asset_id, field_id=field_id)
+            decision = self._persist_decision(
+                decision,
+                asset_id,
+                field_id=field_id,
+                field_boundary_version=field_boundary_version,
+                field_boundary_checksum=field_boundary_checksum,
+            )
             self._audit(tenant_id, actor, decision, "field_context_evidence_missing")
             return DecisionResult(decision, None, None)
         if field_evidence_id is not None:
@@ -370,7 +378,13 @@ class DecisionEngine:
                 conflicts=[],
                 recommended_action=None,
             )
-            decision = self._persist_decision(decision, asset_id, field_id=field_id)
+            decision = self._persist_decision(
+                decision,
+                asset_id,
+                field_id=field_id,
+                field_boundary_version=field_boundary_version,
+                field_boundary_checksum=field_boundary_checksum,
+            )
             self._audit(tenant_id, actor, decision, "rule_missing")
             return DecisionResult(decision, None, None)
 
@@ -426,7 +440,13 @@ class DecisionEngine:
                     else None
                 ),
             )
-            decision = self._persist_decision(decision, asset_id, field_id=field_id)
+            decision = self._persist_decision(
+                decision,
+                asset_id,
+                field_id=field_id,
+                field_boundary_version=field_boundary_version,
+                field_boundary_checksum=field_boundary_checksum,
+            )
             self._audit(tenant_id, actor, decision, "rule_scope_conflict")
             return DecisionResult(decision, None, None)
         rule = selected_rules[0]
@@ -452,7 +472,12 @@ class DecisionEngine:
                 recommended_action=None,
             )
             decision = self._persist_decision(
-                decision, asset_id, rule, field_id=field_id
+                decision,
+                asset_id,
+                rule,
+                field_id=field_id,
+                field_boundary_version=field_boundary_version,
+                field_boundary_checksum=field_boundary_checksum,
             )
             self._audit(tenant_id, actor, decision, "missing_observation")
             return DecisionResult(decision, None, None)
@@ -498,7 +523,12 @@ class DecisionEngine:
                 },
             )
             decision = self._persist_decision(
-                decision, asset_id, rule, field_id=field_id
+                decision,
+                asset_id,
+                rule,
+                field_id=field_id,
+                field_boundary_version=field_boundary_version,
+                field_boundary_checksum=field_boundary_checksum,
             )
             alert = Alert(
                 new_id(),
@@ -556,7 +586,12 @@ class DecisionEngine:
                 },
             )
             decision = self._persist_decision(
-                decision, asset_id, rule, field_id=field_id
+                decision,
+                asset_id,
+                rule,
+                field_id=field_id,
+                field_boundary_version=field_boundary_version,
+                field_boundary_checksum=field_boundary_checksum,
             )
             alert = Alert(
                 new_id(),
@@ -600,7 +635,14 @@ class DecisionEngine:
             conflicts=[],
             recommended_action=None,
         )
-        decision = self._persist_decision(decision, asset_id, rule, field_id=field_id)
+        decision = self._persist_decision(
+            decision,
+            asset_id,
+            rule,
+            field_id=field_id,
+            field_boundary_version=field_boundary_version,
+            field_boundary_checksum=field_boundary_checksum,
+        )
         self._audit(tenant_id, actor, decision, "rule_not_triggered")
         return DecisionResult(decision, None, None)
 
@@ -611,6 +653,8 @@ class DecisionEngine:
         rule: RuleDefinition | None = None,
         *,
         field_id: str | None = None,
+        field_boundary_version: int | None = None,
+        field_boundary_checksum: str | None = None,
     ) -> Decision:
         """Persist immutable applicability context without inferring customer facts."""
         if rule is not None:
@@ -634,6 +678,8 @@ class DecisionEngine:
             decision = replace(
                 decision,
                 subject_field_id=field_id,
+                subject_field_boundary_version=field_boundary_version,
+                subject_field_boundary_checksum=field_boundary_checksum,
                 limitations=[
                     *decision.limitations,
                     "o talhão é contexto operacional não legal; não é evidência de cultura, solo ou diagnóstico",

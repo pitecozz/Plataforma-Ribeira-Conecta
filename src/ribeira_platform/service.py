@@ -874,6 +874,8 @@ class RibeiraApplication:
                     actor,
                     field_id=field.id,
                     field_evidence_id=evidence_id,
+                    field_boundary_version=field.boundary_version,
+                    field_boundary_checksum=field.boundary_checksum,
                 )
 
     def complete_action(

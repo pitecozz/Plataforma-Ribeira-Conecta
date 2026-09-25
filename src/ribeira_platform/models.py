@@ -237,6 +237,8 @@ class Decision:
     # property-scoped measurement in this first rule slice.
     subject_asset_id: str | None = None
     subject_field_id: str | None = None
+    subject_field_boundary_version: int | None = None
+    subject_field_boundary_checksum: str | None = None
     # These fields snapshot the applicability context selected at evaluation
     # time. They do not assert ownership, service availability or a customer
     # need, and keep later relationship changes from rewriting history.

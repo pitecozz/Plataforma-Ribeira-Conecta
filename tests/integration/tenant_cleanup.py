@@ -72,6 +72,10 @@ def delete_test_tenants(tenant_ids: list[str]) -> None:
         if "derived_product" in order and "processing_job" in order:
             order.remove("derived_product")
             order.insert(order.index("processing_job"), "derived_product")
+        if "field_context_boundary_version" in tables:
+            connection.execute(
+                "ALTER TABLE field_context_boundary_version DISABLE TRIGGER USER"
+            )
         for table in order:
             if table != "tenant":
                 connection.execute(
@@ -80,4 +84,8 @@ def delete_test_tenants(tenant_ids: list[str]) -> None:
                     ),
                     (tenant_ids,),
                 )
+        if "field_context_boundary_version" in tables:
+            connection.execute(
+                "ALTER TABLE field_context_boundary_version ENABLE TRIGGER USER"
+            )
         connection.execute("DELETE FROM tenant WHERE id = ANY(%s)", (tenant_ids,))

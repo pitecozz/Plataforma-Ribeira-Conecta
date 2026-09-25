@@ -1761,8 +1761,8 @@ class PostgresStore:
 
     def create_decision(self, item: Decision) -> Decision:
         self.connection.execute(
-            """INSERT INTO decision(id,tenant_id,property_id,conclusion,data_classification,status,evidence_ids,rule_id,rule_version,model_id,model_version,confidence,limitations,missing_data,conflicts,recommended_action,subject_asset_id,subject_field_id,selected_rule_scope_type,subject_customer_id,created_at)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            """INSERT INTO decision(id,tenant_id,property_id,conclusion,data_classification,status,evidence_ids,rule_id,rule_version,model_id,model_version,confidence,limitations,missing_data,conflicts,recommended_action,subject_asset_id,subject_field_id,subject_field_boundary_version,subject_field_boundary_checksum,selected_rule_scope_type,subject_customer_id,created_at)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 item.id,
                 item.tenant_id,
@@ -1784,6 +1784,8 @@ class PostgresStore:
                 else None,
                 item.subject_asset_id,
                 item.subject_field_id,
+                item.subject_field_boundary_version,
+                item.subject_field_boundary_checksum,
                 item.selected_rule_scope_type,
                 item.subject_customer_id,
                 item.created_at,
@@ -1817,6 +1819,10 @@ class PostgresStore:
                     if row["subject_field_id"]
                     else None
                 ),
+                "subject_field_boundary_version": row["subject_field_boundary_version"],
+                "subject_field_boundary_checksum": row[
+                    "subject_field_boundary_checksum"
+                ],
                 "selected_rule_scope_type": row["selected_rule_scope_type"],
                 "subject_customer_id": (
                     self._id(row["subject_customer_id"])

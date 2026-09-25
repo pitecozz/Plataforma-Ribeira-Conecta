@@ -25,7 +25,11 @@ A field/talhão registration establishes only sourced, non-legal operational
 context inside a property. It is not title/survey, crop, soil, laboratory,
 management-zone or agronomic evidence. Property-only evaluations never consume a
 field-scoped rule; it is selected only by explicit field evaluation, and the
-decision retains `FIELD_REGISTRATION` evidence plus `subject_field_id`.
+decision retains `FIELD_REGISTRATION` evidence plus `subject_field_id` and the
+exact immutable `subject_field_boundary_version` and
+`subject_field_boundary_checksum`. Temporal-delta evaluation remains
+property-scoped until a provenance-safe field-clipped product and statistic are
+available.
 
 ## Customer-scope guarantees
 

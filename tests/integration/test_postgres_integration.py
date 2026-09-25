@@ -316,14 +316,26 @@ class PostgresIntegrationTests(unittest.TestCase):
         )
         result = self.application.evaluate_field(tenant.id, field.id)
         self.assertEqual(result.decision.subject_field_id, field.id)
+        self.assertEqual(
+            result.decision.subject_field_boundary_version, field.boundary_version
+        )
+        self.assertEqual(
+            result.decision.subject_field_boundary_checksum, field.boundary_checksum
+        )
         self.assertEqual(result.decision.selected_rule_scope_type, "FIELD")
         self.assertIn(evidence.id, result.decision.evidence_ids)
         with self.store.tenant_transaction(tenant.id):
             stored = self.store.connection.execute(
-                "SELECT subject_field_id,selected_rule_scope_type FROM decision WHERE id=%s",
+                "SELECT subject_field_id,subject_field_boundary_version,subject_field_boundary_checksum,selected_rule_scope_type FROM decision WHERE id=%s",
                 (result.decision.id,),
             ).fetchone()
             self.assertEqual(str(stored["subject_field_id"]), field.id)
+            self.assertEqual(
+                stored["subject_field_boundary_version"], field.boundary_version
+            )
+            self.assertEqual(
+                stored["subject_field_boundary_checksum"], field.boundary_checksum
+            )
             self.assertEqual(stored["selected_rule_scope_type"], "FIELD")
             with self.assertRaises(psycopg.Error):
                 self.store.connection.execute(
