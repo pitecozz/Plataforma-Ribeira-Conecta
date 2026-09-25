@@ -65,6 +65,31 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(response.headers["X-Request-ID"], "req-1")
         self.assertIn("X-Correlation-ID", response.headers)
 
+    def test_property_evaluation_requires_property_read_permission(self) -> None:
+        tenant = self.application.create_tenant("Evaluation permission tenant")
+        property_item = self.application.create_property(tenant.id, "Restricted property")
+        client = TestClient(
+            create_app(
+                self.application,
+                DevelopmentIdentityProvider(
+                    "evaluate-only",
+                    AuthContext(
+                        "operator",
+                        tenant.id,
+                        permissions=frozenset({"decision:evaluate"}),
+                    ),
+                ),
+                settings=Settings("test", "sqlite", None, (), "development", 1024),
+            )
+        )
+
+        response = client.post(
+            f"/v1/tenants/{tenant.id}/properties/{property_item.id}/evaluate",
+            headers={"Authorization": "Bearer evaluate-only"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+
     def test_payload_limit_and_validation(self) -> None:
         large = self.client.post(
             "/v1/tenants",

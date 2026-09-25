@@ -702,6 +702,21 @@ class Farm360ApiTests(unittest.TestCase):
             f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}"
             f"/temporal-deltas/{delta.id}/evaluate"
         )
+        viewer_client = TestClient(
+            create_app(
+                self.application,
+                DevelopmentIdentityProvider(
+                    "viewer",
+                    AuthContext("viewer", self.tenant.id, roles=frozenset({"VIEWER"})),
+                ),
+                settings=Settings("test", "sqlite", None, (), "development", 1_000_000),
+            )
+        )
+        denied = viewer_client.post(
+            evaluation_path, headers={"Authorization": "Bearer viewer"}
+        )
+        self.assertEqual(denied.status_code, 403)
+
         evaluation = self.client.post(
             evaluation_path, headers={"Authorization": "Bearer admin"}
         )

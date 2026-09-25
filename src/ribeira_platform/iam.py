@@ -145,6 +145,16 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
 for _role in ROLE_PERMISSIONS:
     ROLE_PERMISSIONS[_role] = ROLE_PERMISSIONS[_role] | frozenset({"feedback:write"})
 
+for _role in (
+    "TENANT_ADMIN",
+    "MANAGER",
+    "ANALYST",
+    "AGRONOMIST",
+    "TECHNICIAN",
+    "OPERATOR",
+):
+    ROLE_PERMISSIONS[_role] = ROLE_PERMISSIONS[_role] | frozenset({"decision:evaluate"})
+
 # Geospatial access is explicit and remains subject to the same tenant policy.
 _GEOSPATIAL_READ = "geospatial:read"
 _GEOSPATIAL_SEARCH = "geospatial:search"

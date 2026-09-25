@@ -1462,7 +1462,8 @@ def create_app(
         payload: ActorRequest | None = None,
         ctx: AuthContext = Depends(context),
     ):
-        authorize(ctx, "decision:read", tenant_id)
+        authorize(ctx, "property:read", tenant_id)
+        authorize(ctx, "decision:evaluate", tenant_id)
         result = application.evaluate(
             tenant_id,
             property_id,
@@ -1482,7 +1483,7 @@ def create_app(
         ctx: AuthContext = Depends(context),
     ):
         authorize(ctx, "asset:read", tenant_id)
-        authorize(ctx, "decision:read", tenant_id)
+        authorize(ctx, "decision:evaluate", tenant_id)
         result = application.evaluate_asset(
             tenant_id,
             asset_id,
@@ -1502,7 +1503,7 @@ def create_app(
         ctx: AuthContext = Depends(context),
     ):
         authorize(ctx, "property:read", tenant_id)
-        authorize(ctx, "decision:read", tenant_id)
+        authorize(ctx, "decision:evaluate", tenant_id)
         result = application.evaluate_field(
             tenant_id,
             field_id,
@@ -2386,7 +2387,7 @@ def create_app(
         ctx: AuthContext = Depends(context),
     ):
         authorize(ctx, "geospatial:read", tenant_id)
-        authorize(ctx, "decision:read", tenant_id)
+        authorize(ctx, "decision:evaluate", tenant_id)
         return to_jsonable(
             application.evaluate_temporal_delta(
                 tenant_id,

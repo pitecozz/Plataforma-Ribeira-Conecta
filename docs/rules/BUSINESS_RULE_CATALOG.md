@@ -25,13 +25,13 @@ evidence returns `UNKNOWN` or `INCONCLUSIVE`; it does not default to false.
 
 An asset registration contributes only factual applicability context. The evaluation retains its opaque `ASSET_REGISTRATION` evidence ID and `subject_asset_id` in the immutable decision, alongside the property-scoped observation evidence. If that registration evidence is unavailable, the result is `UNKNOWN`/`INCONCLUSIVE`; Ribeira does not use an unproven asset record to select a rule. The asset is never converted into a sensor reading, health state, agronomic diagnosis or automatic action.
 
-The API requires both `asset:read` and `decision:read`; Farm360 renders the evaluation control only when both permissions are present and the selected asset retains its registration evidence. Evaluation is an explicit operator action, not background monitoring, and the resulting immutable decision is refreshed in the property history. Active-rule creation retains the existing `rule:create` and distinct-approver controls. PostgreSQL binds both rule and decision asset references to the same tenant, and a trigger requires the decision's asset to belong to its recorded property.
+The API requires both `asset:read` and `decision:evaluate`; Farm360 renders the evaluation control only when both permissions are present and the selected asset retains its registration evidence. Evaluation is an explicit operator action, not background monitoring, and the resulting immutable decision is refreshed in the property history. Active-rule creation retains the existing `rule:create` and distinct-approver controls. PostgreSQL binds both rule and decision asset references to the same tenant, and a trigger requires the decision's asset to belong to its recorded property.
 
 ## Field-scoped rule boundary
 
 A field/talhão registration contributes only non-legal operational applicability context. The evaluation retains its opaque `FIELD_REGISTRATION` evidence ID and `subject_field_id` in the immutable decision, alongside property-scoped observation evidence. If that registration evidence is unavailable, the result is `UNKNOWN`/`INCONCLUSIVE`; Ribeira does not use an unproven field record to select a rule. The field is never converted into a crop declaration, soil/lab result, management zone, diagnosis or automatic action.
 
-The API requires `property:read` and `decision:read` through `POST /v1/tenants/{tenant_id}/fields/{field_id}/evaluate`. Property-only evaluation never selects a field rule. PostgreSQL binds both rule and decision field references to the same tenant, and a trigger requires the decision's field to belong to its recorded property. Management-zone and crop inheritance are not implied by this slice.
+The API requires `property:read` and `decision:evaluate` through `POST /v1/tenants/{tenant_id}/fields/{field_id}/evaluate`. Property-only evaluation never selects a field rule. PostgreSQL binds both rule and decision field references to the same tenant, and a trigger requires the decision's field to belong to its recorded property. Management-zone and crop inheritance are not implied by this slice.
 
 ## Rule-to-outcome flow
 

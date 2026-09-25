@@ -276,6 +276,9 @@ class IamAndSecurityTests(unittest.TestCase):
         policy = AuthorizationPolicy()
         context = AuthContext("user", "tenant-a", roles=frozenset({"VIEWER"}))
         policy.require(context, "property:read", tenant_id="tenant-a")
+        policy.require(context, "decision:read", tenant_id="tenant-a")
+        with self.assertRaises(AuthorizationError):
+            policy.require(context, "decision:evaluate", tenant_id="tenant-a")
         with self.assertRaises(AuthorizationError):
             policy.require(context, "property:write", tenant_id="tenant-a")
         with self.assertRaises(AuthorizationError):

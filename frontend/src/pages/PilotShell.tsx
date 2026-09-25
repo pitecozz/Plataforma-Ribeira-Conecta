@@ -38,8 +38,8 @@ export function PilotShell({
   const canManageBoundary = permissions.has("tenant:manage");
   const canManageAssets = permissions.has("asset:manage");
   const canCompleteActions = permissions.has("action:write");
-  const canEvaluateAssets = permissions.has("asset:read") && permissions.has("decision:read");
-  const canEvaluateTemporalDelta = permissions.has("geospatial:read") && permissions.has("decision:read");
+  const canEvaluateAssets = permissions.has("asset:read") && permissions.has("decision:evaluate");
+  const canEvaluateTemporalDelta = permissions.has("geospatial:read") && permissions.has("decision:evaluate");
   const canRunSatelliteOperations = permissions.has("geospatial:search") && permissions.has("geospatial:process");
   const openFarm360 = (propertyId: string) => {
     setSelectedPropertyId(propertyId);

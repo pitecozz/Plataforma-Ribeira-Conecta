@@ -546,6 +546,12 @@ class IdentityProvisioningPostgresTests(unittest.TestCase):
         self.assertEqual(assets.status_code, 200)
         self.assertEqual(assets.json()["items"][0]["id"], asset.id)
 
+        evaluation = client.post(
+            f"/v1/tenants/{tenant.id}/assets/{asset.id}/evaluate",
+            headers=headers,
+        )
+        self.assertEqual(evaluation.status_code, 403)
+
         create = client.post(
             f"/v1/tenants/{tenant.id}/properties",
             headers=headers,
