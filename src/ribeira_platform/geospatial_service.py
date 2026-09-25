@@ -1485,6 +1485,19 @@ class GeospatialApplication:
                 "limitations": limitations
                 + ["Baseline and target must be different derived products"],
             }
+        if field is not None:
+            return {
+                "status": "DADO_INSUFICIENTE",
+                "baseline": baseline,
+                "target": target,
+                "delta_mean": None,
+                "comparable_valid_pixels": None,
+                "comparable_coverage_percentage": None,
+                "limitations": limitations
+                + [
+                    "A valid field-clipped temporal delta is required for field comparison"
+                ],
+            }
         baseline_mean = baseline.statistics.mean
         target_mean = target.statistics.mean
         usable = (

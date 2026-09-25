@@ -796,6 +796,54 @@ class Farm360ApiTests(unittest.TestCase):
         self.assertEqual(comparison.json()["comparison"]["delta_product_id"], delta.id)
         self.assertEqual(comparison.json()["comparison"]["comparable_valid_pixels"], 12)
 
+        field_without_delta = self.application.fields.create(
+            self.tenant.id,
+            property_id=self.property.id,
+            name="Synthetic field without delta",
+            status="ACTIVE",
+            geometry_geojson={
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [0.1, 0.1],
+                        [0.1, 0.15],
+                        [0.15, 0.15],
+                        [0.15, 0.1],
+                        [0.1, 0.1],
+                    ]
+                ],
+            },
+            geometry_crs="EPSG:4326",
+            source_reference="synthetic_test_data",
+            observed_at="2026-09-24T12:00:00+00:00",
+            classification=DataClassification.MANUAL_CONFIRMED,
+            actor="operator",
+        )
+        field_without_delta_comparison = self.client.get(
+            f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
+            params={
+                "baseline_product_id": baseline.id,
+                "target_product_id": target.id,
+                "field_id": field_without_delta.id,
+            },
+            headers={"Authorization": "Bearer admin"},
+        )
+        self.assertEqual(field_without_delta_comparison.status_code, 200)
+        self.assertEqual(
+            field_without_delta_comparison.json()["status"], "DADO_INSUFICIENTE"
+        )
+        self.assertEqual(
+            field_without_delta_comparison.json()["comparison"]["classification"],
+            "INCONCLUSIVE",
+        )
+        self.assertIsNone(
+            field_without_delta_comparison.json()["comparison"]["delta_mean"]
+        )
+        self.assertIn(
+            "A valid field-clipped temporal delta is required for field comparison",
+            field_without_delta_comparison.json()["comparison"]["limitations"],
+        )
+
         field_comparison = self.client.get(
             f"/v1/tenants/{self.tenant.id}/properties/{self.property.id}/temporal-comparison",
             params={

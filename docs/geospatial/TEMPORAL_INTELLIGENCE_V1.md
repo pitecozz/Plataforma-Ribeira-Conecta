@@ -36,7 +36,11 @@ provenance are shown.
 
 V1 exposes `target.mean - baseline.mean` only when both persisted products have
 successful jobs, output COG references, valid pixels and a stored mean. It is
-labelled `DERIVED_AGGREGATE`; it is not a pixel-aligned raster delta.
+labelled `DERIVED_AGGREGATE`; it is not a pixel-aligned raster delta. This
+fallback is property-scoped only. A field/talhão request requires a valid
+field-clipped delta with its exact boundary snapshot; otherwise the result is
+`DADO_INSUFICIENTE` and no property aggregate is presented as field evidence.
+
 `comparable_valid_pixels` and `comparable_coverage_percentage` are therefore
 `NULL` rather than invented.
 

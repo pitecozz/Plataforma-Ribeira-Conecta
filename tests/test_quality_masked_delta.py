@@ -193,9 +193,13 @@ class QualityMaskedDeltaTests(unittest.TestCase):
                 "status": "ALIGNED_TO_BASELINE_GRID",
                 "target_grid": "baseline",
                 "resampling": "bilinear",
+                "reference_pixels": 16,
+                "baseline_valid_pixels": 16,
+                "target_valid_pixels": 12,
+                "comparable_valid_pixels": 12,
             },
         )
-        self.assertGreater(delta.statistics.valid_count, 0)
+        self.assertEqual(delta.statistics.valid_count, 12)
         validate_cog(
             self.storage.read_local_path(delta.output_reference),
             expected_value_range=(-2.0, 2.0),
